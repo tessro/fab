@@ -70,16 +70,16 @@ type Agent struct {
 	buffer *RingBuffer
 
 	// Done detection
-	detector     *Detector           // Pattern detector for completion signals
-	onDoneDetect func(match *Match)  // Optional callback when done is detected
+	detector     *Detector          // Pattern detector for completion signals
+	onDoneDetect func(match *Match) // Optional callback when done is detected
 
 	mu            sync.RWMutex
 	onStateChange func(old, new State) // Optional callback for state changes
 
 	// Read loop management
-	readLoopStop chan struct{}   // Signals read loop to stop
-	readLoopDone chan struct{}   // Closed when read loop exits
-	readLoopMu   sync.Mutex      // Protects read loop channels
+	readLoopStop chan struct{} // Signals read loop to stop
+	readLoopDone chan struct{} // Closed when read loop exits
+	readLoopMu   sync.Mutex    // Protects read loop channels
 }
 
 // New creates a new Agent in the Starting state.

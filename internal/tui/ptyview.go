@@ -169,7 +169,7 @@ func (v PTYView) View() string {
 	// Viewport content
 	var content string
 	if len(v.lines) == 0 {
-		content = ptyEmptyStyle.Width(v.width).Height(v.height-1).Render("Waiting for output...")
+		content = ptyEmptyStyle.Width(v.width).Height(v.height - 1).Render("Waiting for output...")
 	} else {
 		content = v.viewport.View()
 	}

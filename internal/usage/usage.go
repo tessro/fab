@@ -14,15 +14,15 @@ const ClaudeDir = ".claude"
 
 // Usage represents aggregated token usage.
 type Usage struct {
-	InputTokens             int64     `json:"input_tokens"`
-	OutputTokens            int64     `json:"output_tokens"`
-	CacheCreationTokens     int64     `json:"cache_creation_tokens"`
-	CacheReadTokens         int64     `json:"cache_read_tokens"`
-	TotalInputTokens        int64     `json:"total_input_tokens"` // InputTokens + CacheCreationTokens + CacheReadTokens
-	TotalTokens             int64     `json:"total_tokens"`       // TotalInputTokens + OutputTokens
-	MessageCount            int       `json:"message_count"`
-	FirstMessageAt          time.Time `json:"first_message_at,omitempty"`
-	LastMessageAt           time.Time `json:"last_message_at,omitempty"`
+	InputTokens         int64     `json:"input_tokens"`
+	OutputTokens        int64     `json:"output_tokens"`
+	CacheCreationTokens int64     `json:"cache_creation_tokens"`
+	CacheReadTokens     int64     `json:"cache_read_tokens"`
+	TotalInputTokens    int64     `json:"total_input_tokens"` // InputTokens + CacheCreationTokens + CacheReadTokens
+	TotalTokens         int64     `json:"total_tokens"`       // TotalInputTokens + OutputTokens
+	MessageCount        int       `json:"message_count"`
+	FirstMessageAt      time.Time `json:"first_message_at,omitempty"`
+	LastMessageAt       time.Time `json:"last_message_at,omitempty"`
 }
 
 // Add combines usage from another Usage instance.
@@ -45,23 +45,23 @@ func (u *Usage) Add(other Usage) {
 
 // jsonlEntry represents a single line in a Claude Code JSONL file.
 type jsonlEntry struct {
-	Type      string    `json:"type"`
-	Timestamp string    `json:"timestamp"`
-	Message   *message  `json:"message,omitempty"`
+	Type      string   `json:"type"`
+	Timestamp string   `json:"timestamp"`
+	Message   *message `json:"message,omitempty"`
 }
 
 // message represents the message field in an assistant entry.
 type message struct {
-	Role  string       `json:"role"`
-	Usage *tokenUsage  `json:"usage,omitempty"`
+	Role  string      `json:"role"`
+	Usage *tokenUsage `json:"usage,omitempty"`
 }
 
 // tokenUsage represents the usage field in a message.
 type tokenUsage struct {
-	InputTokens             int64 `json:"input_tokens"`
-	OutputTokens            int64 `json:"output_tokens"`
+	InputTokens              int64 `json:"input_tokens"`
+	OutputTokens             int64 `json:"output_tokens"`
 	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens    int64 `json:"cache_read_input_tokens"`
+	CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
 }
 
 // ParseFile parses a single JSONL file and returns aggregated usage.
