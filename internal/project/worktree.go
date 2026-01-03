@@ -8,6 +8,47 @@ import (
 	"path/filepath"
 )
 
+// RestoreWorktreePool scans for existing worktrees and populates the pool.
+// This is used when loading projects from config to restore the worktree state.
+// If no worktrees exist on disk, it creates them.
+func (p *Project) RestoreWorktreePool() error {
+	p.mu.Lock()
+
+	// Skip if already populated
+	if len(p.Worktrees) > 0 {
+		p.mu.Unlock()
+		return nil
+	}
+
+	wtDir := p.WorktreesDir()
+
+	// Check if worktrees directory exists
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		// No worktrees directory - need to create pool
+		p.mu.Unlock()
+		_, err := p.CreateWorktreePool()
+		return err
+	}
+
+	// Scan for existing worktrees
+	for i := 1; i <= p.MaxAgents; i++ {
+		wtPath := filepath.Join(wtDir, fmt.Sprintf("wt-%03d", i))
+		if _, err := os.Stat(wtPath); err == nil {
+			p.Worktrees = append(p.Worktrees, Worktree{Path: wtPath})
+		}
+	}
+
+	// If we found no worktrees, create them
+	if len(p.Worktrees) == 0 {
+		p.mu.Unlock()
+		_, err := p.CreateWorktreePool()
+		return err
+	}
+
+	p.mu.Unlock()
+	return nil
+}
+
 // CreateWorktreePool creates the worktree directory and git worktrees for the project.
 // Returns the list of created worktree paths.
 func (p *Project) CreateWorktreePool() ([]string, error) {

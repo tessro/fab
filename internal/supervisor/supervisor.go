@@ -647,6 +647,11 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 		return nil
 	}
 
+	// Ensure worktree pool is populated (for projects loaded from config)
+	if err := proj.RestoreWorktreePool(); err != nil {
+		return fmt.Errorf("restore worktree pool: %w", err)
+	}
+
 	// Register project with agent manager
 	s.agents.RegisterProject(proj)
 
