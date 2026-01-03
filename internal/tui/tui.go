@@ -19,17 +19,18 @@ type Model struct {
 	err   error
 
 	// Components
-	header Header
+	header    Header
+	agentList AgentList
 
 	// TODO: daemon client for IPC
-	// TODO: agent list state
 	// TODO: focused agent for output view
 }
 
 // New creates a new TUI model.
 func New() Model {
 	return Model{
-		header: NewHeader(),
+		header:    NewHeader(),
+		agentList: NewAgentList(),
 	}
 }
 
@@ -45,12 +46,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "j", "down":
+			m.agentList.MoveDown()
+		case "k", "up":
+			m.agentList.MoveUp()
+		case "g", "home":
+			m.agentList.MoveToTop()
+		case "G", "end":
+			m.agentList.MoveToBottom()
 		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.header.SetWidth(m.width)
+		m.updateAgentListSize()
 		m.ready = true
 	}
 
@@ -67,16 +77,21 @@ func (m Model) View() string {
 	header := m.header.View()
 
 	// Status bar
-	status := statusStyle.Width(m.width).Render("Press q to quit")
+	status := statusStyle.Width(m.width).Render("j/k: navigate  q: quit")
 
-	// Main content area
-	contentHeight := m.height - lipgloss.Height(header) - lipgloss.Height(status)
-	content := contentStyle.
-		Width(m.width).
-		Height(contentHeight).
-		Render("No agents running")
+	// Agent list
+	agentList := m.agentList.View()
 
-	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
+	return fmt.Sprintf("%s\n%s\n%s", header, agentList, status)
+}
+
+// updateAgentListSize recalculates the agent list dimensions.
+func (m *Model) updateAgentListSize() {
+	headerHeight := lipgloss.Height(m.header.View())
+	statusHeight := 1 // Single line status bar
+	listHeight := m.height - headerHeight - statusHeight - 1
+
+	m.agentList.SetSize(m.width, listHeight)
 }
 
 // Run starts the TUI.

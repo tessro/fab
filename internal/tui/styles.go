@@ -32,4 +32,31 @@ var (
 	// Main content area
 	contentStyle = lipgloss.NewStyle().
 			Padding(1, 2)
+
+	// Agent list styles
+	agentListContainerStyle = lipgloss.NewStyle()
+
+	agentListEmptyStyle = lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Padding(1, 2)
+
+	agentRowStyle = lipgloss.NewStyle().
+			Padding(0, 1)
+
+	agentRowSelectedStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#3B3B3B")).
+				Padding(0, 1)
+
+	agentIDStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Bold(true)
+
+	agentProjectStyle = lipgloss.NewStyle().
+				Foreground(primaryColor)
+
+	agentTaskStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A0A0A0"))
+
+	agentDurationStyle = lipgloss.NewStyle().
+				Foreground(mutedColor)
 )
