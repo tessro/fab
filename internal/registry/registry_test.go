@@ -1,0 +1,316 @@
+package registry
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/tessro/fab/internal/project"
+)
+
+func TestNew(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if r.Count() != 0 {
+		t.Errorf("Count() = %d, want 0", r.Count())
+	}
+
+	if r.ConfigPath() != configPath {
+		t.Errorf("ConfigPath() = %q, want %q", r.ConfigPath(), configPath)
+	}
+}
+
+func TestRegistry_Add(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Add project
+	p, err := r.Add(projectDir, "myproject", 0)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if p.Name != "myproject" {
+		t.Errorf("Name = %q, want %q", p.Name, "myproject")
+	}
+
+	if p.Path != projectDir {
+		t.Errorf("Path = %q, want %q", p.Path, projectDir)
+	}
+
+	if p.MaxAgents != project.DefaultMaxAgents {
+		t.Errorf("MaxAgents = %d, want %d", p.MaxAgents, project.DefaultMaxAgents)
+	}
+
+	if r.Count() != 1 {
+		t.Errorf("Count() = %d, want 1", r.Count())
+	}
+
+	// Verify config file was created
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Error("config file was not created")
+	}
+}
+
+func TestRegistry_AddDuplicate(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir, "myproject", 0); err != nil {
+		t.Fatalf("first Add() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir, "myproject", 0); err != ErrProjectExists {
+		t.Errorf("second Add() error = %v, want ErrProjectExists", err)
+	}
+}
+
+func TestRegistry_AddInvalidPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add("/nonexistent/path", "test", 0); err != ErrInvalidPath {
+		t.Errorf("Add() error = %v, want ErrInvalidPath", err)
+	}
+}
+
+func TestRegistry_AddDefaultName(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "awesome-project")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	p, err := r.Add(projectDir, "", 0)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if p.Name != "awesome-project" {
+		t.Errorf("Name = %q, want %q", p.Name, "awesome-project")
+	}
+}
+
+func TestRegistry_Remove(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir, "myproject", 0); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if err := r.Remove("myproject"); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	if r.Count() != 0 {
+		t.Errorf("Count() = %d, want 0", r.Count())
+	}
+}
+
+func TestRegistry_RemoveNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if err := r.Remove("nonexistent"); err != ErrProjectNotFound {
+		t.Errorf("Remove() error = %v, want ErrProjectNotFound", err)
+	}
+}
+
+func TestRegistry_Get(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir, "myproject", 5); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	p, err := r.Get("myproject")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if p.Name != "myproject" {
+		t.Errorf("Name = %q, want %q", p.Name, "myproject")
+	}
+
+	if p.MaxAgents != 5 {
+		t.Errorf("MaxAgents = %d, want 5", p.MaxAgents)
+	}
+}
+
+func TestRegistry_GetNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Get("nonexistent"); err != ErrProjectNotFound {
+		t.Errorf("Get() error = %v, want ErrProjectNotFound", err)
+	}
+}
+
+func TestRegistry_List(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir1 := filepath.Join(tmpDir, "project1")
+	projectDir2 := filepath.Join(tmpDir, "project2")
+	if err := os.Mkdir(projectDir1, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(projectDir2, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir1, "project1", 0); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if _, err := r.Add(projectDir2, "project2", 0); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	projects := r.List()
+	if len(projects) != 2 {
+		t.Errorf("len(List()) = %d, want 2", len(projects))
+	}
+}
+
+func TestRegistry_Update(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r.Add(projectDir, "myproject", 3); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	newMax := 5
+	if err := r.Update("myproject", &newMax); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	p, _ := r.Get("myproject")
+	if p.MaxAgents != 5 {
+		t.Errorf("MaxAgents = %d, want 5", p.MaxAgents)
+	}
+}
+
+func TestRegistry_Persistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	projectDir := filepath.Join(tmpDir, "myproject")
+	if err := os.Mkdir(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create registry and add project
+	r1, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if _, err := r1.Add(projectDir, "myproject", 7); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Create new registry instance and verify data persisted
+	r2, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	if r2.Count() != 1 {
+		t.Errorf("Count() = %d, want 1", r2.Count())
+	}
+
+	p, err := r2.Get("myproject")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if p.Name != "myproject" {
+		t.Errorf("Name = %q, want %q", p.Name, "myproject")
+	}
+
+	if p.Path != projectDir {
+		t.Errorf("Path = %q, want %q", p.Path, projectDir)
+	}
+
+	if p.MaxAgents != 7 {
+		t.Errorf("MaxAgents = %d, want 7", p.MaxAgents)
+	}
+}
