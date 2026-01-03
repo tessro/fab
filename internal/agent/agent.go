@@ -33,6 +33,20 @@ const (
 	StateError State = "error"
 )
 
+// Mode controls how orchestrator actions are executed for an agent.
+type Mode string
+
+const (
+	// ModeAuto executes orchestrator actions immediately without user confirmation.
+	ModeAuto Mode = "auto"
+
+	// ModeManual stages orchestrator actions for user confirmation via TUI.
+	ModeManual Mode = "manual"
+)
+
+// DefaultMode is the default agent mode (manual for safety).
+const DefaultMode = ModeManual
+
 // Valid state transitions.
 var validTransitions = map[State][]State{
 	StateStarting: {StateRunning, StateError},
@@ -57,6 +71,7 @@ type Agent struct {
 	Project   *project.Project  // Parent project
 	Worktree  *project.Worktree // Assigned worktree
 	State     State             // Current state
+	Mode      Mode              // Orchestrator action mode (auto/manual)
 	Task      string            // Current task ID (e.g., "FAB-25")
 	StartedAt time.Time         // When the agent was created
 	UpdatedAt time.Time         // Last state change
@@ -82,7 +97,7 @@ type Agent struct {
 	readLoopMu   sync.Mutex    // Protects read loop channels
 }
 
-// New creates a new Agent in the Starting state.
+// New creates a new Agent in the Starting state with the default mode.
 func New(id string, proj *project.Project, wt *project.Worktree) *Agent {
 	now := time.Now()
 	return &Agent{
@@ -90,6 +105,7 @@ func New(id string, proj *project.Project, wt *project.Worktree) *Agent {
 		Project:   proj,
 		Worktree:  wt,
 		State:     StateStarting,
+		Mode:      DefaultMode,
 		StartedAt: now,
 		UpdatedAt: now,
 		buffer:    NewRingBuffer(DefaultBufferSize),
@@ -101,6 +117,31 @@ func (a *Agent) GetState() State {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.State
+}
+
+// GetMode returns the current mode (thread-safe).
+func (a *Agent) GetMode() Mode {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.Mode
+}
+
+// SetMode sets the orchestrator action mode.
+func (a *Agent) SetMode(mode Mode) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.Mode = mode
+	a.UpdatedAt = time.Now()
+}
+
+// IsAutoMode returns true if the agent is in auto mode.
+func (a *Agent) IsAutoMode() bool {
+	return a.GetMode() == ModeAuto
+}
+
+// IsManualMode returns true if the agent is in manual mode.
+func (a *Agent) IsManualMode() bool {
+	return a.GetMode() == ModeManual
 }
 
 // SetTask sets the current task ID.
@@ -245,6 +286,7 @@ func (a *Agent) Info() AgentInfo {
 		Project:   projectName,
 		Worktree:  worktreePath,
 		State:     a.State,
+		Mode:      a.Mode,
 		Task:      a.Task,
 		StartedAt: a.StartedAt,
 		UpdatedAt: a.UpdatedAt,
@@ -257,6 +299,7 @@ type AgentInfo struct {
 	Project   string
 	Worktree  string
 	State     State
+	Mode      Mode
 	Task      string
 	StartedAt time.Time
 	UpdatedAt time.Time

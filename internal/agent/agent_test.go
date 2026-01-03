@@ -308,3 +308,40 @@ func TestDefaultReadLoopConfig(t *testing.T) {
 		t.Error("expected OnError to be nil by default")
 	}
 }
+
+func TestAgent_Mode(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// Default mode is manual
+	if a.GetMode() != ModeManual {
+		t.Errorf("expected default mode Manual, got %s", a.GetMode())
+	}
+
+	if !a.IsManualMode() {
+		t.Error("expected IsManualMode to be true by default")
+	}
+
+	if a.IsAutoMode() {
+		t.Error("expected IsAutoMode to be false by default")
+	}
+
+	// Set to auto mode
+	a.SetMode(ModeAuto)
+	if a.GetMode() != ModeAuto {
+		t.Errorf("expected mode Auto, got %s", a.GetMode())
+	}
+
+	if !a.IsAutoMode() {
+		t.Error("expected IsAutoMode to be true after SetMode(ModeAuto)")
+	}
+
+	if a.IsManualMode() {
+		t.Error("expected IsManualMode to be false after SetMode(ModeAuto)")
+	}
+
+	// Mode is included in Info
+	info := a.Info()
+	if info.Mode != ModeAuto {
+		t.Errorf("expected Info.Mode to be Auto, got %s", info.Mode)
+	}
+}
