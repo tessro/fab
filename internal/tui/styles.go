@@ -9,12 +9,20 @@ var (
 	mutedColor     = lipgloss.Color("#6B7280") // Gray
 	errorColor     = lipgloss.Color("#EF4444") // Red
 
-	// Header style
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(primaryColor).
-			Padding(0, 1)
+	// Header styles
+	headerContainerStyle = lipgloss.NewStyle().
+				Background(primaryColor)
+
+	headerBrandStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(primaryColor).
+				Padding(0, 1)
+
+	headerStatsStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#E0E0E0")).
+				Background(primaryColor).
+				Padding(0, 1)
 
 	// Status bar style
 	statusStyle = lipgloss.NewStyle().

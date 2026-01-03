@@ -18,6 +18,9 @@ type Model struct {
 	ready bool
 	err   error
 
+	// Components
+	header Header
+
 	// TODO: daemon client for IPC
 	// TODO: agent list state
 	// TODO: focused agent for output view
@@ -25,7 +28,9 @@ type Model struct {
 
 // New creates a new TUI model.
 func New() Model {
-	return Model{}
+	return Model{
+		header: NewHeader(),
+	}
 }
 
 // Init implements tea.Model.
@@ -45,6 +50,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.header.SetWidth(m.width)
 		m.ready = true
 	}
 
@@ -58,7 +64,7 @@ func (m Model) View() string {
 	}
 
 	// Header
-	header := headerStyle.Width(m.width).Render("🚌 fab")
+	header := m.header.View()
 
 	// Status bar
 	status := statusStyle.Width(m.width).Render("Press q to quit")
