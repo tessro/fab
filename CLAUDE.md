@@ -27,6 +27,17 @@ fab is a coding agent supervisor - it manages multiple Claude Code instances acr
   - Scope: optional, e.g., `cli`, `tui`, `daemon`, `beads`
 - Keep subject line under 72 chars
 - Reference issue IDs in body when applicable (e.g., `Implements FAB-12`)
+- **Push after committing** - don't let commits pile up locally
+
+## Beads
+
+- Issue IDs are auto-generated; do not prefix titles with IDs
+- Example: `bd create "Add foo feature"` not `bd create "FAB-99: Add foo feature"`
+
+## Releases
+
+- Releases are CI-driven via GitHub Actions on `vX.Y.Z` tags
+- Do not use `gh release` manually
 
 ## Key Conventions
 
