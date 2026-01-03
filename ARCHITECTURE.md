@@ -92,7 +92,7 @@ type Project struct {
 }
 
 type Worktree struct {
-    Path      string   // e.g., "/home/tess/repos/myapp/.fab-worktrees/wt-001"
+    Path      string   // e.g., "~/.fab/worktrees/myapp/wt-001"
     InUse     bool
     AgentID   string   // if in use
 }
@@ -100,7 +100,7 @@ type Worktree struct {
 
 **Worktree pool behavior:**
 - On project add: create `MaxAgents` worktrees upfront (avoids churn)
-- Worktrees live in `<project>/.fab-worktrees/wt-NNN/`
+- Worktrees live in `~/.fab/worktrees/<project>/wt-NNN/`
 - Each agent gets an exclusive worktree from the pool
 - When agent exits, worktree returns to pool (git clean/reset)
 - Pool size can be adjusted with `fab project set <name> --max-agents N`

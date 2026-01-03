@@ -16,7 +16,7 @@ func (p *Project) CreateWorktreePool() ([]string, error) {
 
 	wtDir := p.WorktreesDir()
 
-	// Create the .fab-worktrees directory
+	// Create the worktrees directory
 	if err := os.MkdirAll(wtDir, 0755); err != nil {
 		return nil, fmt.Errorf("create worktrees directory: %w", err)
 	}
@@ -77,8 +77,8 @@ func (p *Project) cleanupWorktrees() error {
 	// Clear the worktrees slice
 	p.Worktrees = p.Worktrees[:0]
 
-	// Remove the .fab-worktrees directory if empty
-	wtDir := filepath.Join(p.Path, ".fab-worktrees")
+	// Remove the worktrees directory if empty
+	wtDir := p.WorktreesDir()
 	if entries, err := os.ReadDir(wtDir); err == nil && len(entries) == 0 {
 		os.Remove(wtDir)
 	}

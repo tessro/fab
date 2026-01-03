@@ -43,5 +43,5 @@ fab is a coding agent supervisor - it manages multiple Claude Code instances acr
 
 - Config lives in `~/.config/fab/config.toml`
 - Daemon socket at `~/.fab/fab.sock`
-- Worktrees in `<project>/.fab-worktrees/`
+- Worktrees in `~/.fab/worktrees/<project>/`
 - Issue prefix: `FAB-`

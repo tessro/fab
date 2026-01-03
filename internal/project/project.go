@@ -3,6 +3,7 @@ package project
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 )
@@ -29,7 +30,7 @@ type Project struct {
 
 // Worktree represents a git worktree used by an agent.
 type Worktree struct {
-	Path    string // Absolute path (e.g., "/home/user/repos/myapp/.fab-worktrees/wt-001")
+	Path    string // Absolute path (e.g., "~/.fab/worktrees/myapp/wt-001")
 	InUse   bool   // Whether assigned to an agent
 	AgentID string // Agent ID if in use (empty if available)
 }
@@ -46,8 +47,13 @@ func NewProject(name, path string) *Project {
 }
 
 // WorktreesDir returns the path to the worktrees directory.
+// Returns ~/.fab/worktrees/<projectName> or falls back to <project>/.fab-worktrees on error.
 func (p *Project) WorktreesDir() string {
-	return filepath.Join(p.Path, ".fab-worktrees")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(p.Path, ".fab-worktrees")
+	}
+	return filepath.Join(home, ".fab", "worktrees", p.Name)
 }
 
 // GetAvailableWorktree returns an available worktree and marks it as in use.
