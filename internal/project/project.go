@@ -57,6 +57,7 @@ func (p *Project) WorktreesDir() string {
 }
 
 // GetAvailableWorktree returns an available worktree and marks it as in use.
+// If the worktree directory is missing, it will be recreated.
 // Returns ErrNoWorktreeAvailable if all worktrees are occupied.
 func (p *Project) GetAvailableWorktree(agentID string) (*Worktree, error) {
 	p.mu.Lock()
@@ -64,6 +65,11 @@ func (p *Project) GetAvailableWorktree(agentID string) (*Worktree, error) {
 
 	for i := range p.Worktrees {
 		if !p.Worktrees[i].InUse {
+			// Ensure the worktree directory exists, recreate if missing
+			if err := p.ensureWorktreeExists(p.Worktrees[i].Path); err != nil {
+				// Skip this worktree if recreation fails, try next
+				continue
+			}
 			p.Worktrees[i].InUse = true
 			p.Worktrees[i].AgentID = agentID
 			return &p.Worktrees[i], nil

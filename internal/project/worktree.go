@@ -58,6 +58,45 @@ func (p *Project) DeleteWorktreePool() error {
 	return p.cleanupWorktrees()
 }
 
+// ensureWorktreeExists checks if a worktree exists and recreates it if missing.
+// Only attempts recreation if the worktrees directory exists and the project path is a valid git repo.
+// Must be called with lock held.
+func (p *Project) ensureWorktreeExists(wtPath string) error {
+	// Check if worktree directory exists
+	if _, err := os.Stat(wtPath); err == nil {
+		return nil // Already exists
+	}
+
+	// Only attempt recreation if the worktrees directory exists
+	// (indicates pool was previously created via CreateWorktreePool)
+	wtDir := p.WorktreesDir()
+	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
+		// Worktrees directory doesn't exist - skip recreation
+		return nil
+	}
+
+	// Verify the project path is a valid git repository before attempting worktree operations
+	gitDir := filepath.Join(p.Path, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		// Not a git repo - skip recreation (likely a test scenario)
+		return nil
+	}
+
+	// Prune stale worktree references first (in case git still has a ref to the deleted path)
+	pruneCmd := exec.Command("git", "worktree", "prune")
+	pruneCmd.Dir = p.Path
+	pruneCmd.Run() // Ignore errors from prune
+
+	// Recreate the git worktree with detached HEAD
+	cmd := exec.Command("git", "worktree", "add", "--detach", wtPath)
+	cmd.Dir = p.Path
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("recreate worktree %s: %w\n%s", wtPath, err, output)
+	}
+
+	return nil
+}
+
 // cleanupWorktrees removes all worktrees. Must be called with lock held.
 func (p *Project) cleanupWorktrees() error {
 	var lastErr error
