@@ -195,6 +195,11 @@ func (m *Manager) CountByProject(projectName string) int {
 	return len(m.projects[projectName])
 }
 
+// CountForProject is an alias for CountByProject.
+func (m *Manager) CountForProject(projectName string) int {
+	return m.CountByProject(projectName)
+}
+
 // CountByState returns counts of agents in each state.
 func (m *Manager) CountByState() map[State]int {
 	m.mu.RLock()

@@ -11,6 +11,8 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/orchestrator"
+	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
 )
 
@@ -20,9 +22,11 @@ const Version = "0.1.0"
 // Supervisor handles IPC requests and orchestrates agents across projects.
 // It implements the daemon.Handler interface.
 type Supervisor struct {
-	registry  *registry.Registry
-	agents    *agent.Manager
-	startedAt time.Time
+	registry      *registry.Registry
+	agents        *agent.Manager
+	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
+	orchConfig    orchestrator.Config
+	startedAt     time.Time
 
 	// shutdownCh is closed when shutdown is requested
 	shutdownCh chan struct{}
@@ -37,10 +41,12 @@ type Supervisor struct {
 // New creates a new Supervisor with the given registry and agent manager.
 func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 	s := &Supervisor{
-		registry:   reg,
-		agents:     agents,
-		startedAt:  time.Now(),
-		shutdownCh: make(chan struct{}),
+		registry:      reg,
+		agents:        agents,
+		orchestrators: make(map[string]*orchestrator.Orchestrator),
+		orchConfig:    orchestrator.DefaultConfig(),
+		startedAt:     time.Now(),
+		shutdownCh:    make(chan struct{}),
 	}
 
 	// Register event handler to broadcast agent events
@@ -93,6 +99,16 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	case daemon.MsgDetach:
 		return s.handleDetach(ctx, req)
 
+	// Orchestrator
+	case daemon.MsgAgentDone:
+		return s.handleAgentDone(ctx, req)
+	case daemon.MsgListStagedActions:
+		return s.handleListStagedActions(ctx, req)
+	case daemon.MsgApproveAction:
+		return s.handleApproveAction(ctx, req)
+	case daemon.MsgRejectAction:
+		return s.handleRejectAction(ctx, req)
+
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
 	}
@@ -144,8 +160,9 @@ func (s *Supervisor) handleStart(ctx context.Context, req *daemon.Request) *daem
 		// Start all projects
 		projects := s.registry.List()
 		for _, p := range projects {
-			p.SetRunning(true)
-			s.agents.RegisterProject(p)
+			if err := s.startOrchestrator(ctx, p); err != nil {
+				return errorResponse(req, fmt.Sprintf("failed to start project %s: %v", p.Name, err))
+			}
 		}
 		return successResponse(req, nil)
 	}
@@ -159,8 +176,10 @@ func (s *Supervisor) handleStart(ctx context.Context, req *daemon.Request) *daem
 		return errorResponse(req, fmt.Sprintf("project not found: %s", startReq.Project))
 	}
 
-	proj.SetRunning(true)
-	s.agents.RegisterProject(proj)
+	if err := s.startOrchestrator(ctx, proj); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to start project: %v", err))
+	}
+
 	return successResponse(req, nil)
 }
 
@@ -175,8 +194,7 @@ func (s *Supervisor) handleStop(ctx context.Context, req *daemon.Request) *daemo
 		// Stop all projects
 		projects := s.registry.List()
 		for _, p := range projects {
-			s.agents.StopAll(p.Name)
-			p.SetRunning(false)
+			s.stopOrchestrator(p.Name)
 		}
 		return successResponse(req, nil)
 	}
@@ -190,8 +208,7 @@ func (s *Supervisor) handleStop(ctx context.Context, req *daemon.Request) *daemo
 		return errorResponse(req, fmt.Sprintf("project not found: %s", stopReq.Project))
 	}
 
-	s.agents.StopAll(proj.Name)
-	proj.SetRunning(false)
+	s.stopOrchestrator(proj.Name)
 	return successResponse(req, nil)
 }
 
@@ -618,4 +635,187 @@ func unmarshalPayload(payload any, dst any) error {
 		return err
 	}
 	return json.Unmarshal(data, dst)
+}
+
+// startOrchestrator creates and starts an orchestrator for the given project.
+func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if already running
+	if orch, ok := s.orchestrators[proj.Name]; ok && orch.IsRunning() {
+		return nil
+	}
+
+	// Register project with agent manager
+	s.agents.RegisterProject(proj)
+
+	// Create orchestrator
+	orch := orchestrator.New(proj, s.agents, s.orchConfig)
+	s.orchestrators[proj.Name] = orch
+
+	// Mark project as running
+	proj.SetRunning(true)
+
+	// Start the orchestrator
+	return orch.Start()
+}
+
+// stopOrchestrator stops the orchestrator for the given project.
+func (s *Supervisor) stopOrchestrator(projectName string) {
+	s.mu.Lock()
+	orch, ok := s.orchestrators[projectName]
+	s.mu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	// Stop the orchestrator
+	orch.Stop()
+
+	// Stop all agents
+	s.agents.StopAll(projectName)
+
+	// Mark project as not running
+	proj, err := s.registry.Get(projectName)
+	if err == nil {
+		proj.SetRunning(false)
+	}
+
+	// Clean up orchestrator
+	s.mu.Lock()
+	delete(s.orchestrators, projectName)
+	s.mu.Unlock()
+}
+
+// getOrchestrator returns the orchestrator for a project, or nil if not running.
+func (s *Supervisor) getOrchestrator(projectName string) *orchestrator.Orchestrator {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.orchestrators[projectName]
+}
+
+// getOrchestratorForAgent finds the orchestrator for an agent by ID.
+func (s *Supervisor) getOrchestratorForAgent(agentID string) *orchestrator.Orchestrator {
+	a, err := s.agents.Get(agentID)
+	if err != nil {
+		return nil
+	}
+
+	info := a.Info()
+	return s.getOrchestrator(info.Project)
+}
+
+// handleAgentDone handles agent completion signals.
+func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var doneReq daemon.AgentDoneRequest
+	if err := unmarshalPayload(req.Payload, &doneReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	// Find the agent from the connection's worktree
+	// For now, we need the agent ID from somewhere - typically the agent knows its own ID
+	// The fab agent done command should include the agent ID or we look it up from the worktree
+
+	// TODO: Look up agent by worktree from the connection context
+	// For now, we'll add an AgentID field to the request
+
+	return successResponse(req, nil)
+}
+
+// handleListStagedActions returns all pending staged actions.
+func (s *Supervisor) handleListStagedActions(_ context.Context, req *daemon.Request) *daemon.Response {
+	var listReq daemon.StagedActionsRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &listReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	var actions []daemon.StagedAction
+
+	s.mu.RLock()
+	for name, orch := range s.orchestrators {
+		if listReq.Project != "" && listReq.Project != name {
+			continue
+		}
+
+		for _, a := range orch.Actions().List() {
+			actions = append(actions, daemon.StagedAction{
+				ID:        a.ID,
+				AgentID:   a.AgentID,
+				Project:   a.Project,
+				Type:      daemon.ActionType(a.Type),
+				Payload:   a.Payload,
+				CreatedAt: a.CreatedAt,
+			})
+		}
+	}
+	s.mu.RUnlock()
+
+	return successResponse(req, daemon.StagedActionsResponse{
+		Actions: actions,
+	})
+}
+
+// handleApproveAction approves and executes a staged action.
+func (s *Supervisor) handleApproveAction(_ context.Context, req *daemon.Request) *daemon.Response {
+	var approveReq daemon.ApproveActionRequest
+	if err := unmarshalPayload(req.Payload, &approveReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if approveReq.ActionID == "" {
+		return errorResponse(req, "action ID required")
+	}
+
+	// Find the orchestrator with this action
+	s.mu.RLock()
+	var foundOrch *orchestrator.Orchestrator
+	for _, orch := range s.orchestrators {
+		if _, ok := orch.Actions().Get(approveReq.ActionID); ok {
+			foundOrch = orch
+			break
+		}
+	}
+	s.mu.RUnlock()
+
+	if foundOrch == nil {
+		return errorResponse(req, "action not found")
+	}
+
+	// Use the orchestrator's ApproveAction method which removes and executes
+	if err := foundOrch.ApproveAction(approveReq.ActionID); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to execute action: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// handleRejectAction rejects a staged action without executing it.
+func (s *Supervisor) handleRejectAction(_ context.Context, req *daemon.Request) *daemon.Response {
+	var rejectReq daemon.RejectActionRequest
+	if err := unmarshalPayload(req.Payload, &rejectReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if rejectReq.ActionID == "" {
+		return errorResponse(req, "action ID required")
+	}
+
+	// Find the orchestrator with this action and reject it
+	s.mu.RLock()
+	for _, orch := range s.orchestrators {
+		if _, ok := orch.Actions().Get(rejectReq.ActionID); ok {
+			s.mu.RUnlock()
+			if err := orch.RejectAction(rejectReq.ActionID, rejectReq.Reason); err != nil {
+				return errorResponse(req, fmt.Sprintf("failed to reject action: %v", err))
+			}
+			return successResponse(req, nil)
+		}
+	}
+	s.mu.RUnlock()
+
+	return errorResponse(req, "action not found")
 }
