@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,6 +12,44 @@ import (
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/registry"
 )
+
+// newTestGitRepo creates a temp directory initialized as a git repository.
+func newTestGitRepo(t *testing.T) (string, func()) {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "fab-project-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	// Initialize as git repository
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		os.RemoveAll(dir)
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+
+	// Create initial commit (required for worktrees)
+	cmd = exec.Command("git", "commit", "--allow-empty", "-m", "Initial commit")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	if err := cmd.Run(); err != nil {
+		os.RemoveAll(dir)
+		t.Fatalf("failed to create initial commit: %v", err)
+	}
+
+	cleanup := func() {
+		os.RemoveAll(dir)
+	}
+
+	return dir, cleanup
+}
 
 // newTestSupervisor creates a supervisor with a temporary registry for testing.
 func newTestSupervisor(t *testing.T) (*Supervisor, func()) {
@@ -138,12 +177,9 @@ func TestSupervisor_HandleProjectAdd(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Create a temp directory to act as project
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Create a temp git repository to act as project
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	req := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
@@ -172,18 +208,18 @@ func TestSupervisor_HandleProjectAdd(t *testing.T) {
 	if payload.MaxAgents != 5 {
 		t.Errorf("expected max_agents 5, got %d", payload.MaxAgents)
 	}
+	if len(payload.Worktrees) != 5 {
+		t.Errorf("expected 5 worktrees, got %d", len(payload.Worktrees))
+	}
 }
 
 func TestSupervisor_HandleProjectList(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Add a project first (using git repo)
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
@@ -223,12 +259,9 @@ func TestSupervisor_HandleProjectRemove(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Add a project first (using git repo)
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
@@ -325,12 +358,9 @@ func TestSupervisor_HandleStart(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Add a project first (using git repo)
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
@@ -379,12 +409,9 @@ func TestSupervisor_HandleStop(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add and start a project first
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Add and start a project first (using git repo)
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
@@ -436,12 +463,9 @@ func TestSupervisor_HandleProjectSet(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first
-	projDir, err := os.MkdirTemp("", "fab-project-*")
-	if err != nil {
-		t.Fatalf("failed to create project dir: %v", err)
-	}
-	defer os.RemoveAll(projDir)
+	// Add a project first (using git repo)
+	projDir, projCleanup := newTestGitRepo(t)
+	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,

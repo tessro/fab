@@ -267,13 +267,19 @@ func (s *Supervisor) handleProjectAdd(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, fmt.Sprintf("failed to add project: %v", err))
 	}
 
-	// TODO: Create worktree pool (FAB-20)
+	// Create worktree pool
+	worktrees, err := proj.CreateWorktreePool()
+	if err != nil {
+		// Remove the project from registry since worktree creation failed
+		_ = s.registry.Remove(proj.Name)
+		return errorResponse(req, fmt.Sprintf("failed to create worktree pool: %v", err))
+	}
 
 	return successResponse(req, daemon.ProjectAddResponse{
 		Name:      proj.Name,
 		Path:      proj.Path,
 		MaxAgents: proj.MaxAgents,
-		Worktrees: []string{}, // Populated by FAB-20
+		Worktrees: worktrees,
 	})
 }
 
@@ -292,7 +298,13 @@ func (s *Supervisor) handleProjectRemove(ctx context.Context, req *daemon.Reques
 	s.agents.DeleteAll(removeReq.Name)
 	s.agents.UnregisterProject(removeReq.Name)
 
-	// TODO: Delete worktrees if requested (FAB-20)
+	// Delete worktrees if requested
+	if removeReq.DeleteWorktrees {
+		proj, err := s.registry.Get(removeReq.Name)
+		if err == nil {
+			_ = proj.DeleteWorktreePool()
+		}
+	}
 
 	if err := s.registry.Remove(removeReq.Name); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to remove project: %v", err))
