@@ -70,11 +70,9 @@ func NewWithClient(client *daemon.Client) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	if m.client != nil {
-		// Attach to stream and start receiving events
-		return tea.Batch(
-			m.attachToStream(),
-			m.fetchAgentList(),
-		)
+		// Fetch agent list first, then attach to stream
+		// (must be sequential to avoid concurrent decoder access)
+		return m.fetchAgentList()
 	}
 	return nil
 }
@@ -209,6 +207,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
+			// Attach to event stream after initial agent list fetch
+			if !m.attached {
+				cmds = append(cmds, m.attachToStream())
+			}
 		}
 	}
 
