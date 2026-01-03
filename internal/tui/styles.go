@@ -59,4 +59,27 @@ var (
 
 	agentDurationStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
+
+	// PTY view styles
+	ptyHeaderStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#2D2D2D")).
+			Padding(0, 1)
+
+	ptyHeaderFocusedStyle = lipgloss.NewStyle().
+				Background(primaryColor).
+				Padding(0, 1)
+
+	ptyHeaderAgentStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true)
+
+	ptyHeaderProjectStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#A0A0A0"))
+
+	ptyViewportStyle = lipgloss.NewStyle().
+				Padding(0, 1)
+
+	ptyEmptyStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Padding(1, 2)
 )
