@@ -69,6 +69,10 @@ type Agent struct {
 	// Output buffer captures recent PTY output for display/scrollback
 	buffer *RingBuffer
 
+	// Done detection
+	detector     *Detector           // Pattern detector for completion signals
+	onDoneDetect func(match *Match)  // Optional callback when done is detected
+
 	mu            sync.RWMutex
 	onStateChange func(old, new State) // Optional callback for state changes
 }
@@ -435,4 +439,85 @@ func (a *Agent) Output(n int) []byte {
 // This is typically called in the supervisor's read loop.
 func (a *Agent) CaptureOutput(p []byte) {
 	a.buffer.Write(p)
+}
+
+// SetDetector configures the pattern detector for done detection.
+// Pass nil to disable detection.
+func (a *Agent) SetDetector(d *Detector) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.detector = d
+}
+
+// Detector returns the current detector (may be nil).
+func (a *Agent) Detector() *Detector {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.detector
+}
+
+// OnDoneDetect sets a callback that's invoked when a done pattern is detected.
+// The callback receives the match information.
+func (a *Agent) OnDoneDetect(fn func(match *Match)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onDoneDetect = fn
+}
+
+// CheckDone checks the output buffer for completion patterns.
+// Returns the match if a completion pattern is found, nil otherwise.
+// Does not transition state - caller decides whether to mark done.
+func (a *Agent) CheckDone() *Match {
+	a.mu.RLock()
+	detector := a.detector
+	a.mu.RUnlock()
+
+	if detector == nil {
+		return nil
+	}
+
+	return detector.CheckBuffer(a.buffer)
+}
+
+// CheckDoneAndTransition checks for done patterns and transitions to Done state if found.
+// Returns the match if detected and transition succeeded, nil otherwise.
+// If a done callback is set, it's invoked before the transition.
+func (a *Agent) CheckDoneAndTransition() *Match {
+	match := a.CheckDone()
+	if match == nil {
+		return nil
+	}
+
+	// Get callback while holding read lock
+	a.mu.RLock()
+	callback := a.onDoneDetect
+	a.mu.RUnlock()
+
+	// Invoke callback before transition
+	if callback != nil {
+		callback(match)
+	}
+
+	// Attempt transition (may fail if state doesn't allow it)
+	if err := a.MarkDone(); err != nil {
+		return nil
+	}
+
+	return match
+}
+
+// CheckNewOutput checks only the most recent lines for completion patterns.
+// More efficient than CheckDone when called frequently on new output.
+// The numLines parameter specifies how many recent lines to check.
+func (a *Agent) CheckNewOutput(numLines int) *Match {
+	a.mu.RLock()
+	detector := a.detector
+	a.mu.RUnlock()
+
+	if detector == nil {
+		return nil
+	}
+
+	lines := a.buffer.Lines(numLines)
+	return detector.CheckLines(lines)
 }
