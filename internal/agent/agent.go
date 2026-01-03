@@ -75,6 +75,11 @@ type Agent struct {
 
 	mu            sync.RWMutex
 	onStateChange func(old, new State) // Optional callback for state changes
+
+	// Read loop management
+	readLoopStop chan struct{}   // Signals read loop to stop
+	readLoopDone chan struct{}   // Closed when read loop exits
+	readLoopMu   sync.Mutex      // Protects read loop channels
 }
 
 // New creates a new Agent in the Starting state.
@@ -520,4 +525,204 @@ func (a *Agent) CheckNewOutput(numLines int) *Match {
 
 	lines := a.buffer.Lines(numLines)
 	return detector.CheckLines(lines)
+}
+
+// ReadLoopConfig configures the read loop behavior.
+type ReadLoopConfig struct {
+	// OnOutput is called whenever data is read from the PTY.
+	// The callback receives the raw bytes read. It should not block.
+	OnOutput func(data []byte)
+
+	// OnError is called when a read error occurs (other than EOF).
+	// If nil, errors are silently ignored.
+	OnError func(err error)
+
+	// BufferSize is the size of the read buffer. Default: 4096.
+	BufferSize int
+
+	// CheckDoneLines is the number of recent lines to check for done patterns.
+	// Default: 5. Set to 0 to disable done detection in the read loop.
+	CheckDoneLines int
+}
+
+// DefaultReadLoopConfig returns the default read loop configuration.
+func DefaultReadLoopConfig() ReadLoopConfig {
+	return ReadLoopConfig{
+		BufferSize:     4096,
+		CheckDoneLines: 5,
+	}
+}
+
+// StartReadLoop starts a goroutine that continuously reads from the PTY.
+// Data is captured to the ring buffer and the OnOutput callback is called.
+// The loop runs until StopReadLoop is called or the PTY returns EOF/error.
+// Returns an error if the read loop is already running or PTY is not started.
+func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
+	a.readLoopMu.Lock()
+	defer a.readLoopMu.Unlock()
+
+	// Check if already running
+	if a.readLoopStop != nil {
+		select {
+		case <-a.readLoopDone:
+			// Previous loop finished, clean up
+		default:
+			return errors.New("read loop already running")
+		}
+	}
+
+	// Verify PTY is started
+	a.mu.RLock()
+	ptyFile := a.ptyFile
+	a.mu.RUnlock()
+
+	if ptyFile == nil {
+		return ErrPTYNotStarted
+	}
+
+	// Apply defaults
+	if cfg.BufferSize <= 0 {
+		cfg.BufferSize = 4096
+	}
+	if cfg.CheckDoneLines <= 0 {
+		cfg.CheckDoneLines = 5
+	}
+
+	// Create control channels
+	a.readLoopStop = make(chan struct{})
+	a.readLoopDone = make(chan struct{})
+
+	go a.runReadLoop(cfg)
+
+	return nil
+}
+
+// runReadLoop is the main read loop goroutine.
+func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
+	defer close(a.readLoopDone)
+
+	buf := make([]byte, cfg.BufferSize)
+
+	for {
+		// Check for stop signal
+		select {
+		case <-a.readLoopStop:
+			return
+		default:
+		}
+
+		// Read from PTY (this may block)
+		n, err := a.Read(buf)
+
+		if n > 0 {
+			data := buf[:n]
+
+			// Capture to ring buffer
+			a.CaptureOutput(data)
+
+			// Call output callback
+			if cfg.OnOutput != nil {
+				cfg.OnOutput(data)
+			}
+
+			// Transition to running if we were starting
+			if a.GetState() == StateStarting {
+				_ = a.MarkRunning()
+			}
+
+			// Check for done patterns
+			if cfg.CheckDoneLines > 0 {
+				if match := a.CheckNewOutput(cfg.CheckDoneLines); match != nil {
+					// Get callback while holding read lock
+					a.mu.RLock()
+					callback := a.onDoneDetect
+					a.mu.RUnlock()
+
+					// Invoke callback before transition
+					if callback != nil {
+						callback(match)
+					}
+
+					// Attempt transition
+					_ = a.MarkDone()
+					return
+				}
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				// PTY closed, mark agent as done or error
+				if a.IsActive() {
+					_ = a.MarkDone()
+				}
+				return
+			}
+
+			// Handle read errors
+			if cfg.OnError != nil {
+				cfg.OnError(err)
+			}
+
+			// Check if we should stop
+			select {
+			case <-a.readLoopStop:
+				return
+			default:
+			}
+
+			// For other errors, check if PTY is still valid
+			a.mu.RLock()
+			ptyFile := a.ptyFile
+			a.mu.RUnlock()
+
+			if ptyFile == nil {
+				return
+			}
+		}
+	}
+}
+
+// StopReadLoop stops the read loop goroutine.
+// It blocks until the loop has exited.
+// Safe to call if the loop is not running.
+func (a *Agent) StopReadLoop() {
+	a.readLoopMu.Lock()
+	stopCh := a.readLoopStop
+	doneCh := a.readLoopDone
+	a.readLoopMu.Unlock()
+
+	if stopCh == nil {
+		return
+	}
+
+	// Signal stop
+	select {
+	case <-stopCh:
+		// Already closed
+	default:
+		close(stopCh)
+	}
+
+	// Wait for loop to exit
+	if doneCh != nil {
+		<-doneCh
+	}
+}
+
+// IsReadLoopRunning returns true if the read loop is currently running.
+func (a *Agent) IsReadLoopRunning() bool {
+	a.readLoopMu.Lock()
+	defer a.readLoopMu.Unlock()
+
+	if a.readLoopStop == nil {
+		return false
+	}
+
+	select {
+	case <-a.readLoopDone:
+		return false
+	default:
+		return true
+	}
 }

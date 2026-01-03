@@ -28,6 +28,9 @@ type Supervisor struct {
 	shutdownCh chan struct{}
 	shutdownMu sync.Mutex
 
+	// Server reference for broadcasting output events
+	server *daemon.Server
+
 	mu sync.RWMutex
 }
 
@@ -473,11 +476,92 @@ func (s *Supervisor) handleDetach(ctx context.Context, req *daemon.Request) *dae
 	return successResponse(req, nil)
 }
 
+// SetServer sets the daemon server for broadcasting events.
+// This must be called before agents are created.
+func (s *Supervisor) SetServer(srv *daemon.Server) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.server = srv
+}
+
+// Server returns the daemon server, or nil if not set.
+func (s *Supervisor) Server() *daemon.Server {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.server
+}
+
 // handleAgentEvent broadcasts agent events to attached clients.
 func (s *Supervisor) handleAgentEvent(event agent.Event) {
-	// This is called from the agent manager, which doesn't have access to the server.
-	// We need to get the server from somewhere - this will be wired up when the daemon starts.
-	// For now, this is a placeholder that can be connected via SetServer.
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	var streamEvent *daemon.StreamEvent
+
+	switch event.Type {
+	case agent.EventCreated:
+		info := event.Agent.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "created",
+			AgentID: info.ID,
+			Project: info.Project,
+		}
+	case agent.EventStateChanged:
+		info := event.Agent.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "state",
+			AgentID: info.ID,
+			Project: info.Project,
+			State:   string(event.NewState),
+		}
+	case agent.EventDeleted:
+		info := event.Agent.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "deleted",
+			AgentID: info.ID,
+			Project: info.Project,
+		}
+	}
+
+	if streamEvent != nil {
+		srv.Broadcast(streamEvent)
+	}
+}
+
+// broadcastOutput sends PTY output to attached clients.
+func (s *Supervisor) broadcastOutput(agentID, project string, data []byte) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:    "output",
+		AgentID: agentID,
+		Project: project,
+		Data:    string(data),
+	})
+}
+
+// StartAgentReadLoop starts the read loop for an agent.
+// This should be called after the agent's PTY is started.
+func (s *Supervisor) StartAgentReadLoop(a *agent.Agent) error {
+	info := a.Info()
+
+	cfg := agent.DefaultReadLoopConfig()
+	cfg.OnOutput = func(data []byte) {
+		s.broadcastOutput(info.ID, info.Project, data)
+	}
+
+	return a.StartReadLoop(cfg)
 }
 
 // successResponse creates a successful response.

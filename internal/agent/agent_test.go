@@ -262,3 +262,49 @@ func TestAgent_IsTerminal(t *testing.T) {
 		t.Error("expected Error to be terminal")
 	}
 }
+
+func TestAgent_ReadLoop_NoPTY(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// StartReadLoop should fail without PTY
+	err := a.StartReadLoop(DefaultReadLoopConfig())
+	if err != ErrPTYNotStarted {
+		t.Errorf("expected ErrPTYNotStarted, got %v", err)
+	}
+
+	// Should not be running
+	if a.IsReadLoopRunning() {
+		t.Error("expected read loop to not be running")
+	}
+}
+
+func TestAgent_ReadLoop_StopNoop(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// StopReadLoop should be safe to call when not running
+	a.StopReadLoop() // Should not panic
+
+	if a.IsReadLoopRunning() {
+		t.Error("expected read loop to not be running")
+	}
+}
+
+func TestDefaultReadLoopConfig(t *testing.T) {
+	cfg := DefaultReadLoopConfig()
+
+	if cfg.BufferSize != 4096 {
+		t.Errorf("expected BufferSize 4096, got %d", cfg.BufferSize)
+	}
+
+	if cfg.CheckDoneLines != 5 {
+		t.Errorf("expected CheckDoneLines 5, got %d", cfg.CheckDoneLines)
+	}
+
+	if cfg.OnOutput != nil {
+		t.Error("expected OnOutput to be nil by default")
+	}
+
+	if cfg.OnError != nil {
+		t.Error("expected OnError to be nil by default")
+	}
+}
