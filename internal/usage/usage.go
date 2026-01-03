@@ -224,9 +224,44 @@ func ParseAllProjects() (map[string]Usage, error) {
 
 // BillingWindow represents a 5-hour billing window for Claude Pro/Max.
 type BillingWindow struct {
-	Start    time.Time `json:"start"`
-	End      time.Time `json:"end"`
-	Usage    Usage     `json:"usage"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+	Usage Usage     `json:"usage"`
+}
+
+// Limits represents usage caps for a billing window.
+// Claude Pro/Max has rolling 5-hour windows with output token limits.
+type Limits struct {
+	OutputTokens int64 `json:"output_tokens"`
+}
+
+// DefaultProLimits returns conservative defaults for Claude Pro plan.
+// Actual limits vary by model and subscription; configure as needed.
+func DefaultProLimits() Limits {
+	return Limits{
+		OutputTokens: 500_000, // ~500K output tokens per 5-hour window
+	}
+}
+
+// DefaultMaxLimits returns defaults for Claude Max plan.
+func DefaultMaxLimits() Limits {
+	return Limits{
+		OutputTokens: 2_000_000, // ~2M output tokens per 5-hour window
+	}
+}
+
+// Percent calculates usage as a percentage of limits (0.0 to 1.0+).
+// Returns ratio of output tokens used vs limit.
+func (u Usage) Percent(limits Limits) float64 {
+	if limits.OutputTokens == 0 {
+		return 0
+	}
+	return float64(u.OutputTokens) / float64(limits.OutputTokens)
+}
+
+// PercentInt returns usage percentage as an integer (0-100+).
+func (u Usage) PercentInt(limits Limits) int {
+	return int(u.Percent(limits) * 100)
 }
 
 // GetCurrentBillingWindow returns the current 5-hour billing window.
@@ -322,4 +357,81 @@ func parseFileInWindow(path string, window BillingWindow) (Usage, error) {
 	usage.TotalTokens = usage.TotalInputTokens + usage.OutputTokens
 
 	return usage, nil
+}
+
+// ParseAllProjectsInWindow aggregates usage across all Claude Code projects within a billing window.
+func ParseAllProjectsInWindow(window BillingWindow) (Usage, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return Usage{}, err
+	}
+
+	projectsDir := filepath.Join(home, ClaudeDir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Usage{}, nil
+		}
+		return Usage{}, err
+	}
+
+	var total Usage
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		projectDir := filepath.Join(projectsDir, entry.Name())
+		pattern := filepath.Join(projectDir, "*.jsonl")
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			usage, err := parseFileInWindow(file, window)
+			if err != nil {
+				continue
+			}
+			total.Add(usage)
+		}
+	}
+
+	return total, nil
+}
+
+// GetCurrentBillingWindowWithUsage returns the current billing window with aggregated usage.
+func GetCurrentBillingWindowWithUsage() (BillingWindow, error) {
+	window := GetCurrentBillingWindow()
+	usage, err := ParseAllProjectsInWindow(window)
+	if err != nil {
+		return window, err
+	}
+	window.Usage = usage
+	return window, nil
+}
+
+// GetDayBillingWindows returns all 5 billing windows for a given day.
+func GetDayBillingWindows(date time.Time) []BillingWindow {
+	date = date.UTC()
+	midnight := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+
+	windows := make([]BillingWindow, 5)
+	for i := 0; i < 5; i++ {
+		start := midnight.Add(time.Duration(i*5) * time.Hour)
+		windows[i] = BillingWindow{
+			Start: start,
+			End:   start.Add(5 * time.Hour),
+		}
+	}
+	return windows
+}
+
+// TimeRemaining returns the duration remaining in this billing window.
+func (bw BillingWindow) TimeRemaining() time.Duration {
+	remaining := bw.End.Sub(time.Now().UTC())
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
