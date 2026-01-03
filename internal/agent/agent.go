@@ -66,8 +66,8 @@ type Agent struct {
 	cmd     *exec.Cmd    // The Claude Code process
 	size    *pty.Winsize // Current terminal size
 
-	// Output buffer will be added in a separate task
-	// buffer *ringbuffer.RingBuffer
+	// Output buffer captures recent PTY output for display/scrollback
+	buffer *RingBuffer
 
 	mu            sync.RWMutex
 	onStateChange func(old, new State) // Optional callback for state changes
@@ -83,6 +83,7 @@ func New(id string, proj *project.Project, wt *project.Worktree) *Agent {
 		State:     StateStarting,
 		StartedAt: now,
 		UpdatedAt: now,
+		buffer:    NewRingBuffer(DefaultBufferSize),
 	}
 }
 
@@ -416,4 +417,22 @@ func (a *Agent) PID() int {
 		return -1
 	}
 	return a.cmd.Process.Pid
+}
+
+// Buffer returns the output ring buffer for direct access.
+// The buffer is safe for concurrent use.
+func (a *Agent) Buffer() *RingBuffer {
+	return a.buffer
+}
+
+// Output returns the last n lines of captured output.
+// If n <= 0, returns all captured output.
+func (a *Agent) Output(n int) []byte {
+	return a.buffer.Last(n)
+}
+
+// CaptureOutput writes data to both the PTY and the output buffer.
+// This is typically called in the supervisor's read loop.
+func (a *Agent) CaptureOutput(p []byte) {
+	a.buffer.Write(p)
 }
