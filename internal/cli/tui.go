@@ -10,7 +10,12 @@ var tuiCmd = &cobra.Command{
 	Short: "Launch the terminal user interface",
 	Long:  "Launch the interactive TUI for monitoring and managing fab agents.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return tui.Run()
+		client, err := ConnectClient()
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+		return tui.RunWithClient(client)
 	},
 }
 
