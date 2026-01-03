@@ -43,7 +43,7 @@ type Request struct {
 // Response is the envelope for all IPC responses.
 type Response struct {
 	Type    MessageType `json:"type"`
-	ID      string      `json:"id,omitempty"`      // Correlates with request ID
+	ID      string      `json:"id,omitempty"` // Correlates with request ID
 	Success bool        `json:"success"`
 	Error   string      `json:"error,omitempty"`
 	Payload any         `json:"payload,omitempty"` // Type-specific payload
@@ -58,14 +58,14 @@ type PingResponse struct {
 
 // StartRequest is the payload for start requests.
 type StartRequest struct {
-	Project string `json:"project"`          // Project name, or empty for all
-	All     bool   `json:"all,omitempty"`    // Start all projects
+	Project string `json:"project"`       // Project name, or empty for all
+	All     bool   `json:"all,omitempty"` // Start all projects
 }
 
 // StopRequest is the payload for stop requests.
 type StopRequest struct {
-	Project string `json:"project"`          // Project name, or empty for all
-	All     bool   `json:"all,omitempty"`    // Stop all projects
+	Project string `json:"project"`       // Project name, or empty for all
+	All     bool   `json:"all,omitempty"` // Stop all projects
 }
 
 // StatusResponse is the payload for status responses.
@@ -93,12 +93,12 @@ type SupervisorStatus struct {
 
 // ProjectStatus contains per-project status info.
 type ProjectStatus struct {
-	Name          string        `json:"name"`
-	Path          string        `json:"path"`
-	Running       bool          `json:"running"` // Orchestration active
-	MaxAgents     int           `json:"max_agents"`
-	ActiveAgents  int           `json:"active_agents"`
-	Agents        []AgentStatus `json:"agents,omitempty"`
+	Name         string        `json:"name"`
+	Path         string        `json:"path"`
+	Running      bool          `json:"running"` // Orchestration active
+	MaxAgents    int           `json:"max_agents"`
+	ActiveAgents int           `json:"active_agents"`
+	Agents       []AgentStatus `json:"agents,omitempty"`
 }
 
 // AgentStatus contains per-agent status info.
@@ -120,15 +120,15 @@ type ProjectAddRequest struct {
 
 // ProjectAddResponse is the payload for project.add responses.
 type ProjectAddResponse struct {
-	Name       string   `json:"name"`
-	Path       string   `json:"path"`
-	MaxAgents  int      `json:"max_agents"`
-	Worktrees  []string `json:"worktrees"` // Created worktree paths
+	Name      string   `json:"name"`
+	Path      string   `json:"path"`
+	MaxAgents int      `json:"max_agents"`
+	Worktrees []string `json:"worktrees"` // Created worktree paths
 }
 
 // ProjectRemoveRequest is the payload for project.remove requests.
 type ProjectRemoveRequest struct {
-	Name           string `json:"name"`
+	Name            string `json:"name"`
 	DeleteWorktrees bool   `json:"delete_worktrees,omitempty"` // Clean up worktrees
 }
 
@@ -193,9 +193,9 @@ type AttachRequest struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type    string `json:"type"`              // "output", "state", "created", "deleted"
+	Type    string `json:"type"` // "output", "state", "created", "deleted"
 	AgentID string `json:"agent_id"`
 	Project string `json:"project"`
-	Data    string `json:"data,omitempty"`    // For output events
-	State   string `json:"state,omitempty"`   // For state events
+	Data    string `json:"data,omitempty"`  // For output events
+	State   string `json:"state,omitempty"` // For state events
 }
