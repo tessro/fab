@@ -86,28 +86,27 @@ func (c *Client) nextID() string {
 }
 
 // Send sends a request and waits for the response.
-// This is not safe to call concurrently with other Send/Recv operations.
+// This is safe to call concurrently with other Send operations.
+// Do not call Send while RecvEvent is in progress.
 func (c *Client) Send(req *Request) (*Response, error) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.conn == nil {
-		c.mu.Unlock()
 		return nil, fmt.Errorf("not connected")
 	}
-	encoder := c.encoder
-	decoder := c.decoder
-	c.mu.Unlock()
 
 	// Assign request ID if not set
 	if req.ID == "" {
 		req.ID = c.nextID()
 	}
 
-	if err := encoder.Encode(req); err != nil {
+	if err := c.encoder.Encode(req); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
 	}
 
 	var resp Response
-	if err := decoder.Decode(&resp); err != nil {
+	if err := c.decoder.Decode(&resp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
@@ -344,6 +343,73 @@ func (c *Client) AgentInput(id, input string) error {
 	return nil
 }
 
+// AgentDone signals that an agent has completed its task.
+// This is called by agents to notify the orchestrator they are done.
+func (c *Client) AgentDone(reason string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentDone,
+		Payload: AgentDoneRequest{Reason: reason},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("agent done failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ListStagedActions returns pending actions for user approval.
+func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgListStagedActions,
+		Payload: StagedActionsRequest{Project: project},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("list actions failed: %s", resp.Error)
+	}
+
+	var result StagedActionsResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// ApproveAction approves and executes a staged action.
+func (c *Client) ApproveAction(actionID string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgApproveAction,
+		Payload: ApproveActionRequest{ActionID: actionID},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("approve action failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// RejectAction rejects a staged action without executing it.
+func (c *Client) RejectAction(actionID, reason string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgRejectAction,
+		Payload: RejectActionRequest{ActionID: actionID, Reason: reason},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("reject action failed: %s", resp.Error)
+	}
+	return nil
+}
+
 // Attach subscribes to streaming events.
 // After calling Attach, use RecvEvent to receive events.
 func (c *Client) Attach(projects []string) error {
@@ -390,6 +456,7 @@ func (c *Client) IsAttached() bool {
 // RecvEvent receives the next streaming event.
 // This blocks until an event is received or an error occurs.
 // Only call this after Attach has been called.
+// This method is not safe to call concurrently with Send or other RecvEvent calls.
 func (c *Client) RecvEvent() (*StreamEvent, error) {
 	c.mu.Lock()
 	if c.conn == nil {
