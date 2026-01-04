@@ -15,6 +15,7 @@ type Focus int
 const (
 	FocusAgentList Focus = iota
 	FocusPTYView
+	FocusInputLine
 )
 
 // StreamEventMsg wraps a daemon stream event for Bubble Tea.
@@ -27,6 +28,11 @@ type StreamEventMsg struct {
 type AgentListMsg struct {
 	Agents []daemon.AgentStatus
 	Err    error
+}
+
+// AgentInputMsg is the result of sending input to an agent.
+type AgentInputMsg struct {
+	Err error
 }
 
 // Model is the main Bubbletea model for the fab TUI.
@@ -44,6 +50,7 @@ type Model struct {
 	header    Header
 	agentList AgentList
 	ptyView   PTYView
+	inputLine InputLine
 
 	// Daemon client for IPC
 	client   *daemon.Client
@@ -56,6 +63,7 @@ func New() Model {
 		header:    NewHeader(),
 		agentList: NewAgentList(),
 		ptyView:   NewPTYView(),
+		inputLine: NewInputLine(),
 		focus:     FocusAgentList,
 	}
 }
@@ -69,12 +77,13 @@ func NewWithClient(client *daemon.Client) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
+	cmds := []tea.Cmd{m.inputLine.input.Cursor.BlinkCmd()}
 	if m.client != nil {
 		// Fetch agent list first, then attach to stream
 		// (must be sequential to avoid concurrent decoder access)
-		return m.fetchAgentList()
+		cmds = append(cmds, m.fetchAgentList())
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 // attachToStream connects to the daemon event stream.
@@ -117,24 +126,77 @@ func (m Model) fetchAgentList() tea.Cmd {
 	}
 }
 
+// sendAgentInput sends input to an agent asynchronously.
+func (m Model) sendAgentInput(agentID, input string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.AgentInput(agentID, input)
+		return AgentInputMsg{Err: err}
+	}
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle input line when focused
+		if m.focus == FocusInputLine {
+			switch msg.String() {
+			case "esc":
+				// Blur input and return to agent list
+				m.inputLine.SetFocused(false)
+				m.focus = FocusAgentList
+			case "enter":
+				// Submit input to agent
+				if m.client != nil && m.ptyView.AgentID() != "" {
+					input := m.inputLine.Value()
+					if input != "" {
+						// Send input with newline asynchronously
+						cmds = append(cmds, m.sendAgentInput(m.ptyView.AgentID(), input+"\n"))
+						m.inputLine.Clear()
+					}
+				}
+			case "tab":
+				// Cycle to agent list
+				m.inputLine.SetFocused(false)
+				m.focus = FocusAgentList
+			default:
+				// Pass all other keys to input
+				cmd := m.inputLine.Update(msg)
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 
 		case "tab":
-			// Toggle focus between agent list and PTY view
-			if m.focus == FocusAgentList {
+			// Cycle focus: agent list -> PTY view -> input line -> agent list
+			switch m.focus {
+			case FocusAgentList:
 				m.focus = FocusPTYView
 				m.ptyView.SetFocused(true)
-			} else {
-				m.focus = FocusAgentList
+			case FocusPTYView:
 				m.ptyView.SetFocused(false)
+				m.inputLine.SetFocused(true)
+				m.focus = FocusInputLine
+			case FocusInputLine:
+				m.inputLine.SetFocused(false)
+				m.focus = FocusAgentList
+			}
+
+		case "i":
+			// Focus input line (vim-style)
+			if m.ptyView.AgentID() != "" {
+				m.ptyView.SetFocused(false)
+				m.inputLine.SetFocused(true)
+				m.focus = FocusInputLine
 			}
 
 		case "enter":
@@ -148,28 +210,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "j", "down":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveDown()
-			} else {
+			} else if m.focus == FocusPTYView {
 				m.ptyView.ScrollDown(1)
 			}
 
 		case "k", "up":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveUp()
-			} else {
+			} else if m.focus == FocusPTYView {
 				m.ptyView.ScrollUp(1)
 			}
 
 		case "g", "home":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveToTop()
-			} else {
+			} else if m.focus == FocusPTYView {
 				m.ptyView.ScrollToTop()
 			}
 
 		case "G", "end":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveToBottom()
-			} else {
+			} else if m.focus == FocusPTYView {
 				m.ptyView.ScrollToBottom()
 			}
 
@@ -211,6 +273,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.attached {
 				cmds = append(cmds, m.attachToStream())
 			}
+		}
+
+	case AgentInputMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
 		}
 	}
 
@@ -290,10 +357,13 @@ func (m Model) View() string {
 
 	// Status bar with context-sensitive help
 	var helpText string
-	if m.focus == FocusAgentList {
-		helpText = "j/k: navigate  enter: view output  tab: switch pane  q: quit"
-	} else {
-		helpText = "j/k/pgup/pgdn: scroll  tab: switch pane  q: quit"
+	switch m.focus {
+	case FocusAgentList:
+		helpText = "j/k: navigate  enter: view output  i: input  tab: switch pane  q: quit"
+	case FocusPTYView:
+		helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
+	case FocusInputLine:
+		helpText = "enter: send  esc: cancel  tab: switch pane"
 	}
 	status := statusStyle.Width(m.width).Render(helpText)
 
@@ -303,14 +373,21 @@ func (m Model) View() string {
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, ptyView)
 
-	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
+	// Input line (only show when agent is selected)
+	var inputLine string
+	if m.ptyView.AgentID() != "" {
+		inputLine = m.inputLine.View()
+	}
+
+	return fmt.Sprintf("%s\n%s\n%s\n%s", header, content, inputLine, status)
 }
 
 // updateLayout recalculates component dimensions for side-by-side layout.
 func (m *Model) updateLayout() {
 	headerHeight := lipgloss.Height(m.header.View())
-	statusHeight := 1 // Single line status bar
-	contentHeight := m.height - headerHeight - statusHeight - 1
+	statusHeight := 1    // Single line status bar
+	inputLineHeight := 3 // Input line with border
+	contentHeight := m.height - headerHeight - statusHeight - inputLineHeight - 1
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -321,6 +398,7 @@ func (m *Model) updateLayout() {
 
 	m.agentList.SetSize(listWidth, contentHeight)
 	m.ptyView.SetSize(ptyWidth, contentHeight)
+	m.inputLine.SetSize(m.width, inputLineHeight)
 }
 
 // Run starts the TUI without a daemon connection.

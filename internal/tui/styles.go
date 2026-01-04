@@ -82,4 +82,15 @@ var (
 	ptyEmptyStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
 			Padding(1, 2)
+
+	// Input line styles
+	inputLineStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(mutedColor).
+			Padding(0, 1)
+
+	inputLineFocusedStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(primaryColor).
+				Padding(0, 1)
 )

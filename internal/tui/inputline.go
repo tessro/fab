@@ -1,0 +1,73 @@
+package tui
+
+import (
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// InputLine is a text input component for sending input to agents.
+type InputLine struct {
+	width   int
+	height  int
+	focused bool
+	input   textinput.Model
+}
+
+// NewInputLine creates a new input line component.
+func NewInputLine() InputLine {
+	ti := textinput.New()
+	ti.Placeholder = "Type a message..."
+	ti.CharLimit = 4096
+	ti.Prompt = "> "
+	return InputLine{
+		input: ti,
+	}
+}
+
+// SetSize updates the component dimensions.
+func (i *InputLine) SetSize(width, height int) {
+	i.width = width
+	i.height = height
+	i.input.Width = width - 4 // Account for prompt and padding
+}
+
+// SetFocused sets the focus state.
+func (i *InputLine) SetFocused(focused bool) {
+	i.focused = focused
+	if focused {
+		i.input.Focus()
+	} else {
+		i.input.Blur()
+	}
+}
+
+// IsFocused returns whether the input is focused.
+func (i *InputLine) IsFocused() bool {
+	return i.focused
+}
+
+// Update handles input events and returns a command.
+func (i *InputLine) Update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	i.input, cmd = i.input.Update(msg)
+	return cmd
+}
+
+// Value returns the current input value.
+func (i *InputLine) Value() string {
+	return i.input.Value()
+}
+
+// Clear resets the input value.
+func (i *InputLine) Clear() {
+	i.input.SetValue("")
+}
+
+// View renders the input line.
+func (i InputLine) View() string {
+	var style = inputLineStyle
+	if i.focused {
+		style = inputLineFocusedStyle
+	}
+	return style.Width(i.width).Render(i.input.View())
+}
