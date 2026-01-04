@@ -1,0 +1,18 @@
+# Lefthook pre-commit hooks for fab
+# Install: lefthook install
+
+pre-commit:
+  parallel: true
+  commands:
+    golangci-lint:
+      glob: "*.go"
+      run: golangci-lint run {staged_files}
+
+    gofmt:
+      glob: "*.go"
+      run: gofmt -l {staged_files}
+      fail_text: "Files are not formatted. Run: gofmt -w <files>"
+
+    govet:
+      glob: "*.go"
+      run: go vet {staged_files}
