@@ -26,7 +26,8 @@ const (
 	MsgAgentList   MessageType = "agent.list"
 	MsgAgentCreate MessageType = "agent.create"
 	MsgAgentDelete MessageType = "agent.delete"
-	MsgAgentInput  MessageType = "agent.input" // Send input to agent PTY
+	MsgAgentInput  MessageType = "agent.input"  // Send input to agent PTY
+	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
 	// TUI streaming
 	MsgAttach MessageType = "attach" // Subscribe to agent output streams
@@ -190,6 +191,17 @@ type AgentListResponse struct {
 type AgentInputRequest struct {
 	ID    string `json:"id"`
 	Input string `json:"input"` // Raw input to send to PTY
+}
+
+// AgentOutputRequest is the payload for agent.output requests.
+type AgentOutputRequest struct {
+	ID string `json:"id"`
+}
+
+// AgentOutputResponse is the payload for agent.output responses.
+type AgentOutputResponse struct {
+	ID     string `json:"id"`
+	Output string `json:"output"` // Buffered PTY output
 }
 
 // AttachRequest is the payload for attach requests.

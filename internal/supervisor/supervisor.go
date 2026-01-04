@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -65,6 +66,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 // Handle processes IPC requests and returns responses.
 // Implements daemon.Handler.
 func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Response {
+	slog.Debug("supervisor handling request", "type", req.Type)
 	switch req.Type {
 	// Server management
 	case daemon.MsgPing:
@@ -99,6 +101,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentDelete(ctx, req)
 	case daemon.MsgAgentInput:
 		return s.handleAgentInput(ctx, req)
+	case daemon.MsgAgentOutput:
+		return s.handleAgentOutput(ctx, req)
 
 	// TUI streaming
 	case daemon.MsgAttach:
@@ -384,6 +388,7 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 	}
 
 	agents := s.agents.List(listReq.Project)
+	slog.Debug("agent list requested", "filter", listReq.Project, "count", len(agents))
 	statuses := make([]daemon.AgentStatus, 0, len(agents))
 
 	for _, a := range agents {
@@ -477,6 +482,31 @@ func (s *Supervisor) handleAgentInput(ctx context.Context, req *daemon.Request) 
 	}
 
 	return successResponse(req, map[string]int{"bytes_written": n})
+}
+
+// handleAgentOutput returns buffered PTY output for an agent.
+func (s *Supervisor) handleAgentOutput(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var outputReq daemon.AgentOutputRequest
+	if err := unmarshalPayload(req.Payload, &outputReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if outputReq.ID == "" {
+		return errorResponse(req, "agent ID required")
+	}
+
+	a, err := s.agents.Get(outputReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("agent not found: %s", outputReq.ID))
+	}
+
+	// Get all buffered output from the agent's ring buffer
+	output := a.Buffer().String()
+
+	return successResponse(req, &daemon.AgentOutputResponse{
+		ID:     outputReq.ID,
+		Output: output,
+	})
 }
 
 // handleAttach subscribes a client to streaming events.

@@ -358,6 +358,27 @@ func (c *Client) AgentInput(id, input string) error {
 	return nil
 }
 
+// AgentOutput retrieves buffered PTY output from an agent.
+func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentOutput,
+		Payload: AgentOutputRequest{ID: id},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("agent output failed: %s", resp.Error)
+	}
+
+	var result AgentOutputResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
 // AgentDone signals that an agent has completed its task.
 // This is called by agents to notify the orchestrator they are done.
 func (c *Client) AgentDone(reason string) error {

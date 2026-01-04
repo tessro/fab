@@ -35,6 +35,13 @@ type AgentInputMsg struct {
 	Err error
 }
 
+// AgentOutputMsg contains buffered output fetched for an agent.
+type AgentOutputMsg struct {
+	AgentID string
+	Output  string
+	Err     error
+}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -137,6 +144,20 @@ func (m Model) sendAgentInput(agentID, input string) tea.Cmd {
 	}
 }
 
+// fetchAgentOutput retrieves buffered output for an agent.
+func (m Model) fetchAgentOutput(agentID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		resp, err := m.client.AgentOutput(agentID)
+		if err != nil {
+			return AgentOutputMsg{AgentID: agentID, Err: err}
+		}
+		return AgentOutputMsg{AgentID: agentID, Output: resp.Output}
+	}
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -204,6 +225,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == FocusAgentList {
 				if agent := m.agentList.Selected(); agent != nil {
 					m.ptyView.SetAgent(agent.ID, agent.Project)
+					// Fetch existing buffered output for this agent
+					cmds = append(cmds, m.fetchAgentOutput(agent.ID))
 				}
 			}
 
@@ -278,6 +301,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AgentInputMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
+		}
+
+	case AgentOutputMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else if msg.AgentID == m.ptyView.AgentID() {
+			// Only apply if still viewing this agent
+			m.ptyView.AppendOutput(msg.Output)
 		}
 	}
 
