@@ -5,7 +5,7 @@ BINARY := fab
 build:
 	go build -o $(BINARY) ./cmd/fab
 
-install:
+install: build
 	go install ./cmd/fab
 
 clean:
