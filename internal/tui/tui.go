@@ -195,6 +195,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "q", "ctrl+c":
+			// Close client to unblock any pending RecvEvent() calls
+			if m.client != nil {
+				m.client.Close()
+			}
 			return m, tea.Quit
 
 		case "tab":
