@@ -30,6 +30,11 @@ type Client struct {
 	ioMu sync.Mutex
 
 	reqID atomic.Uint64
+
+	// Event streaming via dedicated connection
+	eventMu   sync.Mutex
+	eventConn net.Conn
+	eventDone chan struct{}
 }
 
 // NewClient creates a new daemon client.
@@ -70,6 +75,9 @@ func (c *Client) Connect() error {
 
 // Close closes the connection to the daemon.
 func (c *Client) Close() error {
+	// Stop event stream first
+	c.StopEventStream()
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -130,6 +138,7 @@ func (c *Client) Send(req *Request) (*Response, error) {
 	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
+	defer conn.SetDeadline(time.Time{}) // Always clear deadline on exit
 
 	if err := encoder.Encode(req); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -139,9 +148,6 @@ func (c *Client) Send(req *Request) (*Response, error) {
 	if err := decoder.Decode(&resp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
-
-	// Clear deadline after successful operation
-	conn.SetDeadline(time.Time{})
 
 	return &resp, nil
 }
@@ -562,4 +568,113 @@ func (c *Client) RecvEvent() (*StreamEvent, error) {
 	// Clear deadline on success
 	conn.SetReadDeadline(time.Time{})
 	return &event, nil
+}
+
+// EventResult contains either a stream event or an error.
+type EventResult struct {
+	Event *StreamEvent
+	Err   error
+}
+
+// StreamEvents opens a dedicated connection for event streaming and returns a channel.
+// Events are received on the channel until an error occurs or StopEventStream is called.
+// This is preferred over RecvEvent as it uses a dedicated connection and doesn't require
+// timeout-based polling.
+func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
+
+	// Close any existing event stream
+	if c.eventConn != nil {
+		c.eventConn.Close()
+		if c.eventDone != nil {
+			close(c.eventDone)
+		}
+	}
+
+	// Create a new dedicated connection for events
+	conn, err := net.DialTimeout("unix", c.socketPath, ConnectTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("dial daemon for events: %w", err)
+	}
+
+	encoder := json.NewEncoder(conn)
+	decoder := json.NewDecoder(conn)
+
+	// Send attach request on this connection
+	req := &Request{
+		ID:      "event-stream",
+		Type:    MsgAttach,
+		Payload: AttachRequest{Projects: projects},
+	}
+	if err := encoder.Encode(req); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("encode attach request: %w", err)
+	}
+
+	// Wait for attach response
+	var resp Response
+	if err := decoder.Decode(&resp); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("decode attach response: %w", err)
+	}
+	if !resp.Success {
+		conn.Close()
+		return nil, fmt.Errorf("attach failed: %s", resp.Error)
+	}
+
+	// Store connection and done channel
+	c.eventConn = conn
+	c.eventDone = make(chan struct{})
+	done := c.eventDone
+
+	// Create channel for events
+	events := make(chan EventResult, 16)
+
+	// Start reader goroutine
+	go func() {
+		defer close(events)
+		defer conn.Close()
+
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			var event StreamEvent
+			if err := decoder.Decode(&event); err != nil {
+				select {
+				case <-done:
+					// Clean shutdown, don't send error
+				case events <- EventResult{Err: fmt.Errorf("decode event: %w", err)}:
+				}
+				return
+			}
+
+			select {
+			case <-done:
+				return
+			case events <- EventResult{Event: &event}:
+			}
+		}
+	}()
+
+	return events, nil
+}
+
+// StopEventStream stops the event streaming goroutine and closes the event connection.
+func (c *Client) StopEventStream() {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
+
+	if c.eventDone != nil {
+		close(c.eventDone)
+		c.eventDone = nil
+	}
+	if c.eventConn != nil {
+		c.eventConn.Close()
+		c.eventConn = nil
+	}
 }

@@ -4,7 +4,6 @@ package tui
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -77,6 +76,9 @@ type Model struct {
 	client   *daemon.Client
 	attached bool
 
+	// Event channel from dedicated streaming connection
+	eventChan <-chan daemon.EventResult
+
 	// Staged actions pending approval (for selected agent)
 	stagedActions []daemon.StagedAction
 }
@@ -110,29 +112,38 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// attachToStream connects to the daemon event stream.
+// StreamStartMsg is sent when the event stream is started successfully.
+type StreamStartMsg struct {
+	EventChan <-chan daemon.EventResult
+}
+
+// attachToStream connects to the daemon event stream using a dedicated connection.
 func (m Model) attachToStream() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		if err := m.client.Attach(nil); err != nil {
+		eventChan, err := m.client.StreamEvents(nil)
+		if err != nil {
 			return StreamEventMsg{Err: err}
 		}
-		// Start receiving events
-		event, err := m.client.RecvEvent()
-		return StreamEventMsg{Event: event, Err: err}
+		return StreamStartMsg{EventChan: eventChan}
 	}
 }
 
-// waitForEvent waits for the next stream event.
+// waitForEvent waits for the next event from the channel.
 func (m Model) waitForEvent() tea.Cmd {
+	if m.eventChan == nil {
+		return nil
+	}
+	ch := m.eventChan
 	return func() tea.Msg {
-		if m.client == nil || !m.attached {
-			return nil
+		result, ok := <-ch
+		if !ok {
+			// Channel closed
+			return StreamEventMsg{Err: fmt.Errorf("event stream closed")}
 		}
-		event, err := m.client.RecvEvent()
-		return StreamEventMsg{Event: event, Err: err}
+		return StreamEventMsg{Event: result.Event, Err: result.Err}
 	}
 }
 
@@ -372,24 +383,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateLayout()
 		m.ready = true
 
+	case StreamStartMsg:
+		// Event stream connected successfully
+		m.eventChan = msg.EventChan
+		m.attached = true
+		cmds = append(cmds, m.waitForEvent())
+
 	case StreamEventMsg:
-		slog.Debug("StreamEventMsg received",
-			"has_err", msg.Err != nil,
-			"has_event", msg.Event != nil,
-		)
-		// Mark as attached once we start receiving (even timeouts mean we're connected)
-		if !m.attached {
-			m.attached = true
-		}
 		if msg.Err != nil {
-			// Check if it's a timeout - if so, just retry
-			if isTimeoutError(msg.Err) {
-				cmds = append(cmds, m.waitForEvent())
-			} else {
-				m.err = msg.Err
-			}
+			slog.Debug("stream error, stopping event loop", "err", msg.Err)
+			m.err = msg.Err
 		} else if msg.Event != nil {
-			slog.Debug("calling handleStreamEvent", "type", msg.Event.Type)
+			slog.Debug("stream event received", "type", msg.Event.Type)
 			m.handleStreamEvent(msg.Event)
 			// Continue listening for events
 			cmds = append(cmds, m.waitForEvent())
@@ -614,12 +619,3 @@ func RunWithClient(client *daemon.Client) error {
 	return err
 }
 
-// isTimeoutError checks if an error is a network timeout.
-func isTimeoutError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Check for timeout in error message (from net.Error wrapping)
-	return strings.Contains(err.Error(), "timeout") ||
-		strings.Contains(err.Error(), "i/o timeout")
-}
