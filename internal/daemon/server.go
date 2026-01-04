@@ -64,19 +64,24 @@ func (f HandlerFunc) Handle(ctx context.Context, req *Request) *Response {
 type Server struct {
 	socketPath string
 	handler    Handler
-	listener   net.Listener
 
-	mu       sync.Mutex
-	conns    map[net.Conn]struct{}
+	mu sync.Mutex
+	// +checklocks:mu
+	listener net.Listener
+	// +checklocks:mu
+	conns map[net.Conn]struct{}
+	// +checklocks:mu
 	attached map[net.Conn]*attachedClient
-	started  bool
-	done     chan struct{}
+	// +checklocks:mu
+	started bool
+	done    chan struct{}
 }
 
 // attachedClient tracks a client subscribed to streaming events.
 type attachedClient struct {
+	// +checklocks:mu
 	encoder  *json.Encoder
-	projects []string // Filter: empty means all projects
+	projects []string // Filter: empty means all projects (immutable after creation)
 	mu       sync.Mutex
 }
 

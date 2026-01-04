@@ -12,13 +12,19 @@ const DefaultBufferSize = 10000
 // RingBuffer is a thread-safe circular buffer for storing terminal output lines.
 // It stores a fixed number of lines and overwrites the oldest when full.
 type RingBuffer struct {
-	lines    [][]byte // Circular buffer of lines
-	size     int      // Maximum number of lines
-	head     int      // Next write position
-	count    int      // Current number of lines stored
-	partial  []byte   // Incomplete line being accumulated
-	mu       sync.RWMutex
-	totalIn  int64 // Total bytes written (for stats)
+	// +checklocks:mu
+	lines [][]byte // Circular buffer of lines
+	size  int      // Maximum number of lines (immutable after creation)
+	// +checklocks:mu
+	head int // Next write position
+	// +checklocks:mu
+	count int // Current number of lines stored
+	// +checklocks:mu
+	partial []byte // Incomplete line being accumulated
+	mu      sync.RWMutex
+	// +checklocks:mu
+	totalIn int64 // Total bytes written (for stats)
+	// +checklocks:mu
 	totalOut int64 // Total bytes read (for stats)
 }
 

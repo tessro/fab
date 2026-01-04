@@ -41,9 +41,13 @@ type EventHandler func(event Event)
 // Manager manages a pool of agents across projects.
 // It handles creation, tracking, and lifecycle events for all agents.
 type Manager struct {
-	agents   map[string]*Agent           // ID -> Agent
-	projects map[string][]*Agent         // Project name -> Agents
-	handlers []EventHandler              // Event subscribers
+	// +checklocks:mu
+	agents map[string]*Agent // ID -> Agent
+	// +checklocks:mu
+	projects map[string][]*Agent // Project name -> Agents
+	// +checklocks:mu
+	handlers []EventHandler // Event subscribers
+	// +checklocks:mu
 	registry map[string]*project.Project // Project name -> Project
 
 	mu sync.RWMutex

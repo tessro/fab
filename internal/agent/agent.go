@@ -71,35 +71,50 @@ type Agent struct {
 	ID        string            // Unique identifier (e.g., "a1b2c3")
 	Project   *project.Project  // Parent project
 	Worktree  *project.Worktree // Assigned worktree
-	State     State             // Current state
-	Mode      Mode              // Orchestrator action mode (auto/manual)
-	Task      string            // Current task ID (e.g., "FAB-25")
 	StartedAt time.Time         // When the agent was created
-	UpdatedAt time.Time         // Last state change
+
+	// +checklocks:mu
+	State State // Current state
+	// +checklocks:mu
+	Mode Mode // Orchestrator action mode (auto/manual)
+	// +checklocks:mu
+	Task string // Current task ID (e.g., "FAB-25")
+	// +checklocks:mu
+	UpdatedAt time.Time // Last state change
 
 	// PTY management
-	ptyFile *os.File     // PTY file descriptor for I/O
-	cmd     *exec.Cmd    // The Claude Code process
-	size    *pty.Winsize // Current terminal size
+	// +checklocks:mu
+	ptyFile *os.File // PTY file descriptor for I/O
+	// +checklocks:mu
+	cmd *exec.Cmd // The Claude Code process
+	// +checklocks:mu
+	size *pty.Winsize // Current terminal size
 
 	// Output buffer captures recent PTY output for display/scrollback
 	buffer *RingBuffer
 
 	// Done detection
-	detector     *Detector          // Pattern detector for completion signals
+	// +checklocks:mu
+	detector *Detector // Pattern detector for completion signals
+	// +checklocks:mu
 	onDoneDetect func(match *Match) // Optional callback when done is detected
 
-	mu            sync.RWMutex
+	mu sync.RWMutex
+	// +checklocks:mu
 	onStateChange func(old, new State) // Optional callback for state changes
 
 	// Read loop management
+	// +checklocks:readLoopMu
 	readLoopStop chan struct{} // Signals read loop to stop
+	// +checklocks:readLoopMu
 	readLoopDone chan struct{} // Closed when read loop exits
 	readLoopMu   sync.Mutex    // Protects read loop channels
 
 	// Exit information
-	exitErr  error // Error from process exit (nil for clean exit)
-	stopping bool  // True when Stop() has been called
+	// +checklocks:mu
+	exitErr error // Error from process exit (nil for clean exit)
+	// +checklocks:mu
+	stopping bool // True when Stop() has been called
 }
 
 // New creates a new Agent in the Starting state with the default mode.

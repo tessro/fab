@@ -39,6 +39,7 @@ type StagedAction struct {
 
 // ActionQueue manages staged actions for manual mode.
 type ActionQueue struct {
+	// +checklocks:mu
 	actions []StagedAction
 	mu      sync.RWMutex
 }

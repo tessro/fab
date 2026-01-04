@@ -23,18 +23,20 @@ const Version = "0.1.0"
 // Supervisor handles IPC requests and orchestrates agents across projects.
 // It implements the daemon.Handler interface.
 type Supervisor struct {
-	registry      *registry.Registry
-	agents        *agent.Manager
-	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
-	orchConfig    orchestrator.Config
-	startedAt     time.Time
+	registry   *registry.Registry
+	agents     *agent.Manager
+	orchConfig orchestrator.Config
+	startedAt  time.Time
 
-	// shutdownCh is closed when shutdown is requested
-	shutdownCh chan struct{}
+	// +checklocks:mu
+	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
+
+	// +checklocks:shutdownMu
+	shutdownCh chan struct{} // closed when shutdown is requested
 	shutdownMu sync.Mutex
 
-	// Server reference for broadcasting output events
-	server *daemon.Server
+	// +checklocks:mu
+	server *daemon.Server // Server reference for broadcasting output events
 
 	mu sync.RWMutex
 }

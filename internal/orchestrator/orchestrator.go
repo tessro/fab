@@ -37,17 +37,22 @@ Close the task with 'bd close <id>', then run 'fab agent done'.`,
 // Orchestrator manages the automatic agent lifecycle for a single project.
 type Orchestrator struct {
 	project *project.Project
-	config  Config
 	agents  *agent.Manager
+
+	// +checklocks:mu
+	config Config
 
 	// Action queue for manual mode
 	actions *ActionQueue
 
 	// Lifecycle management
+	// +checklocks:mu
 	stopCh chan struct{}
+	// +checklocks:mu
 	doneCh chan struct{}
 	mu     sync.RWMutex
 
+	// +checklocks:mu
 	running bool
 }
 

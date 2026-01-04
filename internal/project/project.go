@@ -19,10 +19,12 @@ var ErrWorktreeNotFound = errors.New("worktree not found")
 
 // Project represents a supervised coding project.
 type Project struct {
-	Name      string     // Unique identifier (e.g., "myapp")
-	Path      string     // Absolute path to project root
-	MaxAgents int        // Max concurrent agents (default: 3)
-	Running   bool       // Whether orchestration is active
+	Name      string // Unique identifier (e.g., "myapp")
+	Path      string // Absolute path to project root
+	MaxAgents int    // Max concurrent agents (default: 3)
+	// +checklocks:mu
+	Running bool // Whether orchestration is active
+	// +checklocks:mu
 	Worktrees []Worktree // Pool of worktrees for agents
 
 	mu sync.RWMutex // Protects Worktrees and Running

@@ -13,13 +13,18 @@ import (
 // Client connects to the fab daemon over Unix socket.
 type Client struct {
 	socketPath string
-	conn       net.Conn
-	encoder    *json.Encoder
-	decoder    *json.Decoder
 
-	mu       sync.Mutex
-	reqID    atomic.Uint64
+	mu sync.Mutex
+	// +checklocks:mu
+	conn net.Conn
+	// +checklocks:mu
+	encoder *json.Encoder
+	// +checklocks:mu
+	decoder *json.Decoder
+	// +checklocks:mu
 	attached bool
+
+	reqID atomic.Uint64
 }
 
 // NewClient creates a new daemon client.

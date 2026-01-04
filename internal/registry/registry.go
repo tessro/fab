@@ -38,9 +38,10 @@ type Config struct {
 
 // Registry manages the persistent collection of projects.
 type Registry struct {
-	configPath string
-	projects   map[string]*project.Project
-	mu         sync.RWMutex
+	configPath string // Immutable after creation
+	// +checklocks:mu
+	projects map[string]*project.Project
+	mu       sync.RWMutex
 }
 
 // New creates a new Registry with the default config path.

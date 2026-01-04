@@ -9,6 +9,7 @@ import (
 // Detector watches agent output for completion patterns.
 // It is thread-safe and can be used concurrently.
 type Detector struct {
+	// +checklocks:mu
 	patterns []*Pattern
 	mu       sync.RWMutex
 }
