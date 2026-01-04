@@ -49,6 +49,13 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		shutdownCh:    make(chan struct{}),
 	}
 
+	// Set up callback to start agent read loops when PTY starts
+	s.orchConfig.OnAgentStarted = func(a *agent.Agent) {
+		if err := s.StartAgentReadLoop(a); err != nil {
+			// Log but don't fail - agent is still usable without broadcasting
+		}
+	}
+
 	// Register event handler to broadcast agent events
 	agents.OnEvent(s.handleAgentEvent)
 

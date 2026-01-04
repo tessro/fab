@@ -18,6 +18,10 @@ type Config struct {
 
 	// KickstartPrompt is sent to agents when they start.
 	KickstartPrompt string
+
+	// OnAgentStarted is called after an agent's PTY is started.
+	// Use this to set up output reading/broadcasting.
+	OnAgentStarted func(*agent.Agent)
 }
 
 // DefaultConfig returns the default orchestrator configuration.
@@ -172,7 +176,18 @@ func (o *Orchestrator) spawnAgentsToCapacity() {
 		// Set the agent mode from config
 		a.SetMode(o.config.DefaultAgentMode)
 
-		// Queue kickstart action
+		// Start the PTY immediately (without prompt)
+		if err := a.Start(""); err != nil {
+			// Failed to start PTY, skip this agent
+			continue
+		}
+
+		// Notify that the agent has started (for read loop setup)
+		if o.config.OnAgentStarted != nil {
+			o.config.OnAgentStarted(a)
+		}
+
+		// Queue kickstart action (will write to stdin)
 		o.queueKickstart(a)
 	}
 }
@@ -201,8 +216,8 @@ func (o *Orchestrator) queueKickstart(a *agent.Agent) {
 
 // executeKickstart sends the kickstart prompt to an agent.
 func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
-	// Start the agent's PTY with the prompt
-	if err := a.Start(prompt); err != nil {
+	// Write the kickstart prompt to stdin
+	if _, err := a.Write([]byte(prompt + "\n")); err != nil {
 		// Log error but continue
 		return
 	}
@@ -253,11 +268,7 @@ func (o *Orchestrator) executeAction(action StagedAction) error {
 
 	switch action.Type {
 	case ActionSendMessage:
-		if a.GetState() == agent.StateStarting {
-			// Agent hasn't started yet, start with the message as prompt
-			return a.Start(action.Payload)
-		}
-		// Send message to running agent
+		// Send message to agent's stdin
 		_, err := a.Write([]byte(action.Payload + "\n"))
 		return err
 
