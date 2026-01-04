@@ -353,7 +353,8 @@ func (a *Agent) Start(initialPrompt string) error {
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
-		"--verbose")
+		"--verbose",
+		"--permission-mode", "acceptEdits")
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
