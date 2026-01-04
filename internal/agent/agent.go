@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -674,6 +675,7 @@ func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
 
 // runReadLoop is the main read loop goroutine that parses JSONL output.
 func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
+	defer logging.LogPanic("agent-read-loop", nil)
 	defer close(a.readLoopDone)
 
 	// Get stdout reference

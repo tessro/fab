@@ -24,6 +24,11 @@ type Client struct {
 	// +checklocks:mu
 	attached bool
 
+	// ioMu serializes all I/O operations (encode/decode).
+	// This prevents concurrent access to the encoder/decoder which can cause panics.
+	// Must be acquired AFTER mu if both are needed.
+	ioMu sync.Mutex
+
 	reqID atomic.Uint64
 }
 
@@ -98,37 +103,45 @@ func (c *Client) nextID() string {
 }
 
 // Send sends a request and waits for the response.
-// This is safe to call concurrently with other Send operations.
-// Do not call Send while RecvEvent is in progress.
+// This blocks until the response is received or an error occurs.
+// Send and RecvEvent are mutually exclusive - only one can run at a time.
 func (c *Client) Send(req *Request) (*Response, error) {
+	// Get connection state under mu
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.conn == nil {
+		c.mu.Unlock()
 		return nil, fmt.Errorf("not connected")
 	}
+	conn := c.conn
+	encoder := c.encoder
+	decoder := c.decoder
+	c.mu.Unlock()
 
 	// Assign request ID if not set
 	if req.ID == "" {
 		req.ID = c.nextID()
 	}
 
+	// Serialize all I/O operations
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
+
 	// Set deadline for this request/response cycle
-	if err := c.conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
 
-	if err := c.encoder.Encode(req); err != nil {
+	if err := encoder.Encode(req); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
 	}
 
 	var resp Response
-	if err := c.decoder.Decode(&resp); err != nil {
+	if err := decoder.Decode(&resp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	// Clear deadline after successful operation
-	c.conn.SetDeadline(time.Time{})
+	conn.SetDeadline(time.Time{})
 
 	return &resp, nil
 }
@@ -513,22 +526,40 @@ func (c *Client) IsAttached() bool {
 	return c.attached
 }
 
+// EventTimeout is the read timeout for streaming events.
+// RecvEvent will return an error after this duration if no event is received.
+// This allows Send operations to interleave with event receiving.
+const EventTimeout = 100 * time.Millisecond
+
 // RecvEvent receives the next streaming event.
-// This blocks until an event is received or an error occurs.
+// This blocks until an event is received, timeout occurs, or an error occurs.
 // Only call this after Attach has been called.
-// This method is not safe to call concurrently with Send or other RecvEvent calls.
+// RecvEvent and Send are mutually exclusive - only one can run at a time.
 func (c *Client) RecvEvent() (*StreamEvent, error) {
 	c.mu.Lock()
 	if c.conn == nil {
 		c.mu.Unlock()
 		return nil, fmt.Errorf("not connected")
 	}
+	conn := c.conn
 	decoder := c.decoder
 	c.mu.Unlock()
 
+	// Serialize all I/O operations
+	c.ioMu.Lock()
+	defer c.ioMu.Unlock()
+
+	// Set a short timeout so we periodically yield for Send operations
+	conn.SetReadDeadline(time.Now().Add(EventTimeout))
+
 	var event StreamEvent
 	if err := decoder.Decode(&event); err != nil {
+		// Clear deadline on error
+		conn.SetReadDeadline(time.Time{})
 		return nil, fmt.Errorf("decode event: %w", err)
 	}
+
+	// Clear deadline on success
+	conn.SetReadDeadline(time.Time{})
 	return &event, nil
 }

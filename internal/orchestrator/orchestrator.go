@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -134,6 +135,7 @@ func (o *Orchestrator) StopCh() <-chan struct{} {
 
 // run is the main orchestration loop.
 func (o *Orchestrator) run() {
+	defer logging.LogPanic("orchestrator-loop", nil)
 	defer close(o.doneCh)
 
 	// Initial spawn of agents up to capacity

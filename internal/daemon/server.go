@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/tessro/fab/internal/logging"
 )
 
 // DefaultSocketPath returns the default Unix socket path.
@@ -149,6 +151,8 @@ func (s *Server) Start() error {
 
 // acceptLoop accepts incoming connections.
 func (s *Server) acceptLoop() {
+	defer logging.LogPanic("daemon-accept-loop", nil)
+
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -174,6 +178,7 @@ func (s *Server) acceptLoop() {
 
 // handleConnection processes requests from a single client.
 func (s *Server) handleConnection(conn net.Conn) {
+	defer logging.LogPanic("daemon-connection-handler", nil)
 	defer func() {
 		conn.Close()
 		s.mu.Lock()

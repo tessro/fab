@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // DefaultLogPath returns the default log file path (~/.fab/fab.log).
@@ -85,4 +86,37 @@ func SetupTest(w io.Writer) {
 		Level: slog.LevelDebug,
 	})
 	slog.SetDefault(slog.New(handler))
+}
+
+// LogPanic logs a panic with stack trace and context.
+// Use in a defer at the start of goroutines:
+//
+//	defer logging.LogPanic("goroutine-name", nil)
+//
+// Or with a recovery callback:
+//
+//	defer logging.LogPanic("goroutine-name", func(r any) { cleanup() })
+func LogPanic(name string, onRecover func(any)) {
+	if r := recover(); r != nil {
+		slog.Error("panic recovered",
+			"goroutine", name,
+			"panic", r,
+			"stack", string(captureStack()),
+		)
+		if onRecover != nil {
+			onRecover(r)
+		}
+	}
+}
+
+// captureStack returns the current goroutine's stack trace.
+func captureStack() []byte {
+	buf := make([]byte, 4096)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, len(buf)*2)
+	}
 }

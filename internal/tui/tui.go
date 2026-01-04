@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -354,7 +355,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StreamEventMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			// Check if it's a timeout - if so, just retry
+			if isTimeoutError(msg.Err) {
+				cmds = append(cmds, m.waitForEvent())
+			} else {
+				m.err = msg.Err
+			}
 		} else if msg.Event != nil {
 			m.attached = true
 			m.handleStreamEvent(msg.Event)
@@ -613,4 +619,14 @@ func RunWithClient(client *daemon.Client) error {
 	)
 	_, err := p.Run()
 	return err
+}
+
+// isTimeoutError checks if an error is a network timeout.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for timeout in error message (from net.Error wrapping)
+	return strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "i/o timeout")
 }
