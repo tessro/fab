@@ -160,6 +160,9 @@ func (v *ChatView) SetInputView(view string, height int) {
 
 // AppendEntry adds a chat entry to the view.
 func (v *ChatView) AppendEntry(entry daemon.ChatEntryDTO) {
+	// Capture scroll position before updating content
+	wasAtBottom := v.viewport.AtBottom() || v.viewport.YOffset >= v.viewport.TotalLineCount()-v.viewport.Height-5
+
 	v.entries = append(v.entries, entry)
 
 	// Cap at max entries to prevent unbounded growth
@@ -170,8 +173,8 @@ func (v *ChatView) AppendEntry(entry daemon.ChatEntryDTO) {
 
 	v.updateContent()
 
-	// Auto-scroll to bottom if near the end
-	if v.viewport.AtBottom() || v.viewport.YOffset >= v.viewport.TotalLineCount()-v.viewport.Height-5 {
+	// Auto-scroll to bottom if we were at/near the bottom
+	if wasAtBottom {
 		v.viewport.GotoBottom()
 	}
 }
