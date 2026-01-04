@@ -55,6 +55,11 @@ type ActionResultMsg struct {
 	Err error
 }
 
+// PermissionResultMsg is the result of responding to a permission request.
+type PermissionResultMsg struct {
+	Err error
+}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -81,6 +86,9 @@ type Model struct {
 
 	// Staged actions pending approval (for selected agent)
 	stagedActions []daemon.StagedAction
+
+	// Pending permission requests (for selected agent)
+	pendingPermissions []daemon.PermissionRequest
 }
 
 // New creates a new TUI model.
@@ -219,6 +227,41 @@ func (m Model) rejectAction(actionID string) tea.Cmd {
 	}
 }
 
+// allowPermission approves a permission request.
+func (m Model) allowPermission(requestID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.RespondPermission(requestID, "allow", "", false)
+		return PermissionResultMsg{Err: err}
+	}
+}
+
+// denyPermission denies a permission request.
+func (m Model) denyPermission(requestID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.RespondPermission(requestID, "deny", "denied by user", false)
+		return PermissionResultMsg{Err: err}
+	}
+}
+
+// pendingPermissionForAgent returns the first pending permission request for the given agent.
+func (m *Model) pendingPermissionForAgent(agentID string) *daemon.PermissionRequest {
+	if agentID == "" {
+		return nil
+	}
+	for i := range m.pendingPermissions {
+		if m.pendingPermissions[i].AgentID == agentID {
+			return &m.pendingPermissions[i]
+		}
+	}
+	return nil
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -299,15 +342,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "y":
-			// Approve pending action for selected agent
+			// Approve pending permission or action for selected agent
 			if m.focus != FocusInputLine {
 				agentID := m.chatView.AgentID()
-				action := m.pendingActionForAgent(agentID)
-				slog.Debug("y pressed",
-					"chatview_agent", agentID,
-					"action_found", action != nil,
-				)
-				if action != nil {
+				// Permissions take priority over actions
+				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+					slog.Debug("approving permission",
+						"permission_id", perm.ID,
+						"tool", perm.ToolName,
+					)
+					cmds = append(cmds, m.allowPermission(perm.ID))
+				} else if action := m.pendingActionForAgent(agentID); action != nil {
 					slog.Debug("approving action",
 						"action_id", action.ID,
 						"action_agent", action.AgentID,
@@ -317,10 +362,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "n":
-			// Reject pending action for selected agent
+			// Reject pending permission or action for selected agent
 			if m.focus != FocusInputLine {
-				action := m.pendingActionForAgent(m.chatView.AgentID())
-				if action != nil {
+				agentID := m.chatView.AgentID()
+				// Permissions take priority over actions
+				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+					slog.Debug("denying permission",
+						"permission_id", perm.ID,
+						"tool", perm.ToolName,
+					)
+					cmds = append(cmds, m.denyPermission(perm.ID))
+				} else if action := m.pendingActionForAgent(agentID); action != nil {
 					cmds = append(cmds, m.rejectAction(action.ID))
 				}
 			}
@@ -330,7 +382,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == FocusAgentList {
 				if agent := m.agentList.Selected(); agent != nil {
 					m.chatView.SetAgent(agent.ID, agent.Project)
-					// Update pending action for newly selected agent
+					// Update pending permission/action for newly selected agent
+					m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
 					m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
 					// Fetch existing chat history for this agent
 					cmds = append(cmds, m.fetchAgentChatHistory(agent.ID))
@@ -444,6 +497,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Refresh staged actions after approve/reject
 			cmds = append(cmds, m.fetchStagedActions())
 		}
+
+	case PermissionResultMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			// Remove the permission from our pending list
+			permID := m.chatView.PendingPermissionID()
+			if permID != "" {
+				for i := range m.pendingPermissions {
+					if m.pendingPermissions[i].ID == permID {
+						m.pendingPermissions = append(m.pendingPermissions[:i], m.pendingPermissions[i+1:]...)
+						break
+					}
+				}
+			}
+		}
+		// Clear the chat view's pending permission
+		m.chatView.SetPendingPermission(nil)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -507,6 +578,21 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		if event.AgentID == m.chatView.AgentID() {
 			m.chatView.ClearAgent()
 		}
+
+	case "permission_request":
+		// A new permission request arrived
+		if event.PermissionRequest != nil {
+			slog.Debug("permission_request event",
+				"agent", event.AgentID,
+				"tool", event.PermissionRequest.ToolName,
+			)
+			// Add to our list of pending permissions
+			m.pendingPermissions = append(m.pendingPermissions, *event.PermissionRequest)
+			// Update chat view if this is for the current agent
+			if event.AgentID == m.chatView.AgentID() {
+				m.chatView.SetPendingPermission(m.pendingPermissionForAgent(event.AgentID))
+			}
+		}
 	}
 }
 
@@ -543,20 +629,25 @@ func (m Model) View() string {
 	// Header
 	header := m.header.View()
 
-	// Check for pending action on selected agent
+	// Check for pending permission or action on selected agent
+	pendingPermission := m.pendingPermissionForAgent(m.chatView.AgentID())
 	pendingAction := m.pendingActionForAgent(m.chatView.AgentID())
 
 	// Status bar with context-sensitive help
 	var helpText string
 	switch m.focus {
 	case FocusAgentList:
-		if pendingAction != nil {
+		if pendingPermission != nil {
+			helpText = "y: allow  n: deny  j/k: navigate  enter: view  q: quit"
+		} else if pendingAction != nil {
 			helpText = "y: approve  n: reject  j/k: navigate  enter: view  q: quit"
 		} else {
 			helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
 		}
 	case FocusChatView:
-		if pendingAction != nil {
+		if pendingPermission != nil {
+			helpText = "y: allow  n: deny  j/k: scroll  tab: switch pane  q: quit"
+		} else if pendingAction != nil {
 			helpText = "y: approve  n: reject  j/k: scroll  tab: switch pane  q: quit"
 		} else {
 			helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"

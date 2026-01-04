@@ -23,10 +23,11 @@ const Version = "0.1.0"
 // Supervisor handles IPC requests and orchestrates agents across projects.
 // It implements the daemon.Handler interface.
 type Supervisor struct {
-	registry   *registry.Registry
-	agents     *agent.Manager
-	orchConfig orchestrator.Config
-	startedAt  time.Time
+	registry    *registry.Registry
+	agents      *agent.Manager
+	orchConfig  orchestrator.Config
+	permissions *daemon.PermissionManager
+	startedAt   time.Time
 
 	// +checklocks:mu
 	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
@@ -40,6 +41,9 @@ type Supervisor struct {
 	mu sync.RWMutex
 }
 
+// PermissionTimeout is the default timeout for permission requests.
+const PermissionTimeout = 5 * time.Minute
+
 // New creates a new Supervisor with the given registry and agent manager.
 func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 	s := &Supervisor{
@@ -47,6 +51,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		agents:        agents,
 		orchestrators: make(map[string]*orchestrator.Orchestrator),
 		orchConfig:    orchestrator.DefaultConfig(),
+		permissions:   daemon.NewPermissionManager(PermissionTimeout),
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
 	}
@@ -122,6 +127,14 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleApproveAction(ctx, req)
 	case daemon.MsgRejectAction:
 		return s.handleRejectAction(ctx, req)
+
+	// Permission handling
+	case daemon.MsgPermissionRequest:
+		return s.handlePermissionRequest(ctx, req)
+	case daemon.MsgPermissionRespond:
+		return s.handlePermissionRespond(ctx, req)
+	case daemon.MsgPermissionList:
+		return s.handlePermissionList(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
@@ -949,4 +962,121 @@ func (s *Supervisor) handleRejectAction(_ context.Context, req *daemon.Request) 
 	s.mu.RUnlock()
 
 	return errorResponse(req, "action not found")
+}
+
+// handlePermissionRequest handles a permission request from the hook command.
+// This blocks until a TUI client responds via permission.respond.
+func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Request) *daemon.Response {
+	var permReq daemon.PermissionRequestPayload
+	if err := unmarshalPayload(req.Payload, &permReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if permReq.ToolName == "" {
+		return errorResponse(req, "tool_name is required")
+	}
+
+	// Find the project for this agent
+	var project string
+	if permReq.AgentID != "" {
+		if a, err := s.agents.Get(permReq.AgentID); err == nil {
+			project = a.Info().Project
+		}
+	}
+
+	// Create the permission request
+	permissionReq := &daemon.PermissionRequest{
+		AgentID:     permReq.AgentID,
+		Project:     project,
+		ToolName:    permReq.ToolName,
+		ToolInput:   permReq.ToolInput,
+		ToolUseID:   permReq.ToolUseID,
+		RequestedAt: time.Now(),
+	}
+
+	// Add to the permission manager and get the response channel
+	id, respCh := s.permissions.Add(permissionReq)
+	permissionReq.ID = id
+
+	// Broadcast the permission request to attached TUI clients
+	s.broadcastPermissionRequest(permissionReq)
+
+	// Block waiting for a response from the TUI
+	resp := <-respCh
+	if resp == nil {
+		// Channel was closed without a response (timeout or cancellation)
+		return errorResponse(req, "permission request cancelled or timed out")
+	}
+
+	return successResponse(req, resp)
+}
+
+// handlePermissionRespond handles a permission response from the TUI.
+func (s *Supervisor) handlePermissionRespond(_ context.Context, req *daemon.Request) *daemon.Response {
+	var respPayload daemon.PermissionRespondPayload
+	if err := unmarshalPayload(req.Payload, &respPayload); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if respPayload.ID == "" {
+		return errorResponse(req, "permission request ID required")
+	}
+
+	resp := &daemon.PermissionResponse{
+		ID:        respPayload.ID,
+		Behavior:  respPayload.Behavior,
+		Message:   respPayload.Message,
+		Interrupt: respPayload.Interrupt,
+	}
+
+	if err := s.permissions.Respond(respPayload.ID, resp); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to respond: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// handlePermissionList returns pending permission requests.
+func (s *Supervisor) handlePermissionList(_ context.Context, req *daemon.Request) *daemon.Response {
+	var listReq daemon.PermissionListRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &listReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	var requests []*daemon.PermissionRequest
+	if listReq.Project != "" {
+		requests = s.permissions.ListForProject(listReq.Project)
+	} else {
+		requests = s.permissions.List()
+	}
+
+	// Convert to slice of values for response
+	result := make([]daemon.PermissionRequest, len(requests))
+	for i, r := range requests {
+		result[i] = *r
+	}
+
+	return successResponse(req, daemon.PermissionListResponse{
+		Requests: result,
+	})
+}
+
+// broadcastPermissionRequest sends a permission request to attached TUI clients.
+func (s *Supervisor) broadcastPermissionRequest(req *daemon.PermissionRequest) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:              "permission_request",
+		AgentID:           req.AgentID,
+		Project:           req.Project,
+		PermissionRequest: req,
+	})
 }

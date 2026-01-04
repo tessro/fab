@@ -11,18 +11,19 @@ import (
 
 // ChatView displays chat entries for a selected agent in a conversational format.
 type ChatView struct {
-	entries       []daemon.ChatEntryDTO
-	width         int
-	height        int
-	scroll        int // current scroll offset (legacy, viewport handles this)
-	focused       bool
-	agentID       string
-	project       string
-	viewport      viewport.Model
-	ready         bool
-	pendingAction *daemon.StagedAction // pending action awaiting approval
-	inputView     string               // rendered input line view
-	inputHeight   int                  // height of input line (for layout)
+	entries           []daemon.ChatEntryDTO
+	width             int
+	height            int
+	scroll            int // current scroll offset (legacy, viewport handles this)
+	focused           bool
+	agentID           string
+	project           string
+	viewport          viewport.Model
+	ready             bool
+	pendingAction     *daemon.StagedAction     // pending action awaiting approval
+	pendingPermission *daemon.PermissionRequest // pending permission request
+	inputView         string                    // rendered input line view
+	inputHeight       int                       // height of input line (for layout)
 }
 
 // NewChatView creates a new chat view component.
@@ -47,6 +48,11 @@ func (v *ChatView) updateViewportSize() {
 
 	// Reserve space for pending action bar if present
 	if v.pendingAction != nil {
+		contentHeight -= 2 // 1 line for content + 1 line padding
+	}
+
+	// Reserve space for pending permission request if present
+	if v.pendingPermission != nil {
 		contentHeight -= 2 // 1 line for content + 1 line padding
 	}
 
@@ -120,6 +126,30 @@ func (v *ChatView) SetPendingAction(action *daemon.StagedAction) {
 // HasPendingAction returns whether there's a pending action.
 func (v *ChatView) HasPendingAction() bool {
 	return v.pendingAction != nil
+}
+
+// SetPendingPermission sets the pending permission request for this chat view.
+func (v *ChatView) SetPendingPermission(req *daemon.PermissionRequest) {
+	hadPermission := v.pendingPermission != nil
+	hasPermission := req != nil
+	v.pendingPermission = req
+	// Recalculate viewport size if pending permission state changed
+	if hadPermission != hasPermission {
+		v.updateViewportSize()
+	}
+}
+
+// HasPendingPermission returns whether there's a pending permission request.
+func (v *ChatView) HasPendingPermission() bool {
+	return v.pendingPermission != nil
+}
+
+// PendingPermissionID returns the ID of the pending permission request, or empty string.
+func (v *ChatView) PendingPermissionID() string {
+	if v.pendingPermission == nil {
+		return ""
+	}
+	return v.pendingPermission.ID
 }
 
 // SetInputView sets the rendered input line view to display.
@@ -299,6 +329,9 @@ func (v ChatView) View() string {
 	if v.pendingAction != nil {
 		emptyHeight -= 2
 	}
+	if v.pendingPermission != nil {
+		emptyHeight -= 2
+	}
 	if v.inputHeight > 0 {
 		emptyHeight -= v.inputHeight
 	}
@@ -311,8 +344,11 @@ func (v ChatView) View() string {
 	// Build the inner content
 	parts := []string{header, content}
 
-	// Add pending action bar if present
-	if v.pendingAction != nil {
+	// Add pending permission bar if present (takes priority over action)
+	if v.pendingPermission != nil {
+		parts = append(parts, v.renderPendingPermission())
+	} else if v.pendingAction != nil {
+		// Add pending action bar if present
 		parts = append(parts, v.renderPendingAction())
 	}
 
@@ -355,4 +391,32 @@ func (v ChatView) renderPendingAction() string {
 
 	label := pendingActionLabelStyle.Render("⏸ Pending:")
 	return pendingActionStyle.Width(v.width - 4).Render(label + " " + payload)
+}
+
+// renderPendingPermission renders the pending permission request bar.
+func (v ChatView) renderPendingPermission() string {
+	if v.pendingPermission == nil {
+		return ""
+	}
+
+	// Format tool input for display
+	toolInput := string(v.pendingPermission.ToolInput)
+	// Remove outer braces and quotes for cleaner display
+	toolInput = strings.TrimPrefix(toolInput, "{")
+	toolInput = strings.TrimSuffix(toolInput, "}")
+	toolInput = strings.ReplaceAll(toolInput, "\n", " ")
+	toolInput = strings.TrimSpace(toolInput)
+
+	// Truncate for display
+	maxLen := v.width - 40
+	if maxLen < 20 {
+		maxLen = 20
+	}
+	if len(toolInput) > maxLen {
+		toolInput = toolInput[:maxLen-3] + "..."
+	}
+
+	label := pendingPermissionLabelStyle.Render("🔐 Permission:")
+	toolName := pendingPermissionToolStyle.Render("[" + v.pendingPermission.ToolName + "]")
+	return pendingPermissionStyle.Width(v.width - 4).Render(label + " " + toolName + " " + toolInput)
 }

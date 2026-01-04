@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -348,13 +349,23 @@ func (a *Agent) Start(initialPrompt string) error {
 		workDir = a.Project.Path
 	}
 
+	// Get fab binary path for hook configuration
+	fabPath, err := os.Executable()
+	if err != nil {
+		fabPath = "fab" // Fall back to PATH lookup
+	}
+
+	// Build settings JSON with PreToolUse hook that routes to fab daemon
+	hookSettings := fmt.Sprintf(`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"%s hook"}]}]}}`, fabPath)
+
 	// Build claude command with stream-json mode (no -p for multi-turn)
 	// --verbose is required when using --output-format stream-json
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--verbose",
-		"--permission-mode", "acceptEdits")
+		"--permission-mode", "default",
+		"--settings", hookSettings)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}

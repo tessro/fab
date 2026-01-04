@@ -489,6 +489,71 @@ func (c *Client) RejectAction(actionID, reason string) error {
 	return nil
 }
 
+// RequestPermission sends a permission request and blocks until a response is received.
+// This is called by the fab hook command when Claude Code needs tool permission.
+// The method blocks until the TUI user approves or denies the request.
+func (c *Client) RequestPermission(req *PermissionRequestPayload) (*PermissionResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgPermissionRequest,
+		Payload: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("permission request failed: %s", resp.Error)
+	}
+
+	var result PermissionResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// RespondPermission sends a response to a pending permission request.
+// Called by the TUI when the user approves or denies a permission.
+func (c *Client) RespondPermission(id, behavior, message string, interrupt bool) error {
+	resp, err := c.Send(&Request{
+		Type: MsgPermissionRespond,
+		Payload: PermissionRespondPayload{
+			ID:        id,
+			Behavior:  behavior,
+			Message:   message,
+			Interrupt: interrupt,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("respond permission failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ListPendingPermissions returns pending permission requests awaiting user approval.
+func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgPermissionList,
+		Payload: PermissionListRequest{Project: project},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("list permissions failed: %s", resp.Error)
+	}
+
+	var result PermissionListResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
 // Attach subscribes to streaming events.
 // After calling Attach, use RecvEvent to receive events.
 func (c *Client) Attach(projects []string) error {

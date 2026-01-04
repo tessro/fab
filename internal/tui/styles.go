@@ -111,4 +111,17 @@ var (
 	pendingActionLabelStyle = lipgloss.NewStyle().
 				Foreground(primaryColor).
 				Bold(true)
+
+	// Permission request styles
+	pendingPermissionStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#4B3B2B")).
+				Padding(0, 1)
+
+	pendingPermissionLabelStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#FFA500")). // Orange for attention
+					Bold(true)
+
+	pendingPermissionToolStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#FFFFFF")).
+					Bold(true)
 )
