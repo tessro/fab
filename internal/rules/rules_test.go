@@ -86,17 +86,17 @@ func TestLoadConfig(t *testing.T) {
 	content := `
 [[rules]]
 tool = "Bash"
-effect = "allow"
+action ="allow"
 pattern = "git :*"
 
 [[rules]]
 tool = "Read"
-effect = "allow"
+action ="allow"
 pattern = ":*"
 
 [[rules]]
 tool = "Write"
-effect = "deny"
+action ="deny"
 pattern = "/etc/:*"
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
@@ -116,8 +116,8 @@ pattern = "/etc/:*"
 	if config.Rules[0].Tool != "Bash" {
 		t.Errorf("rule 0 tool = %q, want Bash", config.Rules[0].Tool)
 	}
-	if config.Rules[0].Effect != EffectAllow {
-		t.Errorf("rule 0 effect = %q, want allow", config.Rules[0].Effect)
+	if config.Rules[0].Action != ActionAllow {
+		t.Errorf("rule 0 action = %q, want allow", config.Rules[0].Action)
 	}
 	if config.Rules[0].Pattern != "git :*" {
 		t.Errorf("rule 0 pattern = %q, want 'git :*'", config.Rules[0].Pattern)
@@ -151,12 +151,12 @@ func TestEvaluator(t *testing.T) {
 	globalRules := `
 [[rules]]
 tool = "Bash"
-effect = "allow"
+action ="allow"
 pattern = "ls :*"
 
 [[rules]]
 tool = "Read"
-effect = "allow"
+action ="allow"
 pattern = ":*"
 `
 	if err := os.WriteFile(filepath.Join(globalDir, "permissions.toml"), []byte(globalRules), 0644); err != nil {
@@ -167,12 +167,12 @@ pattern = ":*"
 	projectRules := `
 [[rules]]
 tool = "Bash"
-effect = "allow"
+action ="allow"
 pattern = "git :*"
 
 [[rules]]
 tool = "Bash"
-effect = "deny"
+action ="deny"
 pattern = "rm :*"
 `
 	if err := os.WriteFile(filepath.Join(projectDir, "permissions.toml"), []byte(projectRules), 0644); err != nil {
@@ -186,27 +186,27 @@ pattern = "rm :*"
 			name       string
 			toolName   string
 			toolInput  string
-			wantEffect Effect
+			wantAction Action
 			wantMatch  bool
 		}{
-			{"git allowed by project rule", "Bash", `{"command":"git status"}`, EffectAllow, true},
-			{"rm denied by project rule", "Bash", `{"command":"rm -rf /"}`, EffectDeny, true},
-			{"ls allowed by global rule", "Bash", `{"command":"ls -la"}`, EffectAllow, true},
-			{"read allowed by global wildcard", "Read", `{"file_path":"/any/file.txt"}`, EffectAllow, true},
-			{"unknown command no match", "Bash", `{"command":"cargo build"}`, EffectPass, false},
+			{"git allowed by project rule", "Bash", `{"command":"git status"}`, ActionAllow, true},
+			{"rm denied by project rule", "Bash", `{"command":"rm -rf /"}`, ActionDeny, true},
+			{"ls allowed by global rule", "Bash", `{"command":"ls -la"}`, ActionAllow, true},
+			{"read allowed by global wildcard", "Read", `{"file_path":"/any/file.txt"}`, ActionAllow, true},
+			{"unknown command no match", "Bash", `{"command":"cargo build"}`, ActionPass, false},
 		}
 
 		// Create a simple in-memory test by directly testing rule evaluation
 		projectConfig := &Config{
 			Rules: []Rule{
-				{Tool: "Bash", Effect: EffectAllow, Pattern: "git :*"},
-				{Tool: "Bash", Effect: EffectDeny, Pattern: "rm :*"},
+				{Tool: "Bash", Action: ActionAllow, Pattern: "git :*"},
+				{Tool: "Bash", Action: ActionDeny, Pattern: "rm :*"},
 			},
 		}
 		globalConfig := &Config{
 			Rules: []Rule{
-				{Tool: "Bash", Effect: EffectAllow, Pattern: "ls :*"},
-				{Tool: "Read", Effect: EffectAllow, Pattern: ":*"},
+				{Tool: "Bash", Action: ActionAllow, Pattern: "ls :*"},
+				{Tool: "Read", Action: ActionAllow, Pattern: ":*"},
 			},
 		}
 
@@ -217,7 +217,7 @@ pattern = "rm :*"
 			t.Run(tt.name, func(t *testing.T) {
 				primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
 
-				var gotEffect Effect = EffectPass
+				var gotAction Action= ActionPass
 				gotMatch := false
 
 				for _, rule := range allRules {
@@ -225,16 +225,16 @@ pattern = "rm :*"
 						continue
 					}
 					if MatchPattern(rule.Pattern, primaryField) {
-						if rule.Effect != EffectPass {
-							gotEffect = rule.Effect
+						if rule.Action != ActionPass {
+							gotAction = rule.Action
 							gotMatch = true
 							break
 						}
 					}
 				}
 
-				if gotEffect != tt.wantEffect {
-					t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+				if gotAction != tt.wantAction {
+					t.Errorf("action = %v, want %v", gotAction, tt.wantAction)
 				}
 				if gotMatch != tt.wantMatch {
 					t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
@@ -247,28 +247,28 @@ pattern = "rm :*"
 func TestPatternsArray(t *testing.T) {
 	// Test that patterns array works (any match counts)
 	rules := []Rule{
-		{Tool: "Bash", Effect: EffectAllow, Patterns: []string{"git :*", "cargo :*", "go :*"}},
-		{Tool: "Bash", Effect: EffectDeny, Patterns: []string{"rm :*", "sudo :*"}},
+		{Tool: "Bash", Action: ActionAllow, Patterns: []string{"git :*", "cargo :*", "go :*"}},
+		{Tool: "Bash", Action: ActionDeny, Patterns: []string{"rm :*", "sudo :*"}},
 	}
 
 	tests := []struct {
 		name       string
 		command    string
-		wantEffect Effect
+		wantAction Action
 		wantMatch  bool
 	}{
-		{"git matches first pattern", "git status", EffectAllow, true},
-		{"cargo matches second pattern", "cargo build", EffectAllow, true},
-		{"go matches third pattern", "go test ./...", EffectAllow, true},
-		{"rm matches deny rule", "rm -rf /", EffectDeny, true},
-		{"sudo matches deny rule", "sudo apt install", EffectDeny, true},
-		{"unknown no match", "python script.py", EffectPass, false},
+		{"git matches first pattern", "git status", ActionAllow, true},
+		{"cargo matches second pattern", "cargo build", ActionAllow, true},
+		{"go matches third pattern", "go test ./...", ActionAllow, true},
+		{"rm matches deny rule", "rm -rf /", ActionDeny, true},
+		{"sudo matches deny rule", "sudo apt install", ActionDeny, true},
+		{"unknown no match", "python script.py", ActionPass, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			primaryField := tt.command
-			var gotEffect Effect = EffectPass
+			var gotAction Action= ActionPass
 			gotMatch := false
 
 			for _, rule := range rules {
@@ -284,14 +284,14 @@ func TestPatternsArray(t *testing.T) {
 					}
 				}
 				if matched {
-					gotEffect = rule.Effect
+					gotAction = rule.Action
 					gotMatch = true
 					break
 				}
 			}
 
-			if gotEffect != tt.wantEffect {
-				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			if gotAction != tt.wantAction {
+				t.Errorf("action = %v, want %v", gotAction, tt.wantAction)
 			}
 			if gotMatch != tt.wantMatch {
 				t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
@@ -303,25 +303,25 @@ func TestPatternsArray(t *testing.T) {
 func TestNoPatternMatchesAll(t *testing.T) {
 	// Test that omitting pattern/patterns matches all
 	rules := []Rule{
-		{Tool: "Read", Effect: EffectAllow}, // No pattern = match all
-		{Tool: "Bash", Effect: EffectDeny},  // No pattern = match all
+		{Tool: "Read", Action: ActionAllow}, // No pattern = match all
+		{Tool: "Bash", Action: ActionDeny},  // No pattern = match all
 	}
 
 	tests := []struct {
 		name       string
 		toolName   string
 		toolInput  string
-		wantEffect Effect
+		wantAction Action
 	}{
-		{"read any file allowed", "Read", `{"file_path":"/any/path"}`, EffectAllow},
-		{"read another file allowed", "Read", `{"file_path":"/etc/passwd"}`, EffectAllow},
-		{"bash any command denied", "Bash", `{"command":"anything"}`, EffectDeny},
-		{"bash another command denied", "Bash", `{"command":"rm -rf /"}`, EffectDeny},
+		{"read any file allowed", "Read", `{"file_path":"/any/path"}`, ActionAllow},
+		{"read another file allowed", "Read", `{"file_path":"/etc/passwd"}`, ActionAllow},
+		{"bash any command denied", "Bash", `{"command":"anything"}`, ActionDeny},
+		{"bash another command denied", "Bash", `{"command":"rm -rf /"}`, ActionDeny},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotEffect Effect = EffectPass
+			var gotAction Action= ActionPass
 
 			for _, rule := range rules {
 				if rule.Tool != tt.toolName {
@@ -329,13 +329,13 @@ func TestNoPatternMatchesAll(t *testing.T) {
 				}
 				// No pattern means match all
 				if rule.Pattern == "" && len(rule.Patterns) == 0 {
-					gotEffect = rule.Effect
+					gotAction = rule.Action
 					break
 				}
 			}
 
-			if gotEffect != tt.wantEffect {
-				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			if gotAction != tt.wantAction {
+				t.Errorf("action = %v, want %v", gotAction, tt.wantAction)
 			}
 		})
 	}
@@ -348,27 +348,27 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 	// Create a mock evaluator that we can test directly
 	// by building rules and testing the evaluation logic
 	rules := []Rule{
-		{Tool: "Bash", Effect: EffectAllow, Patterns: []string{"bd:*", "git:*"}},
+		{Tool: "Bash", Action: ActionAllow, Patterns: []string{"bd:*", "git:*"}},
 	}
 
 	tests := []struct {
 		name       string
 		toolName   string
 		toolInput  string
-		wantEffect Effect
+		wantAction Action
 		wantMatch  bool
 	}{
-		{"bd ready matches", "Bash", `{"command":"bd ready"}`, EffectAllow, true},
-		{"bd list matches", "Bash", `{"command":"bd list"}`, EffectAllow, true},
-		{"git status matches", "Bash", `{"command":"git status"}`, EffectAllow, true},
-		{"other command no match", "Bash", `{"command":"cargo build"}`, EffectPass, false},
+		{"bd ready matches", "Bash", `{"command":"bd ready"}`, ActionAllow, true},
+		{"bd list matches", "Bash", `{"command":"bd list"}`, ActionAllow, true},
+		{"git status matches", "Bash", `{"command":"git status"}`, ActionAllow, true},
+		{"other command no match", "Bash", `{"command":"cargo build"}`, ActionPass, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
 
-			var gotEffect Effect = EffectPass
+			var gotAction Action= ActionPass
 			gotMatch := false
 
 			for _, rule := range rules {
@@ -378,9 +378,9 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 
 				matched := false
 				if rule.Script != "" {
-					effect, err := ScriptMatch(ctx, rule.Script, tt.toolName, json.RawMessage(tt.toolInput))
-					if err == nil && effect != EffectPass {
-						gotEffect = effect
+					action, err := ScriptMatch(ctx, rule.Script, tt.toolName, json.RawMessage(tt.toolInput))
+					if err == nil && action != ActionPass {
+						gotAction = action
 						gotMatch = true
 						break
 					}
@@ -399,16 +399,16 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 				}
 
 				if matched {
-					if rule.Effect != EffectPass {
-						gotEffect = rule.Effect
+					if rule.Action != ActionPass {
+						gotAction = rule.Action
 						gotMatch = true
 						break
 					}
 				}
 			}
 
-			if gotEffect != tt.wantEffect {
-				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			if gotAction != tt.wantAction {
+				t.Errorf("action = %v, want %v", gotAction, tt.wantAction)
 			}
 			if gotMatch != tt.wantMatch {
 				t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
@@ -424,12 +424,12 @@ func TestLoadConfigWithPatterns(t *testing.T) {
 	content := `
 [[rules]]
 tool = "Bash"
-effect = "allow"
+action ="allow"
 patterns = ["git :*", "cargo :*", "go :*"]
 
 [[rules]]
 tool = "Read"
-effect = "allow"
+action ="allow"
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -495,24 +495,24 @@ func TestScriptMatch(t *testing.T) {
 	tests := []struct {
 		name       string
 		script     string
-		wantEffect Effect
+		wantAction Action
 		wantErr    bool
 	}{
-		{"allow script", allowScript, EffectAllow, false},
-		{"deny script", denyScript, EffectDeny, false},
-		{"pass script", passScript, EffectPass, false},
-		{"fail script", failScript, EffectPass, true},
-		{"nonexistent script", "/nonexistent/script.sh", EffectPass, true},
+		{"allow script", allowScript, ActionAllow, false},
+		{"deny script", denyScript, ActionDeny, false},
+		{"pass script", passScript, ActionPass, false},
+		{"fail script", failScript, ActionPass, true},
+		{"nonexistent script", "/nonexistent/script.sh", ActionPass, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			effect, err := ScriptMatch(ctx, tt.script, "Bash", toolInput)
+			action, err := ScriptMatch(ctx, tt.script, "Bash", toolInput)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr = %v", err, tt.wantErr)
 			}
-			if effect != tt.wantEffect {
-				t.Errorf("effect = %v, want %v", effect, tt.wantEffect)
+			if action != tt.wantAction {
+				t.Errorf("action = %v, want %v", action, tt.wantAction)
 			}
 		})
 	}

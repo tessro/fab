@@ -102,16 +102,16 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	effect, matched, err := evaluator.Evaluate(ctx, projectName, hookInput.ToolName, hookInput.ToolInput)
+	action, matched, err := evaluator.Evaluate(ctx, projectName, hookInput.ToolName, hookInput.ToolInput)
 	if err != nil {
 		slog.Debug("rule evaluation error", "error", err)
 	} else if matched {
-		switch effect {
-		case rules.EffectAllow:
+		switch action {
+		case rules.ActionAllow:
 			return outputHookResponse("allow", "", false)
-		case rules.EffectDeny:
+		case rules.ActionDeny:
 			return outputHookResponse("deny", "blocked by permission rule", false)
-		// EffectPass falls through to daemon
+		// ActionPass falls through to daemon
 		}
 	}
 

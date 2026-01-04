@@ -8,22 +8,22 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Effect is the result of a rule evaluation.
-type Effect string
+// Action is the result of a rule evaluation.
+type Action string
 
 const (
-	// EffectAllow permits the tool invocation.
-	EffectAllow Effect = "allow"
-	// EffectDeny blocks the tool invocation.
-	EffectDeny Effect = "deny"
-	// EffectPass skips to the next rule.
-	EffectPass Effect = "pass"
+	// ActionAllow permits the tool invocation.
+	ActionAllow Action = "allow"
+	// ActionDeny blocks the tool invocation.
+	ActionDeny Action = "deny"
+	// ActionPass skips to the next rule.
+	ActionPass Action = "pass"
 )
 
 // Rule defines a single permission rule.
 type Rule struct {
-	Tool     string   `toml:"tool"`               // Tool name to match (e.g., "Bash", "Read")
-	Effect   Effect   `toml:"effect"`             // allow, deny, or pass
+	Tool   string   `toml:"tool"`               // Tool name to match (e.g., "Bash", "Read")
+	Action Action   `toml:"action"`             // allow, deny, or pass
 	Pattern  string   `toml:"pattern,omitempty"`  // Pattern to match (":*" suffix = prefix match)
 	Patterns []string `toml:"patterns,omitempty"` // Multiple patterns (any match counts)
 	Script   string   `toml:"script,omitempty"`   // Path to validation script

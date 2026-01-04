@@ -91,7 +91,7 @@ func ResolvePrimaryField(toolName string, toolInput json.RawMessage) string {
 // ScriptMatch executes a validation script and returns its decision.
 // The script receives the tool name as its first argument and tool input JSON on stdin.
 // Script output should be "allow", "deny", or "pass" (default on error or other output).
-func ScriptMatch(ctx context.Context, scriptPath, toolName string, toolInput json.RawMessage) (Effect, error) {
+func ScriptMatch(ctx context.Context, scriptPath, toolName string, toolInput json.RawMessage) (Action, error) {
 	ctx, cancel := context.WithTimeout(ctx, DefaultScriptTimeout)
 	defer cancel()
 
@@ -101,17 +101,17 @@ func ScriptMatch(ctx context.Context, scriptPath, toolName string, toolInput jso
 	output, err := cmd.Output()
 	if err != nil {
 		// On error (including timeout), pass to next rule
-		return EffectPass, err
+		return ActionPass, err
 	}
 
 	// Parse output
 	result := strings.TrimSpace(string(output))
 	switch strings.ToLower(result) {
 	case "allow":
-		return EffectAllow, nil
+		return ActionAllow, nil
 	case "deny":
-		return EffectDeny, nil
+		return ActionDeny, nil
 	default:
-		return EffectPass, nil
+		return ActionPass, nil
 	}
 }

@@ -35,7 +35,7 @@ func NewEvaluator() *Evaluator {
 // Evaluate checks permission rules for a tool invocation.
 // projectName is optional; if empty, only global rules are checked.
 // Returns (effect, matched, error) where matched indicates if any rule applied.
-func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, toolInput json.RawMessage) (Effect, bool, error) {
+func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, toolInput json.RawMessage) (Action, bool, error) {
 	// Load rules: project first, then global
 	var allRules []Rule
 
@@ -46,7 +46,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 			config, err := e.loadCached(projectPath)
 			if err != nil {
 				slog.Debug("failed to load project rules", "path", projectPath, "error", err)
-				return EffectPass, false, err
+				return ActionPass, false, err
 			}
 			if config != nil {
 				slog.Debug("loaded project rules", "path", projectPath, "count", len(config.Rules))
@@ -58,12 +58,12 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 	// Load global rules
 	globalPath, err := GlobalConfigPath()
 	if err != nil {
-		return EffectPass, false, err
+		return ActionPass, false, err
 	}
 	globalConfig, err := e.loadCached(globalPath)
 	if err != nil {
 		slog.Debug("failed to load global rules", "path", globalPath, "error", err)
-		return EffectPass, false, err
+		return ActionPass, false, err
 	}
 	if globalConfig != nil {
 		slog.Debug("loaded global rules", "path", globalPath, "count", len(globalConfig.Rules))
@@ -89,7 +89,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 				// Script error, skip to next rule
 				continue
 			}
-			if effect != EffectPass {
+			if effect != ActionPass {
 				return effect, true, nil
 			}
 			// Script returned pass, continue to next rule
@@ -111,18 +111,18 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 		}
 
 		if matched {
-			slog.Debug("rule matched", "tool", rule.Tool, "effect", rule.Effect, "pattern", rule.Pattern, "patterns", rule.Patterns)
-			if rule.Effect == EffectPass {
+			slog.Debug("rule matched", "tool", rule.Tool, "action", rule.Action, "pattern", rule.Pattern, "patterns", rule.Patterns)
+			if rule.Action == ActionPass {
 				// Explicit pass, continue to next rule
 				continue
 			}
-			return rule.Effect, true, nil
+			return rule.Action, true, nil
 		}
 	}
 
 	// No rule matched
 	slog.Debug("no rule matched", "tool", toolName, "primaryField", primaryField)
-	return EffectPass, false, nil
+	return ActionPass, false, nil
 }
 
 // loadCached loads a config with caching based on file modification time.
