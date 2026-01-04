@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,9 +45,11 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 		if err == nil {
 			config, err := e.loadCached(projectPath)
 			if err != nil {
+				slog.Debug("failed to load project rules", "path", projectPath, "error", err)
 				return EffectPass, false, err
 			}
 			if config != nil {
+				slog.Debug("loaded project rules", "path", projectPath, "count", len(config.Rules))
 				allRules = append(allRules, config.Rules...)
 			}
 		}
@@ -59,14 +62,17 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 	}
 	globalConfig, err := e.loadCached(globalPath)
 	if err != nil {
+		slog.Debug("failed to load global rules", "path", globalPath, "error", err)
 		return EffectPass, false, err
 	}
 	if globalConfig != nil {
+		slog.Debug("loaded global rules", "path", globalPath, "count", len(globalConfig.Rules))
 		allRules = append(allRules, globalConfig.Rules...)
 	}
 
 	// Evaluate rules in order
 	primaryField := ResolvePrimaryField(toolName, toolInput)
+	slog.Debug("evaluating rules", "tool", toolName, "primaryField", primaryField, "ruleCount", len(allRules))
 
 	for _, rule := range allRules {
 		// Check if rule applies to this tool
@@ -105,6 +111,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 		}
 
 		if matched {
+			slog.Debug("rule matched", "tool", rule.Tool, "effect", rule.Effect, "pattern", rule.Pattern, "patterns", rule.Patterns)
 			if rule.Effect == EffectPass {
 				// Explicit pass, continue to next rule
 				continue
@@ -114,6 +121,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 	}
 
 	// No rule matched
+	slog.Debug("no rule matched", "tool", toolName, "primaryField", primaryField)
 	return EffectPass, false, nil
 }
 

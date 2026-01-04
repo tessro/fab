@@ -24,6 +24,8 @@ func TestMatchPattern(t *testing.T) {
 		{"prefix match success", "git :*", "git status", true},
 		{"prefix match with space", "git :*", "git commit -m 'test'", true},
 		{"prefix match exact prefix", "git:*", "git", true},
+		{"prefix match no space", "bd:*", "bd ready", true},
+		{"prefix match no space 2", "git:*", "git status", true},
 		{"prefix match failure", "git :*", "cargo build", false},
 		{"prefix match partial failure", "git :*", "gitignore", false},
 
@@ -331,6 +333,82 @@ func TestNoPatternMatchesAll(t *testing.T) {
 
 			if gotEffect != tt.wantEffect {
 				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			}
+		})
+	}
+}
+
+func TestEvaluatorWithPatterns(t *testing.T) {
+	// Test the full evaluator flow with patterns array
+	ctx := context.Background()
+
+	// Create a mock evaluator that we can test directly
+	// by building rules and testing the evaluation logic
+	rules := []Rule{
+		{Tool: "Bash", Effect: EffectAllow, Patterns: []string{"bd:*", "git:*"}},
+	}
+
+	tests := []struct {
+		name       string
+		toolName   string
+		toolInput  string
+		wantEffect Effect
+		wantMatch  bool
+	}{
+		{"bd ready matches", "Bash", `{"command":"bd ready"}`, EffectAllow, true},
+		{"bd list matches", "Bash", `{"command":"bd list"}`, EffectAllow, true},
+		{"git status matches", "Bash", `{"command":"git status"}`, EffectAllow, true},
+		{"other command no match", "Bash", `{"command":"cargo build"}`, EffectPass, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
+
+			var gotEffect Effect = EffectPass
+			gotMatch := false
+
+			for _, rule := range rules {
+				if rule.Tool != tt.toolName {
+					continue
+				}
+
+				matched := false
+				if rule.Script != "" {
+					effect, err := ScriptMatch(ctx, rule.Script, tt.toolName, json.RawMessage(tt.toolInput))
+					if err == nil && effect != EffectPass {
+						gotEffect = effect
+						gotMatch = true
+						break
+					}
+					continue
+				} else if rule.Pattern != "" {
+					matched = MatchPattern(rule.Pattern, primaryField)
+				} else if len(rule.Patterns) > 0 {
+					for _, p := range rule.Patterns {
+						if MatchPattern(p, primaryField) {
+							matched = true
+							break
+						}
+					}
+				} else {
+					matched = true
+				}
+
+				if matched {
+					if rule.Effect != EffectPass {
+						gotEffect = rule.Effect
+						gotMatch = true
+						break
+					}
+				}
+			}
+
+			if gotEffect != tt.wantEffect {
+				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			}
+			if gotMatch != tt.wantMatch {
+				t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
 			}
 		})
 	}
