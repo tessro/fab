@@ -371,9 +371,9 @@ func (a *Agent) Start(initialPrompt string) error {
 // Stop terminates the Claude Code process and closes the PTY.
 func (a *Agent) Stop() error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	if a.ptyFile == nil {
+		a.mu.Unlock()
 		return ErrPTYNotStarted
 	}
 
@@ -382,15 +382,29 @@ func (a *Agent) Stop() error {
 		// Continue cleanup even if close fails
 	}
 
-	// Wait for process to exit (with timeout handled externally if needed)
-	if a.cmd != nil && a.cmd.Process != nil {
-		_ = a.cmd.Process.Kill()
-		_ = a.cmd.Wait()
-	}
-
+	// Get process reference before releasing lock
+	cmd := a.cmd
 	a.ptyFile = nil
 	a.cmd = nil
 	a.UpdatedAt = time.Now()
+	a.mu.Unlock()
+
+	// Kill and wait for process outside the lock to avoid blocking
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+		// Wait with timeout to avoid hanging
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+		select {
+		case <-done:
+			// Process exited
+		case <-time.After(2 * time.Second):
+			// Timeout waiting for process - continue anyway
+			slog.Warn("timeout waiting for process to exit", "agent", a.ID)
+		}
+	}
 
 	return nil
 }
@@ -826,7 +840,7 @@ func (a *Agent) StopReadLoop() {
 		select {
 		case <-doneCh:
 			// Loop exited cleanly
-		case <-time.After(2 * time.Second):
+		case <-time.After(1 * time.Second):
 			// Timeout - log and continue to avoid hanging shutdown
 			slog.Warn("read loop did not exit within timeout", "agent", a.ID)
 		}

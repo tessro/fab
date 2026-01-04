@@ -127,7 +127,7 @@ func (o *Orchestrator) Stop() {
 	select {
 	case <-doneCh:
 		// Loop exited cleanly
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		// Timeout - continue to avoid hanging shutdown
 	}
 
