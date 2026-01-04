@@ -355,8 +355,37 @@ func (a *Agent) Start(initialPrompt string) error {
 		fabPath = "fab" // Fall back to PATH lookup
 	}
 
-	// Build settings JSON with PreToolUse hook that routes to fab daemon
-	hookSettings := fmt.Sprintf(`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"%s hook"}]}]}}`, fabPath)
+	// Build settings with PreToolUse hook that routes to fab daemon
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "*",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": fabPath + " hook",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Add permission rules to allow Read/Edit within worktree scope
+	if workDir != "" {
+		settings["permissions"] = map[string]any{
+			"allow": []string{
+				fmt.Sprintf("Read(//%s/**)", workDir),
+				fmt.Sprintf("Edit(//%s/**)", workDir),
+			},
+		}
+	}
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
 
 	// Build claude command with stream-json mode (no -p for multi-turn)
 	// --verbose is required when using --output-format stream-json
@@ -365,7 +394,7 @@ func (a *Agent) Start(initialPrompt string) error {
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "default",
-		"--settings", hookSettings)
+		"--settings", string(settingsJSON))
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
