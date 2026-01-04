@@ -168,9 +168,9 @@ func (a *Agent) GetTask() string {
 // Returns ErrInvalidTransition if the transition is not allowed.
 func (a *Agent) Transition(newState State) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	if !a.canTransition(newState) {
+		a.mu.Unlock()
 		return ErrInvalidTransition
 	}
 
@@ -183,10 +183,15 @@ func (a *Agent) Transition(newState State) error {
 		a.Task = ""
 	}
 
-	// Call state change callback outside the lock would be better,
-	// but for simplicity we call it here (callback should be fast)
-	if a.onStateChange != nil {
-		a.onStateChange(oldState, newState)
+	// Get callback before releasing lock
+	callback := a.onStateChange
+	a.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock:
+	// callback -> emit -> broadcast -> socket write (can block)
+	// If we held the lock, Info() calls would block waiting for us
+	if callback != nil {
+		callback(oldState, newState)
 	}
 
 	return nil
