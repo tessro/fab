@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/rules"
 )
 
 // HookInput is the input structure from Claude Code's PermissionRequest hook.
@@ -88,6 +91,31 @@ func runHook(cmd *cobra.Command, args []string) error {
 		// Pass through for other hook types
 		return outputHookResponse("allow", "", false)
 	}
+
+	// Evaluate permission rules before contacting daemon
+	evaluator := rules.NewEvaluator()
+
+	// Try to find the project name from the working directory
+	projectName, err := rules.FindProjectName(hookInput.Cwd)
+	if err != nil {
+		slog.Debug("failed to find project name", "cwd", hookInput.Cwd, "error", err)
+	}
+
+	ctx := context.Background()
+	effect, matched, err := evaluator.Evaluate(ctx, projectName, hookInput.ToolName, hookInput.ToolInput)
+	if err != nil {
+		slog.Debug("rule evaluation error", "error", err)
+	} else if matched {
+		switch effect {
+		case rules.EffectAllow:
+			return outputHookResponse("allow", "", false)
+		case rules.EffectDeny:
+			return outputHookResponse("deny", "blocked by permission rule", false)
+		// EffectPass falls through to daemon
+		}
+	}
+
+	// No matching rule or pass effect - proceed to daemon for TUI prompt
 
 	// Connect to daemon
 	client, err := ConnectClient()
