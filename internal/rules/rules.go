@@ -22,10 +22,11 @@ const (
 
 // Rule defines a single permission rule.
 type Rule struct {
-	Tool    string `toml:"tool"`              // Tool name to match (e.g., "Bash", "Read")
-	Effect  Effect `toml:"effect"`            // allow, deny, or pass
-	Pattern string `toml:"pattern,omitempty"` // Pattern to match (":*" suffix = prefix match)
-	Script  string `toml:"script,omitempty"`  // Path to validation script
+	Tool     string   `toml:"tool"`               // Tool name to match (e.g., "Bash", "Read")
+	Effect   Effect   `toml:"effect"`             // allow, deny, or pass
+	Pattern  string   `toml:"pattern,omitempty"`  // Pattern to match (":*" suffix = prefix match)
+	Patterns []string `toml:"patterns,omitempty"` // Multiple patterns (any match counts)
+	Script   string   `toml:"script,omitempty"`   // Path to validation script
 }
 
 // Config represents a permissions configuration file.

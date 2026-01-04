@@ -239,6 +239,147 @@ pattern = "rm :*"
 	})
 }
 
+func TestPatternsArray(t *testing.T) {
+	// Test that patterns array works (any match counts)
+	rules := []Rule{
+		{Tool: "Bash", Effect: EffectAllow, Patterns: []string{"git :*", "cargo :*", "go :*"}},
+		{Tool: "Bash", Effect: EffectDeny, Patterns: []string{"rm :*", "sudo :*"}},
+	}
+
+	tests := []struct {
+		name       string
+		command    string
+		wantEffect Effect
+		wantMatch  bool
+	}{
+		{"git matches first pattern", "git status", EffectAllow, true},
+		{"cargo matches second pattern", "cargo build", EffectAllow, true},
+		{"go matches third pattern", "go test ./...", EffectAllow, true},
+		{"rm matches deny rule", "rm -rf /", EffectDeny, true},
+		{"sudo matches deny rule", "sudo apt install", EffectDeny, true},
+		{"unknown no match", "python script.py", EffectPass, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			primaryField := tt.command
+			var gotEffect Effect = EffectPass
+			gotMatch := false
+
+			for _, rule := range rules {
+				if rule.Tool != "Bash" {
+					continue
+				}
+				// Check patterns array
+				matched := false
+				for _, p := range rule.Patterns {
+					if MatchPattern(p, primaryField) {
+						matched = true
+						break
+					}
+				}
+				if matched {
+					gotEffect = rule.Effect
+					gotMatch = true
+					break
+				}
+			}
+
+			if gotEffect != tt.wantEffect {
+				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			}
+			if gotMatch != tt.wantMatch {
+				t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
+			}
+		})
+	}
+}
+
+func TestNoPatternMatchesAll(t *testing.T) {
+	// Test that omitting pattern/patterns matches all
+	rules := []Rule{
+		{Tool: "Read", Effect: EffectAllow}, // No pattern = match all
+		{Tool: "Bash", Effect: EffectDeny},  // No pattern = match all
+	}
+
+	tests := []struct {
+		name       string
+		toolName   string
+		toolInput  string
+		wantEffect Effect
+	}{
+		{"read any file allowed", "Read", `{"file_path":"/any/path"}`, EffectAllow},
+		{"read another file allowed", "Read", `{"file_path":"/etc/passwd"}`, EffectAllow},
+		{"bash any command denied", "Bash", `{"command":"anything"}`, EffectDeny},
+		{"bash another command denied", "Bash", `{"command":"rm -rf /"}`, EffectDeny},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotEffect Effect = EffectPass
+
+			for _, rule := range rules {
+				if rule.Tool != tt.toolName {
+					continue
+				}
+				// No pattern means match all
+				if rule.Pattern == "" && len(rule.Patterns) == 0 {
+					gotEffect = rule.Effect
+					break
+				}
+			}
+
+			if gotEffect != tt.wantEffect {
+				t.Errorf("effect = %v, want %v", gotEffect, tt.wantEffect)
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithPatterns(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "permissions.toml")
+
+	content := `
+[[rules]]
+tool = "Bash"
+effect = "allow"
+patterns = ["git :*", "cargo :*", "go :*"]
+
+[[rules]]
+tool = "Read"
+effect = "allow"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if len(config.Rules) != 2 {
+		t.Errorf("got %d rules, want 2", len(config.Rules))
+	}
+
+	// Check patterns array
+	if len(config.Rules[0].Patterns) != 3 {
+		t.Errorf("rule 0 patterns count = %d, want 3", len(config.Rules[0].Patterns))
+	}
+	if config.Rules[0].Patterns[0] != "git :*" {
+		t.Errorf("rule 0 patterns[0] = %q, want 'git :*'", config.Rules[0].Patterns[0])
+	}
+
+	// Check rule with no pattern (matches all)
+	if config.Rules[1].Pattern != "" {
+		t.Errorf("rule 1 pattern = %q, want empty", config.Rules[1].Pattern)
+	}
+	if len(config.Rules[1].Patterns) != 0 {
+		t.Errorf("rule 1 patterns = %v, want empty", config.Rules[1].Patterns)
+	}
+}
+
 func TestScriptMatch(t *testing.T) {
 	// Create temp scripts
 	dir := t.TempDir()

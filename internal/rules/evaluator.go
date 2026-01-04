@@ -89,11 +89,19 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 			// Script returned pass, continue to next rule
 			continue
 		} else if rule.Pattern != "" {
-			// Pattern matcher
+			// Single pattern matcher
 			matched = MatchPattern(rule.Pattern, primaryField)
+		} else if len(rule.Patterns) > 0 {
+			// Multiple patterns - any match counts
+			for _, p := range rule.Patterns {
+				if MatchPattern(p, primaryField) {
+					matched = true
+					break
+				}
+			}
 		} else {
-			// No matcher specified, skip rule
-			continue
+			// No matcher specified - matches all
+			matched = true
 		}
 
 		if matched {
