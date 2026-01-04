@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Client connects to the fab daemon over Unix socket.
@@ -31,6 +32,12 @@ func NewClient(socketPath string) *Client {
 	}
 }
 
+// ConnectTimeout is the default timeout for connecting to the daemon.
+const ConnectTimeout = 5 * time.Second
+
+// RequestTimeout is the default timeout for request/response operations.
+const RequestTimeout = 30 * time.Second
+
 // Connect establishes a connection to the daemon.
 func (c *Client) Connect() error {
 	c.mu.Lock()
@@ -40,7 +47,7 @@ func (c *Client) Connect() error {
 		return nil // Already connected
 	}
 
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := net.DialTimeout("unix", c.socketPath, ConnectTimeout)
 	if err != nil {
 		return fmt.Errorf("dial daemon: %w", err)
 	}
@@ -101,6 +108,11 @@ func (c *Client) Send(req *Request) (*Response, error) {
 		req.ID = c.nextID()
 	}
 
+	// Set deadline for this request/response cycle
+	if err := c.conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
+		return nil, fmt.Errorf("set deadline: %w", err)
+	}
+
 	if err := c.encoder.Encode(req); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
 	}
@@ -109,6 +121,9 @@ func (c *Client) Send(req *Request) (*Response, error) {
 	if err := c.decoder.Decode(&resp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
+
+	// Clear deadline after successful operation
+	c.conn.SetDeadline(time.Time{})
 
 	return &resp, nil
 }
