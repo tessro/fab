@@ -1,0 +1,147 @@
+# Default fab permissions - safe global rules
+# Copy to ~/.config/fab/permissions.toml
+#
+# Rules are evaluated in order (project rules first, then global).
+# First matching rule wins. Actions: allow, deny, pass
+#
+# Pattern syntax:
+#   - Empty or ":*" matches everything
+#   - "prefix:*" matches values starting with "prefix"
+#   - Exact string for exact match
+#
+# Primary fields by tool:
+#   Bash: command | Read/Write/Edit: file_path | Glob/Grep: pattern
+#   WebFetch: url | WebSearch: query | Skill: skill | Task: prompt
+
+# =============================================================================
+# ALWAYS SAFE - No side effects
+# =============================================================================
+
+# Task management (read/write to internal state only)
+[[rules]]
+tool = "TodoWrite"
+action = "allow"
+
+# Plan mode transitions (no side effects)
+[[rules]]
+tool = "EnterPlanMode"
+action = "allow"
+
+[[rules]]
+tool = "ExitPlanMode"
+action = "allow"
+
+# User interaction (requires user response)
+[[rules]]
+tool = "AskUserQuestion"
+action = "allow"
+
+# =============================================================================
+# READ-ONLY - Safe file system exploration
+# =============================================================================
+
+# File pattern matching (listing only)
+[[rules]]
+tool = "Glob"
+action = "allow"
+
+# Content search (read-only)
+[[rules]]
+tool = "Grep"
+action = "allow"
+
+# File reading (read-only)
+[[rules]]
+tool = "Read"
+action = "allow"
+
+# =============================================================================
+# WEB - Read-only internet access
+# =============================================================================
+
+# Web search
+[[rules]]
+tool = "WebSearch"
+action = "allow"
+
+# Documentation sites (common safe domains)
+[[rules]]
+tool = "WebFetch"
+action = "allow"
+patterns = [
+    "https://docs.rs:*",
+    "https://pkg.go.dev:*",
+    "https://github.com:*",
+    "https://golang.org:*",
+    "https://go.dev:*",
+    "https://developer.mozilla.org:*",
+    "https://docs.python.org:*",
+    "https://nodejs.org:*",
+    "https://docs.npmjs.com:*",
+    "https://react.dev:*",
+    "https://vuejs.org:*",
+    "https://angular.io:*",
+    "https://docs.docker.com:*",
+    "https://kubernetes.io:*",
+]
+
+# =============================================================================
+# SAFE BASH COMMANDS - Read-only or project-local
+# =============================================================================
+
+[[rules]]
+tool = "Bash"
+action = "allow"
+patterns = [
+    # Git read operations
+    "git status:*",
+    "git diff:*",
+    "git log:*",
+    "git show:*",
+    "git branch:*",
+    "git blame:*",
+    "git remote:*",
+    "git rev-parse:*",
+    "git describe:*",
+    # File listing
+    "ls:*",
+    # Beads issue tracker (local files only)
+    "bd:*",
+    # Safe text utilities
+    "head:*",
+    "tail:*",
+    "wc:*",
+    "diff:*",
+    "cat:*",
+]
+
+# =============================================================================
+# SAFE SKILLS - Beads plugin (local file operations)
+# =============================================================================
+
+[[rules]]
+tool = "Skill"
+action = "allow"
+pattern = "beads::*"
+
+# =============================================================================
+# EXAMPLES: Add project-specific rules in ~/.fab/projects/<name>/permissions.toml
+# =============================================================================
+#
+# # Allow writes within project directory
+# [[rules]]
+# tool = "Write"
+# action = "allow"
+# pattern = "/path/to/project/:*"
+#
+# # Allow npm/pnpm commands
+# [[rules]]
+# tool = "Bash"
+# action = "allow"
+# patterns = ["npm :*", "pnpm :*", "yarn :*"]
+#
+# # Deny dangerous commands even if other rules would allow
+# [[rules]]
+# tool = "Bash"
+# action = "deny"
+# patterns = ["rm -rf :*", "sudo :*", "chmod 777:*"]
