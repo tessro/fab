@@ -71,6 +71,18 @@ func ResolvePrimaryField(toolName string, toolInput json.RawMessage) string {
 		if prompt, ok := input["prompt"].(string); ok {
 			return prompt
 		}
+	case "Skill":
+		if skill, ok := input["skill"].(string); ok {
+			return skill
+		}
+	case "WebSearch":
+		if query, ok := input["query"].(string); ok {
+			return query
+		}
+	case "NotebookEdit":
+		if path, ok := input["notebook_path"].(string); ok {
+			return path
+		}
 	}
 
 	return ""
