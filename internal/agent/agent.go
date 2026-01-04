@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -708,8 +709,10 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		}
 
 		// Parse the JSONL line as a StreamMessage
+		slog.Debug("readloop: raw line", "line", string(line))
 		msg, err := ParseStreamMessage(line)
 		if err != nil {
+			slog.Debug("readloop: parse error", "error", err)
 			if cfg.OnError != nil {
 				cfg.OnError(err)
 			}
@@ -722,6 +725,19 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 
 		// Convert to chat entries and add to history
 		entries := msg.ToChatEntries()
+		contentBlocks := 0
+		role := ""
+		if msg.Message != nil {
+			contentBlocks = len(msg.Message.Content)
+			role = msg.Message.Role
+		}
+		slog.Debug("readloop: parsed message",
+			"agent", a.ID,
+			"type", msg.Type,
+			"role", role,
+			"content_blocks", contentBlocks,
+			"entries", len(entries),
+		)
 		for _, entry := range entries {
 			a.AddChatEntry(entry)
 
