@@ -4,7 +4,6 @@ package agent
 import (
 	"errors"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -99,7 +98,8 @@ type Agent struct {
 	readLoopMu   sync.Mutex    // Protects read loop channels
 
 	// Exit information
-	exitErr error // Error from process exit (nil for clean exit)
+	exitErr  error // Error from process exit (nil for clean exit)
+	stopping bool  // True when Stop() has been called
 }
 
 // New creates a new Agent in the Starting state with the default mode.
@@ -377,6 +377,9 @@ func (a *Agent) Stop() error {
 		return ErrPTYNotStarted
 	}
 
+	// Mark as stopping to prevent read loop from calling Wait()
+	a.stopping = true
+
 	// Close PTY (this signals the process)
 	if err := a.ptyFile.Close(); err != nil {
 		// Continue cleanup even if close fails
@@ -389,21 +392,11 @@ func (a *Agent) Stop() error {
 	a.UpdatedAt = time.Now()
 	a.mu.Unlock()
 
-	// Kill and wait for process outside the lock to avoid blocking
+	// Kill process - don't wait, cleanup happens asynchronously
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
-		// Wait with timeout to avoid hanging
-		done := make(chan error, 1)
-		go func() {
-			done <- cmd.Wait()
-		}()
-		select {
-		case <-done:
-			// Process exited
-		case <-time.After(2 * time.Second):
-			// Timeout waiting for process - continue anyway
-			slog.Warn("timeout waiting for process to exit", "agent", a.ID)
-		}
+		// Reap the zombie in background to avoid resource leak
+		go cmd.Wait()
 	}
 
 	return nil
@@ -510,9 +503,11 @@ func (a *Agent) setExitError(err error) {
 func (a *Agent) waitForProcess() error {
 	a.mu.RLock()
 	cmd := a.cmd
+	stopping := a.stopping
 	a.mu.RUnlock()
 
-	if cmd == nil {
+	// If Stop() was called, it handles waiting for the process
+	if stopping || cmd == nil {
 		return nil
 	}
 
@@ -814,36 +809,24 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 	}
 }
 
-// StopReadLoop stops the read loop goroutine.
-// It blocks until the loop has exited or a timeout is reached.
+// StopReadLoop signals the read loop goroutine to stop.
+// It does not wait for the loop to exit - cleanup happens asynchronously.
 // Safe to call if the loop is not running.
 func (a *Agent) StopReadLoop() {
 	a.readLoopMu.Lock()
 	stopCh := a.readLoopStop
-	doneCh := a.readLoopDone
 	a.readLoopMu.Unlock()
 
 	if stopCh == nil {
 		return
 	}
 
-	// Signal stop
+	// Signal stop (non-blocking)
 	select {
 	case <-stopCh:
 		// Already closed
 	default:
 		close(stopCh)
-	}
-
-	// Wait for loop to exit with timeout
-	if doneCh != nil {
-		select {
-		case <-doneCh:
-			// Loop exited cleanly
-		case <-time.After(1 * time.Second):
-			// Timeout - log and continue to avoid hanging shutdown
-			slog.Warn("read loop did not exit within timeout", "agent", a.ID)
-		}
 	}
 }
 
