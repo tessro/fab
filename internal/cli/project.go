@@ -34,11 +34,23 @@ var projectListCmd = &cobra.Command{
 	RunE:  runProjectList,
 }
 
+var projectStartAll bool
+
+var projectStartCmd = &cobra.Command{
+	Use:   "start [project]",
+	Short: "Start orchestration for a project",
+	Long:  "Start agent orchestration for a registered project. Agents will pick up tasks from beads and work on them.",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runProjectStart,
+}
+
+var projectStopAll bool
+
 var projectStopCmd = &cobra.Command{
-	Use:   "stop <name>",
+	Use:   "stop [project]",
 	Short: "Stop orchestration for a project",
 	Long:  "Stop agent orchestration for the specified project. Running agents will be gracefully stopped.",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runProjectStop,
 }
 
@@ -118,17 +130,53 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runProjectStop(cmd *cobra.Command, args []string) error {
-	projectName := args[0]
+func runProjectStart(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 && !projectStartAll {
+		return fmt.Errorf("specify a project name or use --all")
+	}
 
 	client := MustConnect()
 	defer client.Close()
 
-	if err := client.Stop(projectName, false); err != nil {
-		return fmt.Errorf("stop project: %w", err)
+	var project string
+	if len(args) > 0 {
+		project = args[0]
 	}
 
-	fmt.Printf("🚌 Stopped orchestration for project: %s\n", projectName)
+	if err := client.Start(project, projectStartAll); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+
+	if projectStartAll {
+		fmt.Println("🚌 Started orchestration for all projects")
+	} else {
+		fmt.Printf("🚌 Started orchestration for project: %s\n", project)
+	}
+	return nil
+}
+
+func runProjectStop(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 && !projectStopAll {
+		return fmt.Errorf("specify a project name or use --all")
+	}
+
+	client := MustConnect()
+	defer client.Close()
+
+	var project string
+	if len(args) > 0 {
+		project = args[0]
+	}
+
+	if err := client.Stop(project, projectStopAll); err != nil {
+		return fmt.Errorf("stop: %w", err)
+	}
+
+	if projectStopAll {
+		fmt.Println("🚌 Stopped orchestration for all projects")
+	} else {
+		fmt.Printf("🚌 Stopped orchestration for project: %s\n", project)
+	}
 	return nil
 }
 
@@ -199,11 +247,15 @@ func init() {
 	projectAddCmd.Flags().StringVarP(&projectAddName, "name", "n", "", "Project name (default: directory name)")
 	projectAddCmd.Flags().IntVarP(&projectAddMaxAgents, "max-agents", "m", 3, "Maximum concurrent agents")
 
+	projectStartCmd.Flags().BoolVarP(&projectStartAll, "all", "a", false, "Start all projects")
+	projectStopCmd.Flags().BoolVarP(&projectStopAll, "all", "a", false, "Stop all projects")
+
 	projectRemoveCmd.Flags().BoolVarP(&projectRemoveForce, "force", "f", false, "Skip confirmation prompt")
 	projectRemoveCmd.Flags().BoolVar(&projectRemoveDeleteWorktrees, "delete-worktrees", false, "Delete associated worktrees")
 
 	projectCmd.AddCommand(projectAddCmd)
 	projectCmd.AddCommand(projectListCmd)
+	projectCmd.AddCommand(projectStartCmd)
 	projectCmd.AddCommand(projectStopCmd)
 	projectCmd.AddCommand(projectRemoveCmd)
 	rootCmd.AddCommand(projectCmd)
