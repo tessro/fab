@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
 )
@@ -306,6 +307,83 @@ func TestDefaultReadLoopConfig(t *testing.T) {
 
 	if cfg.OnError != nil {
 		t.Error("expected OnError to be nil by default")
+	}
+}
+
+func TestAgent_ExitError(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// Initially nil
+	if a.ExitError() != nil {
+		t.Error("expected nil exit error initially")
+	}
+
+	// Set exit error
+	testErr := errors.New("test error")
+	a.setExitError(testErr)
+
+	if a.ExitError() != testErr {
+		t.Errorf("expected exit error to be set")
+	}
+
+	// Clear exit error
+	a.setExitError(nil)
+	if a.ExitError() != nil {
+		t.Error("expected exit error to be cleared")
+	}
+}
+
+func TestAgent_ExitCode(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// No cmd, returns -1
+	if a.ExitCode() != -1 {
+		t.Errorf("expected -1 for no cmd, got %d", a.ExitCode())
+	}
+}
+
+func TestAgent_IsCommandNotFound(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// No error, not command not found
+	if a.IsCommandNotFound() {
+		t.Error("expected false when no exit error")
+	}
+
+	// Non-exit error, not command not found
+	a.setExitError(errors.New("random error"))
+	if a.IsCommandNotFound() {
+		t.Error("expected false for non-exit error")
+	}
+}
+
+func TestAgent_ErrorState(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// Starting -> Error is valid
+	if err := a.MarkError(); err != nil {
+		t.Errorf("unexpected error transitioning to Error: %v", err)
+	}
+	if a.GetState() != StateError {
+		t.Errorf("expected Error, got %s", a.GetState())
+	}
+
+	// Error is terminal
+	if !a.IsTerminal() {
+		t.Error("expected Error to be terminal")
+	}
+
+	// Error is not active
+	if a.IsActive() {
+		t.Error("expected Error to not be active")
+	}
+
+	// Can restart from Error
+	if err := a.Reset(); err != nil {
+		t.Errorf("unexpected error resetting from Error: %v", err)
+	}
+	if a.GetState() != StateStarting {
+		t.Errorf("expected Starting after reset, got %s", a.GetState())
 	}
 }
 

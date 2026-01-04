@@ -63,6 +63,7 @@ var (
 	ErrAgentAlreadyDone  = errors.New("agent has already completed")
 	ErrPTYNotStarted     = errors.New("PTY has not been started")
 	ErrPTYAlreadyStarted = errors.New("PTY is already running")
+	ErrProcessExited     = errors.New("process exited unexpectedly")
 )
 
 // Agent represents a Claude Code instance running in a PTY.
@@ -95,6 +96,9 @@ type Agent struct {
 	readLoopStop chan struct{} // Signals read loop to stop
 	readLoopDone chan struct{} // Closed when read loop exits
 	readLoopMu   sync.Mutex    // Protects read loop channels
+
+	// Exit information
+	exitErr error // Error from process exit (nil for clean exit)
 }
 
 // New creates a new Agent in the Starting state with the default mode.
@@ -471,6 +475,67 @@ func (a *Agent) PID() int {
 	return a.cmd.Process.Pid
 }
 
+// ExitError returns the error from process exit, if any.
+// Returns nil for clean exits (exit code 0) or if process is still running.
+func (a *Agent) ExitError() error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.exitErr
+}
+
+// setExitError stores the exit error (called internally).
+func (a *Agent) setExitError(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.exitErr = err
+}
+
+// waitForProcess waits for the process to exit and returns its exit status.
+// Returns nil for clean exit, *exec.ExitError for non-zero exit, or other error.
+func (a *Agent) waitForProcess() error {
+	a.mu.RLock()
+	cmd := a.cmd
+	a.mu.RUnlock()
+
+	if cmd == nil {
+		return nil
+	}
+
+	// Wait for process to exit (if not already waited)
+	return cmd.Wait()
+}
+
+// ExitCode returns the exit code of the process, or -1 if not exited or error.
+func (a *Agent) ExitCode() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.cmd == nil || a.cmd.ProcessState == nil {
+		return -1
+	}
+	return a.cmd.ProcessState.ExitCode()
+}
+
+// IsCommandNotFound returns true if the exit error indicates the command wasn't found.
+func (a *Agent) IsCommandNotFound() bool {
+	a.mu.RLock()
+	exitErr := a.exitErr
+	a.mu.RUnlock()
+
+	if exitErr == nil {
+		return false
+	}
+
+	var exitError *exec.ExitError
+	if errors.As(exitErr, &exitError) {
+		// Exit code 127 is typically "command not found" in Unix shells
+		// Exit code 126 is "command found but not executable"
+		code := exitError.ExitCode()
+		return code == 127 || code == 126
+	}
+	return false
+}
+
 // Buffer returns the output ring buffer for direct access.
 // The buffer is safe for concurrent use.
 func (a *Agent) Buffer() *RingBuffer {
@@ -695,9 +760,17 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 
 		if err != nil {
 			if err == io.EOF {
-				// PTY closed, mark agent as done or error
+				// PTY closed - wait for process and check exit status
 				if a.IsActive() {
-					_ = a.MarkDone()
+					exitErr := a.waitForProcess()
+					if exitErr != nil {
+						// Non-zero exit or signal - this is an error
+						a.setExitError(exitErr)
+						_ = a.MarkError()
+					} else {
+						// Clean exit (exit code 0)
+						_ = a.MarkDone()
+					}
 				}
 				return
 			}
