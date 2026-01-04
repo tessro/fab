@@ -18,7 +18,7 @@ import (
 type State string
 
 const (
-	// StateStarting indicates the agent is initializing (PTY spawning).
+	// StateStarting indicates the agent is initializing.
 	StateStarting State = "starting"
 
 	// StateRunning indicates the agent is actively processing (output detected).
@@ -27,7 +27,7 @@ const (
 	// StateIdle indicates the agent is waiting for input (no recent output).
 	StateIdle State = "idle"
 
-	// StateDone indicates the agent completed its task (bd close detected).
+	// StateDone indicates the agent completed its task.
 	StateDone State = "done"
 
 	// StateError indicates the agent encountered an error or crashed.
@@ -93,12 +93,6 @@ type Agent struct {
 
 	// Chat history stores parsed messages for display/scrollback
 	history *ChatHistory
-
-	// Done detection
-	// +checklocks:mu
-	detector *Detector // Pattern detector for completion signals
-	// +checklocks:mu
-	onDoneDetect func(match *Match) // Optional callback when done is detected
 
 	mu sync.RWMutex
 	// +checklocks:mu
@@ -268,7 +262,7 @@ func (a *Agent) IsTerminal() bool {
 	return a.State == StateDone || a.State == StateError
 }
 
-// CanAcceptInput returns true if the agent can receive PTY input.
+// CanAcceptInput returns true if the agent can receive input.
 func (a *Agent) CanAcceptInput() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -615,101 +609,6 @@ func (a *Agent) AddChatEntry(entry ChatEntry) {
 	a.history.Add(entry)
 }
 
-// SetDetector configures the pattern detector for done detection.
-// Pass nil to disable detection.
-func (a *Agent) SetDetector(d *Detector) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.detector = d
-}
-
-// Detector returns the current detector (may be nil).
-func (a *Agent) Detector() *Detector {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.detector
-}
-
-// OnDoneDetect sets a callback that's invoked when a done pattern is detected.
-// The callback receives the match information.
-func (a *Agent) OnDoneDetect(fn func(match *Match)) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.onDoneDetect = fn
-}
-
-// CheckDone checks the chat history for completion patterns.
-// Returns the match if a completion pattern is found, nil otherwise.
-// Does not transition state - caller decides whether to mark done.
-func (a *Agent) CheckDone() *Match {
-	a.mu.RLock()
-	detector := a.detector
-	a.mu.RUnlock()
-
-	if detector == nil {
-		return nil
-	}
-
-	// Convert recent chat entries to lines for pattern matching
-	entries := a.history.Entries(10)
-	var lines [][]byte
-	for _, entry := range entries {
-		if entry.Content != "" {
-			lines = append(lines, []byte(entry.Content))
-		}
-	}
-	return detector.CheckLines(lines)
-}
-
-// CheckDoneAndTransition checks for done patterns and transitions to Done state if found.
-// Returns the match if detected and transition succeeded, nil otherwise.
-// If a done callback is set, it's invoked before the transition.
-func (a *Agent) CheckDoneAndTransition() *Match {
-	match := a.CheckDone()
-	if match == nil {
-		return nil
-	}
-
-	// Get callback while holding read lock
-	a.mu.RLock()
-	callback := a.onDoneDetect
-	a.mu.RUnlock()
-
-	// Invoke callback before transition
-	if callback != nil {
-		callback(match)
-	}
-
-	// Attempt transition (may fail if state doesn't allow it)
-	if err := a.MarkDone(); err != nil {
-		return nil
-	}
-
-	return match
-}
-
-// CheckNewOutput checks only the most recent entries for completion patterns.
-// More efficient than CheckDone when called frequently on new output.
-// The numEntries parameter specifies how many recent entries to check.
-func (a *Agent) CheckNewOutput(numEntries int) *Match {
-	a.mu.RLock()
-	detector := a.detector
-	a.mu.RUnlock()
-
-	if detector == nil {
-		return nil
-	}
-
-	entries := a.history.Entries(numEntries)
-	var lines [][]byte
-	for _, entry := range entries {
-		if entry.Content != "" {
-			lines = append(lines, []byte(entry.Content))
-		}
-	}
-	return detector.CheckLines(lines)
-}
-
 // ReadLoopConfig configures the read loop behavior.
 type ReadLoopConfig struct {
 	// OnEntry is called whenever a chat entry is parsed from stream output.
@@ -723,17 +622,11 @@ type ReadLoopConfig struct {
 	// OnError is called when a read/parse error occurs (other than EOF).
 	// If nil, errors are silently ignored.
 	OnError func(err error)
-
-	// CheckDoneEntries is the number of recent entries to check for done patterns.
-	// Default: 5. Set to 0 to disable done detection in the read loop.
-	CheckDoneEntries int
 }
 
 // DefaultReadLoopConfig returns the default read loop configuration.
 func DefaultReadLoopConfig() ReadLoopConfig {
-	return ReadLoopConfig{
-		CheckDoneEntries: 5,
-	}
+	return ReadLoopConfig{}
 }
 
 // StartReadLoop starts a goroutine that continuously reads JSONL from stdout.
@@ -761,11 +654,6 @@ func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
 
 	if stdout == nil {
 		return ErrProcessNotStarted
-	}
-
-	// Apply defaults
-	if cfg.CheckDoneEntries <= 0 {
-		cfg.CheckDoneEntries = 5
 	}
 
 	// Create control channels
@@ -837,25 +725,6 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		// Transition to running if we were starting
 		if a.GetState() == StateStarting {
 			_ = a.MarkRunning()
-		}
-
-		// Check for done patterns
-		if cfg.CheckDoneEntries > 0 {
-			if match := a.CheckNewOutput(cfg.CheckDoneEntries); match != nil {
-				// Get callback while holding read lock
-				a.mu.RLock()
-				callback := a.onDoneDetect
-				a.mu.RUnlock()
-
-				// Invoke callback before transition
-				if callback != nil {
-					callback(match)
-				}
-
-				// Attempt transition
-				_ = a.MarkDone()
-				return
-			}
 		}
 	}
 

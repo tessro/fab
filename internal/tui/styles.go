@@ -76,9 +76,6 @@ var (
 	ptyHeaderProjectStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#A0A0A0"))
 
-	ptyViewportStyle = lipgloss.NewStyle().
-				Padding(0, 1)
-
 	ptyEmptyStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
 			Padding(1, 2)
@@ -93,4 +90,18 @@ var (
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(primaryColor).
 				Padding(0, 1)
+
+	// Chat view styles
+	chatAssistantStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // blue
+	chatUserStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // green
+	chatToolStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // gray
+	chatResultStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // gray
+
+	chatViewBorderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(mutedColor)
+
+	chatViewFocusedBorderStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(primaryColor)
 )

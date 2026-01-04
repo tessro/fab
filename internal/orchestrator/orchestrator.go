@@ -210,8 +210,8 @@ func (o *Orchestrator) queueKickstart(a *agent.Agent) {
 
 // executeKickstart sends the kickstart prompt to an agent.
 func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
-	// Write the kickstart prompt to stdin
-	if _, err := a.Write([]byte(prompt + "\n")); err != nil {
+	// Use SendMessage instead of Write
+	if err := a.SendMessage(prompt); err != nil {
 		// Log error but continue
 		return
 	}
@@ -262,14 +262,12 @@ func (o *Orchestrator) executeAction(action StagedAction) error {
 
 	switch action.Type {
 	case ActionSendMessage:
-		// Send message to agent's stdin
-		_, err := a.Write([]byte(action.Payload + "\n"))
-		return err
+		// Use SendMessage instead of Write
+		return a.SendMessage(action.Payload)
 
 	case ActionQuit:
-		// Send /quit command
-		_, err := a.Write([]byte("/quit\n"))
-		return err
+		// Send /quit as a message
+		return a.SendMessage("/quit")
 
 	default:
 		return ErrUnknownActionType

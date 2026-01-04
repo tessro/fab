@@ -51,7 +51,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		shutdownCh:    make(chan struct{}),
 	}
 
-	// Set up callback to start agent read loops when PTY starts
+	// Set up callback to start agent read loops when agent starts
 	s.orchConfig.OnAgentStarted = func(a *agent.Agent) {
 		if err := s.StartAgentReadLoop(a); err != nil {
 			// Log but don't fail - agent is still usable without broadcasting
@@ -104,6 +104,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentInput(ctx, req)
 	case daemon.MsgAgentOutput:
 		return s.handleAgentOutput(ctx, req)
+	case daemon.MsgAgentSendMessage:
+		return s.handleAgentSendMessage(ctx, req)
 
 	// TUI streaming
 	case daemon.MsgAttach:
@@ -461,7 +463,8 @@ func (s *Supervisor) handleAgentDelete(ctx context.Context, req *daemon.Request)
 	return successResponse(req, nil)
 }
 
-// handleAgentInput sends input to an agent's PTY.
+// handleAgentInput sends raw input to an agent's stdin.
+// Deprecated: Use handleAgentSendMessage for structured message input.
 func (s *Supervisor) handleAgentInput(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var inputReq daemon.AgentInputRequest
 	if err := unmarshalPayload(req.Payload, &inputReq); err != nil {
@@ -501,13 +504,36 @@ func (s *Supervisor) handleAgentOutput(ctx context.Context, req *daemon.Request)
 		return errorResponse(req, fmt.Sprintf("agent not found: %s", outputReq.ID))
 	}
 
-	// Get all buffered output from the agent's ring buffer
-	output := a.Buffer().String()
+	// Get all buffered output from the agent's chat history
+	output := string(a.Output(-1))
 
 	return successResponse(req, &daemon.AgentOutputResponse{
 		ID:     outputReq.ID,
 		Output: output,
 	})
+}
+
+// handleAgentSendMessage sends a message to an agent using the stream-json protocol.
+func (s *Supervisor) handleAgentSendMessage(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var sendReq daemon.AgentSendMessageRequest
+	if err := unmarshalPayload(req.Payload, &sendReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if sendReq.ID == "" {
+		return errorResponse(req, "agent ID required")
+	}
+
+	a, err := s.agents.Get(sendReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("agent not found: %s", sendReq.ID))
+	}
+
+	if err := a.SendMessage(sendReq.Content); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
+	}
+
+	return successResponse(req, nil)
 }
 
 // handleAttach subscribes a client to streaming events.
@@ -618,14 +644,40 @@ func (s *Supervisor) broadcastOutput(agentID, project string, data []byte) {
 	})
 }
 
+// broadcastChatEntry sends a chat entry to attached clients.
+func (s *Supervisor) broadcastChatEntry(agentID, project string, entry agent.ChatEntry) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	dto := &daemon.ChatEntryDTO{
+		Role:       entry.Role,
+		Content:    entry.Content,
+		ToolName:   entry.ToolName,
+		ToolInput:  entry.ToolInput,
+		ToolResult: entry.ToolResult,
+		Timestamp:  entry.Timestamp.Format(time.RFC3339),
+	}
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:      "chat_entry",
+		AgentID:   agentID,
+		Project:   project,
+		ChatEntry: dto,
+	})
+}
+
 // StartAgentReadLoop starts the read loop for an agent.
-// This should be called after the agent's PTY is started.
+// This should be called after the agent's process is started.
 func (s *Supervisor) StartAgentReadLoop(a *agent.Agent) error {
 	info := a.Info()
 
 	cfg := agent.DefaultReadLoopConfig()
-	cfg.OnOutput = func(data []byte) {
-		s.broadcastOutput(info.ID, info.Project, data)
+	cfg.OnEntry = func(entry agent.ChatEntry) {
+		s.broadcastChatEntry(info.ID, info.Project, entry)
 	}
 
 	return a.StartReadLoop(cfg)

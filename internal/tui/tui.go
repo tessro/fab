@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,7 +15,7 @@ type Focus int
 
 const (
 	FocusAgentList Focus = iota
-	FocusPTYView
+	FocusChatView
 	FocusInputLine
 )
 
@@ -35,10 +36,10 @@ type AgentInputMsg struct {
 	Err error
 }
 
-// AgentOutputMsg contains buffered output fetched for an agent.
-type AgentOutputMsg struct {
+// AgentChatHistoryMsg contains chat history fetched for an agent.
+type AgentChatHistoryMsg struct {
 	AgentID string
-	Output  string
+	Entries []daemon.ChatEntryDTO
 	Err     error
 }
 
@@ -56,7 +57,7 @@ type Model struct {
 	// Components
 	header    Header
 	agentList AgentList
-	ptyView   PTYView
+	chatView  ChatView
 	inputLine InputLine
 
 	// Daemon client for IPC
@@ -69,7 +70,7 @@ func New() Model {
 	return Model{
 		header:    NewHeader(),
 		agentList: NewAgentList(),
-		ptyView:   NewPTYView(),
+		chatView:  NewChatView(),
 		inputLine: NewInputLine(),
 		focus:     FocusAgentList,
 	}
@@ -133,28 +134,25 @@ func (m Model) fetchAgentList() tea.Cmd {
 	}
 }
 
-// sendAgentInput sends input to an agent asynchronously.
-func (m Model) sendAgentInput(agentID, input string) tea.Cmd {
+// sendAgentMessage sends a user message to an agent via stream-json.
+func (m Model) sendAgentMessage(agentID, content string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		err := m.client.AgentInput(agentID, input)
+		err := m.client.AgentSendMessage(agentID, content)
 		return AgentInputMsg{Err: err}
 	}
 }
 
-// fetchAgentOutput retrieves buffered output for an agent.
-func (m Model) fetchAgentOutput(agentID string) tea.Cmd {
+// fetchAgentChatHistory retrieves chat history for an agent.
+// Currently returns empty entries since chat history streaming handles real-time updates.
+func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
 	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		resp, err := m.client.AgentOutput(agentID)
-		if err != nil {
-			return AgentOutputMsg{AgentID: agentID, Err: err}
-		}
-		return AgentOutputMsg{AgentID: agentID, Output: resp.Output}
+		// Chat history is streamed in real-time via chat_entry events.
+		// When an agent is selected, any new messages will appear via the stream.
+		// TODO: Add agent.chat_history endpoint to fetch existing history on connect.
+		return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
 	}
 }
 
@@ -173,11 +171,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = FocusAgentList
 			case "enter":
 				// Submit input to agent
-				if m.client != nil && m.ptyView.AgentID() != "" {
+				if m.client != nil && m.chatView.AgentID() != "" {
 					input := m.inputLine.Value()
 					if input != "" {
-						// Send input with newline asynchronously
-						cmds = append(cmds, m.sendAgentInput(m.ptyView.AgentID(), input+"\n"))
+						// Show user message immediately in chat
+						m.chatView.AppendEntry(daemon.ChatEntryDTO{
+							Role:      "user",
+							Content:   input,
+							Timestamp: time.Now().Format(time.RFC3339),
+						})
+						// Send to agent
+						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
 						m.inputLine.Clear()
 					}
 				}
@@ -202,13 +206,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "tab":
-			// Cycle focus: agent list -> PTY view -> input line -> agent list
+			// Cycle focus: agent list -> chat view -> input line -> agent list
 			switch m.focus {
 			case FocusAgentList:
-				m.focus = FocusPTYView
-				m.ptyView.SetFocused(true)
-			case FocusPTYView:
-				m.ptyView.SetFocused(false)
+				m.focus = FocusChatView
+				m.chatView.SetFocused(true)
+			case FocusChatView:
+				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
 				m.focus = FocusInputLine
 			case FocusInputLine:
@@ -218,58 +222,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "i":
 			// Focus input line (vim-style)
-			if m.ptyView.AgentID() != "" {
-				m.ptyView.SetFocused(false)
+			if m.chatView.AgentID() != "" {
+				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
 				m.focus = FocusInputLine
 			}
 
 		case "enter":
-			// Select current agent for PTY view
+			// Select current agent for chat view
 			if m.focus == FocusAgentList {
 				if agent := m.agentList.Selected(); agent != nil {
-					m.ptyView.SetAgent(agent.ID, agent.Project)
-					// Fetch existing buffered output for this agent
-					cmds = append(cmds, m.fetchAgentOutput(agent.ID))
+					m.chatView.SetAgent(agent.ID, agent.Project)
+					// Fetch existing chat history for this agent
+					cmds = append(cmds, m.fetchAgentChatHistory(agent.ID))
 				}
 			}
 
 		case "j", "down":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveDown()
-			} else if m.focus == FocusPTYView {
-				m.ptyView.ScrollDown(1)
+			} else if m.focus == FocusChatView {
+				m.chatView.ScrollDown(1)
 			}
 
 		case "k", "up":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveUp()
-			} else if m.focus == FocusPTYView {
-				m.ptyView.ScrollUp(1)
+			} else if m.focus == FocusChatView {
+				m.chatView.ScrollUp(1)
 			}
 
 		case "g", "home":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveToTop()
-			} else if m.focus == FocusPTYView {
-				m.ptyView.ScrollToTop()
+			} else if m.focus == FocusChatView {
+				m.chatView.ScrollToTop()
 			}
 
 		case "G", "end":
 			if m.focus == FocusAgentList {
 				m.agentList.MoveToBottom()
-			} else if m.focus == FocusPTYView {
-				m.ptyView.ScrollToBottom()
+			} else if m.focus == FocusChatView {
+				m.chatView.ScrollToBottom()
 			}
 
 		case "ctrl+u", "pgup":
-			if m.focus == FocusPTYView {
-				m.ptyView.PageUp()
+			if m.focus == FocusChatView {
+				m.chatView.PageUp()
 			}
 
 		case "ctrl+d", "pgdown":
-			if m.focus == FocusPTYView {
-				m.ptyView.PageDown()
+			if m.focus == FocusChatView {
+				m.chatView.PageDown()
 			}
 		}
 
@@ -307,12 +311,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 		}
 
-	case AgentOutputMsg:
+	case AgentChatHistoryMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
-		} else if msg.AgentID == m.ptyView.AgentID() {
+		} else if msg.AgentID == m.chatView.AgentID() {
 			// Only apply if still viewing this agent
-			m.ptyView.AppendOutput(msg.Output)
+			m.chatView.SetEntries(msg.Entries)
 		}
 	}
 
@@ -322,11 +326,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleStreamEvent processes a stream event from the daemon.
 func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 	switch event.Type {
-	case "output":
-		// Only append output if this is the currently viewed agent
-		if event.AgentID == m.ptyView.AgentID() {
-			m.ptyView.AppendOutput(event.Data)
+	case "chat_entry":
+		// Handle chat entry events from stream-json parsing
+		if event.ChatEntry != nil && event.AgentID == m.chatView.AgentID() {
+			m.chatView.AppendEntry(*event.ChatEntry)
 		}
+
+	case "output":
+		// Deprecated: kept for backwards compatibility with raw PTY output
+		// This is no longer used by the chat view
 
 	case "state":
 		// Update agent state in the list
@@ -363,9 +371,9 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		}
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
-		// Clear PTY view if viewing deleted agent
-		if event.AgentID == m.ptyView.AgentID() {
-			m.ptyView.ClearAgent()
+		// Clear chat view if viewing deleted agent
+		if event.AgentID == m.chatView.AgentID() {
+			m.chatView.ClearAgent()
 		}
 	}
 }
@@ -394,23 +402,23 @@ func (m Model) View() string {
 	var helpText string
 	switch m.focus {
 	case FocusAgentList:
-		helpText = "j/k: navigate  enter: view output  i: input  tab: switch pane  q: quit"
-	case FocusPTYView:
+		helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
+	case FocusChatView:
 		helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
 	case FocusInputLine:
 		helpText = "enter: send  esc: cancel  tab: switch pane"
 	}
 	status := statusStyle.Width(m.width).Render(helpText)
 
-	// Side-by-side layout: agent list (left) | PTY view (right)
+	// Side-by-side layout: agent list (left) | chat view (right)
 	agentList := m.agentList.View()
-	ptyView := m.ptyView.View()
+	chatView := m.chatView.View()
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, ptyView)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
 
 	// Input line (only show when agent is selected)
 	var inputLine string
-	if m.ptyView.AgentID() != "" {
+	if m.chatView.AgentID() != "" {
 		inputLine = m.inputLine.View()
 	}
 
@@ -427,12 +435,12 @@ func (m *Model) updateLayout() {
 		contentHeight = 1
 	}
 
-	// Split width: 40% agent list, 60% PTY view
+	// Split width: 40% agent list, 60% chat view
 	listWidth := m.width * 40 / 100
-	ptyWidth := m.width - listWidth
+	chatWidth := m.width - listWidth
 
 	m.agentList.SetSize(listWidth, contentHeight)
-	m.ptyView.SetSize(ptyWidth, contentHeight)
+	m.chatView.SetSize(chatWidth, contentHeight)
 	m.inputLine.SetSize(m.width, inputLineHeight)
 }
 
