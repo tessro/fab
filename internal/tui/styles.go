@@ -80,15 +80,13 @@ var (
 			Foreground(mutedColor).
 			Padding(1, 2)
 
-	// Input line styles
+	// Input line styles (inline, no border since it's inside the chat pane)
 	inputLineStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(mutedColor).
+			Background(lipgloss.Color("#2D2D2D")).
 			Padding(0, 1)
 
 	inputLineFocusedStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(primaryColor).
+				Background(lipgloss.Color("#3B3B3B")).
 				Padding(0, 1)
 
 	// Chat view styles
@@ -104,4 +102,13 @@ var (
 	chatViewFocusedBorderStyle = lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(primaryColor)
+
+	// Pending action styles
+	pendingActionStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#3B3B3B")).
+				Padding(0, 1)
+
+	pendingActionLabelStyle = lipgloss.NewStyle().
+				Foreground(primaryColor).
+				Bold(true)
 )

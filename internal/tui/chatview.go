@@ -11,15 +11,18 @@ import (
 
 // ChatView displays chat entries for a selected agent in a conversational format.
 type ChatView struct {
-	entries  []daemon.ChatEntryDTO
-	width    int
-	height   int
-	scroll   int // current scroll offset (legacy, viewport handles this)
-	focused  bool
-	agentID  string
-	project  string
-	viewport viewport.Model
-	ready    bool
+	entries       []daemon.ChatEntryDTO
+	width         int
+	height        int
+	scroll        int // current scroll offset (legacy, viewport handles this)
+	focused       bool
+	agentID       string
+	project       string
+	viewport      viewport.Model
+	ready         bool
+	pendingAction *daemon.StagedAction // pending action awaiting approval
+	inputView     string               // rendered input line view
+	inputHeight   int                  // height of input line (for layout)
 }
 
 // NewChatView creates a new chat view component.
@@ -33,10 +36,25 @@ func NewChatView() ChatView {
 func (v *ChatView) SetSize(width, height int) {
 	v.width = width
 	v.height = height
+	v.updateViewportSize()
+}
 
-	// Account for border (2 chars top/bottom, 2 chars left/right)
-	contentWidth := width - 2
-	contentHeight := height - 2
+// updateViewportSize recalculates viewport dimensions based on current state.
+func (v *ChatView) updateViewportSize() {
+	// Account for border (2 chars top/bottom, 2 chars left/right) and header (1 line)
+	contentWidth := v.width - 2
+	contentHeight := v.height - 2 - 1 // -1 for header
+
+	// Reserve space for pending action bar if present
+	if v.pendingAction != nil {
+		contentHeight -= 2 // 1 line for content + 1 line padding
+	}
+
+	// Reserve space for input line
+	if v.inputHeight > 0 {
+		contentHeight -= v.inputHeight
+	}
+
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
@@ -86,6 +104,28 @@ func (v *ChatView) ClearAgent() {
 // AgentID returns the current agent ID.
 func (v *ChatView) AgentID() string {
 	return v.agentID
+}
+
+// SetPendingAction sets the pending action for this chat view.
+func (v *ChatView) SetPendingAction(action *daemon.StagedAction) {
+	hadAction := v.pendingAction != nil
+	hasAction := action != nil
+	v.pendingAction = action
+	// Recalculate viewport size if pending action state changed
+	if hadAction != hasAction {
+		v.updateViewportSize()
+	}
+}
+
+// HasPendingAction returns whether there's a pending action.
+func (v *ChatView) HasPendingAction() bool {
+	return v.pendingAction != nil
+}
+
+// SetInputView sets the rendered input line view to display.
+func (v *ChatView) SetInputView(view string, height int) {
+	v.inputView = view
+	v.inputHeight = height
 }
 
 // AppendEntry adds a chat entry to the view.
@@ -255,14 +295,33 @@ func (v ChatView) View() string {
 
 	// Viewport content
 	var content string
+	emptyHeight := v.height - 3
+	if v.pendingAction != nil {
+		emptyHeight -= 2
+	}
+	if v.inputHeight > 0 {
+		emptyHeight -= v.inputHeight
+	}
 	if len(v.entries) == 0 {
-		content = ptyEmptyStyle.Width(v.width - 2).Height(v.height - 3).Render("Waiting for messages...")
+		content = ptyEmptyStyle.Width(v.width - 2).Height(emptyHeight).Render("Waiting for messages...")
 	} else {
 		content = v.viewport.View()
 	}
 
-	// Combine header and content
-	inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+	// Build the inner content
+	parts := []string{header, content}
+
+	// Add pending action bar if present
+	if v.pendingAction != nil {
+		parts = append(parts, v.renderPendingAction())
+	}
+
+	// Add input line if present
+	if v.inputView != "" {
+		parts = append(parts, v.inputView)
+	}
+
+	inner := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	// Apply border
 	var borderStyle lipgloss.Style
@@ -273,4 +332,27 @@ func (v ChatView) View() string {
 	}
 
 	return borderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
+}
+
+// renderPendingAction renders the pending action approval bar.
+func (v ChatView) renderPendingAction() string {
+	if v.pendingAction == nil {
+		return ""
+	}
+
+	// Truncate payload for display
+	payload := v.pendingAction.Payload
+	maxLen := v.width - 30
+	if maxLen < 20 {
+		maxLen = 20
+	}
+	if len(payload) > maxLen {
+		payload = payload[:maxLen-3] + "..."
+	}
+
+	// Replace newlines with spaces for single-line display
+	payload = strings.ReplaceAll(payload, "\n", " ")
+
+	label := pendingActionLabelStyle.Render("⏸ Pending:")
+	return pendingActionStyle.Width(v.width - 4).Render(label + " " + payload)
 }

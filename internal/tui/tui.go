@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -220,6 +221,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Blur input and return to agent list
 				m.inputLine.SetFocused(false)
 				m.focus = FocusAgentList
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			case "enter":
 				// Submit input to agent
 				if m.client != nil && m.chatView.AgentID() != "" {
@@ -234,16 +236,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Send to agent
 						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
 						m.inputLine.Clear()
+						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				}
 			case "tab":
 				// Cycle to agent list
 				m.inputLine.SetFocused(false)
 				m.focus = FocusAgentList
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			default:
 				// Pass all other keys to input
 				cmd := m.inputLine.Update(msg)
 				cmds = append(cmds, cmd)
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -266,9 +271,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
 				m.focus = FocusInputLine
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			case FocusInputLine:
 				m.inputLine.SetFocused(false)
 				m.focus = FocusAgentList
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
 		case "i":
@@ -277,13 +284,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
 				m.focus = FocusInputLine
+				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
 		case "y":
 			// Approve pending action for selected agent
 			if m.focus != FocusInputLine {
-				action := m.pendingActionForAgent(m.chatView.AgentID())
+				agentID := m.chatView.AgentID()
+				action := m.pendingActionForAgent(agentID)
+				slog.Debug("y pressed",
+					"chatview_agent", agentID,
+					"action_found", action != nil,
+				)
 				if action != nil {
+					slog.Debug("approving action",
+						"action_id", action.ID,
+						"action_agent", action.AgentID,
+					)
 					cmds = append(cmds, m.approveAction(action.ID))
 				}
 			}
@@ -302,6 +319,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == FocusAgentList {
 				if agent := m.agentList.Selected(); agent != nil {
 					m.chatView.SetAgent(agent.ID, agent.Project)
+					// Update pending action for newly selected agent
+					m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
 					// Fetch existing chat history for this agent
 					cmds = append(cmds, m.fetchAgentChatHistory(agent.ID))
 				}
@@ -354,6 +373,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 
 	case StreamEventMsg:
+		slog.Debug("StreamEventMsg received",
+			"has_err", msg.Err != nil,
+			"has_event", msg.Event != nil,
+		)
+		// Mark as attached once we start receiving (even timeouts mean we're connected)
+		if !m.attached {
+			m.attached = true
+		}
 		if msg.Err != nil {
 			// Check if it's a timeout - if so, just retry
 			if isTimeoutError(msg.Err) {
@@ -362,7 +389,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = msg.Err
 			}
 		} else if msg.Event != nil {
-			m.attached = true
+			slog.Debug("calling handleStreamEvent", "type", msg.Event.Type)
 			m.handleStreamEvent(msg.Event)
 			// Continue listening for events
 			cmds = append(cmds, m.waitForEvent())
@@ -401,6 +428,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Store all staged actions - filtering happens in pendingActionForAgent
 			m.stagedActions = msg.Actions
+			// Update chat view with pending action for current agent
+			m.chatView.SetPendingAction(m.pendingActionForAgent(m.chatView.AgentID()))
 		}
 
 	case ActionResultMsg:
@@ -420,6 +449,12 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 	switch event.Type {
 	case "chat_entry":
 		// Handle chat entry events from stream-json parsing
+		slog.Debug("chat_entry event received",
+			"event_agent", event.AgentID,
+			"chatview_agent", m.chatView.AgentID(),
+			"match", event.AgentID == m.chatView.AgentID(),
+			"has_entry", event.ChatEntry != nil,
+		)
 		if event.ChatEntry != nil && event.AgentID == m.chatView.AgentID() {
 			m.chatView.AppendEntry(*event.ChatEntry)
 		}
@@ -494,40 +529,6 @@ func (m *Model) pendingActionForAgent(agentID string) *daemon.StagedAction {
 	return nil
 }
 
-// renderPendingAction renders the pending action approval prompt.
-func (m *Model) renderPendingAction(action *daemon.StagedAction) string {
-	// Truncate payload for display
-	payload := action.Payload
-	maxLen := m.width - 40
-	if maxLen < 20 {
-		maxLen = 20
-	}
-	if len(payload) > maxLen {
-		payload = payload[:maxLen-3] + "..."
-	}
-
-	// Replace newlines with spaces for single-line display
-	for i := 0; i < len(payload); i++ {
-		if payload[i] == '\n' {
-			payload = payload[:i] + " " + payload[i+1:]
-		}
-	}
-
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(primaryColor).
-		Padding(0, 1).
-		Width(m.width - 2)
-
-	label := lipgloss.NewStyle().
-		Foreground(primaryColor).
-		Bold(true).
-		Render("⏸ Pending approval:")
-
-	content := fmt.Sprintf("%s %s", label, payload)
-	return style.Render(content)
-}
-
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -566,26 +567,14 @@ func (m Model) View() string {
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
 
-	// Input line or pending action display
-	var inputLine string
-	if m.chatView.AgentID() != "" {
-		if pendingAction != nil {
-			// Show pending action approval prompt
-			inputLine = m.renderPendingAction(pendingAction)
-		} else {
-			inputLine = m.inputLine.View()
-		}
-	}
-
-	return fmt.Sprintf("%s\n%s\n%s\n%s", header, content, inputLine, status)
+	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
 }
 
 // updateLayout recalculates component dimensions for side-by-side layout.
 func (m *Model) updateLayout() {
 	headerHeight := lipgloss.Height(m.header.View())
-	statusHeight := 1    // Single line status bar
-	inputLineHeight := 3 // Input line with border
-	contentHeight := m.height - headerHeight - statusHeight - inputLineHeight - 1
+	statusHeight := 1 // Single line status bar
+	contentHeight := m.height - headerHeight - statusHeight - 1
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -596,7 +585,11 @@ func (m *Model) updateLayout() {
 
 	m.agentList.SetSize(listWidth, contentHeight)
 	m.chatView.SetSize(chatWidth, contentHeight)
-	m.inputLine.SetSize(m.width, inputLineHeight)
+
+	// Input line sized to fit inside chat pane (accounting for border)
+	inputLineHeight := 1
+	m.inputLine.SetSize(chatWidth-4, inputLineHeight)
+	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight)
 }
 
 // Run starts the TUI without a daemon connection.
