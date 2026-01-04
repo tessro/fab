@@ -43,6 +43,17 @@ type AgentChatHistoryMsg struct {
 	Err     error
 }
 
+// StagedActionsMsg contains pending actions that need user approval.
+type StagedActionsMsg struct {
+	Actions []daemon.StagedAction
+	Err     error
+}
+
+// ActionResultMsg is the result of approving/rejecting an action.
+type ActionResultMsg struct {
+	Err error
+}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -63,6 +74,9 @@ type Model struct {
 	// Daemon client for IPC
 	client   *daemon.Client
 	attached bool
+
+	// Staged actions pending approval (for selected agent)
+	stagedActions []daemon.StagedAction
 }
 
 // New creates a new TUI model.
@@ -156,6 +170,42 @@ func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
 	}
 }
 
+// fetchStagedActions retrieves pending actions for user approval.
+func (m Model) fetchStagedActions() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		resp, err := m.client.ListStagedActions("")
+		if err != nil {
+			return StagedActionsMsg{Err: err}
+		}
+		return StagedActionsMsg{Actions: resp.Actions}
+	}
+}
+
+// approveAction approves a staged action.
+func (m Model) approveAction(actionID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.ApproveAction(actionID)
+		return ActionResultMsg{Err: err}
+	}
+}
+
+// rejectAction rejects a staged action.
+func (m Model) rejectAction(actionID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.RejectAction(actionID, "")
+		return ActionResultMsg{Err: err}
+	}
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -226,6 +276,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
 				m.focus = FocusInputLine
+			}
+
+		case "y":
+			// Approve pending action for selected agent
+			if m.focus != FocusInputLine {
+				action := m.pendingActionForAgent(m.chatView.AgentID())
+				if action != nil {
+					cmds = append(cmds, m.approveAction(action.ID))
+				}
+			}
+
+		case "n":
+			// Reject pending action for selected agent
+			if m.focus != FocusInputLine {
+				action := m.pendingActionForAgent(m.chatView.AgentID())
+				if action != nil {
+					cmds = append(cmds, m.rejectAction(action.ID))
+				}
 			}
 
 		case "enter":
@@ -304,6 +372,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.attached {
 				cmds = append(cmds, m.attachToStream())
 			}
+			// Fetch staged actions for approval display
+			cmds = append(cmds, m.fetchStagedActions())
 		}
 
 	case AgentInputMsg:
@@ -317,6 +387,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.AgentID == m.chatView.AgentID() {
 			// Only apply if still viewing this agent
 			m.chatView.SetEntries(msg.Entries)
+		}
+
+	case StagedActionsMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			// Store all staged actions - filtering happens in pendingActionForAgent
+			m.stagedActions = msg.Actions
+		}
+
+	case ActionResultMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			// Refresh staged actions after approve/reject
+			cmds = append(cmds, m.fetchStagedActions())
 		}
 	}
 
@@ -389,6 +475,53 @@ func countRunning(agents []daemon.AgentStatus) int {
 	return count
 }
 
+// pendingActionForAgent returns the first pending action for the given agent.
+func (m *Model) pendingActionForAgent(agentID string) *daemon.StagedAction {
+	if agentID == "" {
+		return nil
+	}
+	for i := range m.stagedActions {
+		if m.stagedActions[i].AgentID == agentID {
+			return &m.stagedActions[i]
+		}
+	}
+	return nil
+}
+
+// renderPendingAction renders the pending action approval prompt.
+func (m *Model) renderPendingAction(action *daemon.StagedAction) string {
+	// Truncate payload for display
+	payload := action.Payload
+	maxLen := m.width - 40
+	if maxLen < 20 {
+		maxLen = 20
+	}
+	if len(payload) > maxLen {
+		payload = payload[:maxLen-3] + "..."
+	}
+
+	// Replace newlines with spaces for single-line display
+	for i := 0; i < len(payload); i++ {
+		if payload[i] == '\n' {
+			payload = payload[:i] + " " + payload[i+1:]
+		}
+	}
+
+	style := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(primaryColor).
+		Padding(0, 1).
+		Width(m.width - 2)
+
+	label := lipgloss.NewStyle().
+		Foreground(primaryColor).
+		Bold(true).
+		Render("⏸ Pending approval:")
+
+	content := fmt.Sprintf("%s %s", label, payload)
+	return style.Render(content)
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -398,13 +531,24 @@ func (m Model) View() string {
 	// Header
 	header := m.header.View()
 
+	// Check for pending action on selected agent
+	pendingAction := m.pendingActionForAgent(m.chatView.AgentID())
+
 	// Status bar with context-sensitive help
 	var helpText string
 	switch m.focus {
 	case FocusAgentList:
-		helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
+		if pendingAction != nil {
+			helpText = "y: approve  n: reject  j/k: navigate  enter: view  q: quit"
+		} else {
+			helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
+		}
 	case FocusChatView:
-		helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
+		if pendingAction != nil {
+			helpText = "y: approve  n: reject  j/k: scroll  tab: switch pane  q: quit"
+		} else {
+			helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
+		}
 	case FocusInputLine:
 		helpText = "enter: send  esc: cancel  tab: switch pane"
 	}
@@ -416,10 +560,15 @@ func (m Model) View() string {
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
 
-	// Input line (only show when agent is selected)
+	// Input line or pending action display
 	var inputLine string
 	if m.chatView.AgentID() != "" {
-		inputLine = m.inputLine.View()
+		if pendingAction != nil {
+			// Show pending action approval prompt
+			inputLine = m.renderPendingAction(pendingAction)
+		} else {
+			inputLine = m.inputLine.View()
+		}
 	}
 
 	return fmt.Sprintf("%s\n%s\n%s\n%s", header, content, inputLine, status)

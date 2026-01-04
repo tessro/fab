@@ -347,9 +347,11 @@ func (a *Agent) Start(initialPrompt string) error {
 	}
 
 	// Build claude command with stream-json mode (no -p for multi-turn)
+	// --verbose is required when using --output-format stream-json
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
-		"--input-format", "stream-json")
+		"--input-format", "stream-json",
+		"--verbose")
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
