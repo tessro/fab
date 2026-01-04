@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/tessro/fab/internal/logging"
 )
@@ -29,8 +30,10 @@ func DefaultSocketPath() string {
 type contextKey string
 
 const (
-	connKey   contextKey = "conn"
-	serverKey contextKey = "server"
+	connKey    contextKey = "conn"
+	serverKey  contextKey = "server"
+	encoderKey contextKey = "encoder"
+	writeMuKey contextKey = "writeMu"
 )
 
 // Handler processes IPC requests and returns responses.
@@ -52,6 +55,18 @@ func ConnFromContext(ctx context.Context) net.Conn {
 func ServerFromContext(ctx context.Context) *Server {
 	srv, _ := ctx.Value(serverKey).(*Server)
 	return srv
+}
+
+// EncoderFromContext retrieves the JSON encoder from the context.
+func EncoderFromContext(ctx context.Context) *json.Encoder {
+	enc, _ := ctx.Value(encoderKey).(*json.Encoder)
+	return enc
+}
+
+// WriteMuFromContext retrieves the write mutex from the context.
+func WriteMuFromContext(ctx context.Context) *sync.Mutex {
+	mu, _ := ctx.Value(writeMuKey).(*sync.Mutex)
+	return mu
 }
 
 // HandlerFunc is a function adapter for Handler.
@@ -80,10 +95,9 @@ type Server struct {
 
 // attachedClient tracks a client subscribed to streaming events.
 type attachedClient struct {
-	// +checklocks:mu
 	encoder  *json.Encoder
 	projects []string // Filter: empty means all projects (immutable after creation)
-	mu       sync.Mutex
+	mu       *sync.Mutex // Shared mutex for all writes to the connection
 }
 
 // NewServer creates a new daemon server.
@@ -191,10 +205,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
+	var writeMu sync.Mutex // Protects all writes to conn
 
-	// Create base context with connection and server info
+	// Create base context with connection, server, and encoder info
 	baseCtx := context.WithValue(context.Background(), connKey, conn)
 	baseCtx = context.WithValue(baseCtx, serverKey, s)
+	baseCtx = context.WithValue(baseCtx, encoderKey, encoder)
+	baseCtx = context.WithValue(baseCtx, writeMuKey, &writeMu)
 
 	for {
 		var req Request
@@ -208,7 +225,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 				Success: false,
 				Error:   fmt.Sprintf("decode request: %v", err),
 			}
+			writeMu.Lock()
 			encoder.Encode(resp)
+			writeMu.Unlock()
 			return
 		}
 
@@ -240,7 +259,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 			slog.Warn("request failed", "type", req.Type, "error", resp.Error)
 		}
 
-		if err := encoder.Encode(resp); err != nil {
+		writeMu.Lock()
+		err := encoder.Encode(resp)
+		writeMu.Unlock()
+		if err != nil {
 			slog.Debug("write response failed", "error", err)
 			return // Client disconnected or write error
 		}
@@ -296,13 +318,14 @@ func (s *Server) Addr() string {
 }
 
 // Attach registers a connection for streaming events.
-// The connection must already be established and tracked.
-func (s *Server) Attach(conn net.Conn, projects []string) {
+// The encoder and mutex are shared with the connection handler for synchronized writes.
+func (s *Server) Attach(conn net.Conn, projects []string, encoder *json.Encoder, mu *sync.Mutex) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.attached[conn] = &attachedClient{
-		encoder:  json.NewEncoder(conn),
+		encoder:  encoder,
 		projects: projects,
+		mu:       mu,
 	}
 }
 
@@ -313,17 +336,23 @@ func (s *Server) Detach(conn net.Conn) {
 	delete(s.attached, conn)
 }
 
+// BroadcastTimeout is how long to wait for a client write before giving up.
+const BroadcastTimeout = 100 * time.Millisecond
+
 // Broadcast sends a stream event to all attached clients.
 // Clients are filtered by their project subscriptions.
+// Uses a short write timeout to avoid blocking on slow clients.
 func (s *Server) Broadcast(event *StreamEvent) {
 	s.mu.Lock()
 	clients := make([]*attachedClient, 0, len(s.attached))
-	for _, client := range s.attached {
+	conns := make([]net.Conn, 0, len(s.attached))
+	for conn, client := range s.attached {
 		clients = append(clients, client)
+		conns = append(conns, conn)
 	}
 	s.mu.Unlock()
 
-	for _, client := range clients {
+	for i, client := range clients {
 		// Check if client is subscribed to this project
 		if len(client.projects) > 0 {
 			subscribed := false
@@ -338,10 +367,21 @@ func (s *Server) Broadcast(event *StreamEvent) {
 			}
 		}
 
+		// Set write deadline to avoid blocking on slow/stuck clients
+		conn := conns[i]
+		conn.SetWriteDeadline(time.Now().Add(BroadcastTimeout))
+
 		// Send event (with per-client lock to prevent interleaving)
 		client.mu.Lock()
-		client.encoder.Encode(event)
+		if err := client.encoder.Encode(event); err != nil {
+			slog.Debug("broadcast encode error", "type", event.Type, "error", err)
+		} else {
+			slog.Debug("broadcast sent", "type", event.Type, "agent", event.AgentID)
+		}
 		client.mu.Unlock()
+
+		// Clear write deadline
+		conn.SetWriteDeadline(time.Time{})
 	}
 }
 

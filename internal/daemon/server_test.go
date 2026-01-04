@@ -179,7 +179,9 @@ func TestServer_AttachBroadcast(t *testing.T) {
 		if req.Type == MsgAttach {
 			conn := ConnFromContext(ctx)
 			srv := ServerFromContext(ctx)
-			srv.Attach(conn, nil) // Subscribe to all projects
+			encoder := EncoderFromContext(ctx)
+			writeMu := WriteMuFromContext(ctx)
+			srv.Attach(conn, nil, encoder, writeMu) // Subscribe to all projects
 		}
 		return &Response{Success: true}
 	})
@@ -246,8 +248,10 @@ func TestServer_AttachWithProjectFilter(t *testing.T) {
 		if req.Type == MsgAttach {
 			conn := ConnFromContext(ctx)
 			srv := ServerFromContext(ctx)
+			encoder := EncoderFromContext(ctx)
+			writeMu := WriteMuFromContext(ctx)
 			// Only subscribe to "project-a"
-			srv.Attach(conn, []string{"project-a"})
+			srv.Attach(conn, []string{"project-a"}, encoder, writeMu)
 		}
 		return &Response{Success: true}
 	})

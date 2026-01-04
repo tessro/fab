@@ -547,12 +547,14 @@ func (s *Supervisor) handleAttach(ctx context.Context, req *daemon.Request) *dae
 
 	conn := daemon.ConnFromContext(ctx)
 	srv := daemon.ServerFromContext(ctx)
+	encoder := daemon.EncoderFromContext(ctx)
+	writeMu := daemon.WriteMuFromContext(ctx)
 
-	if conn == nil || srv == nil {
+	if conn == nil || srv == nil || encoder == nil || writeMu == nil {
 		return errorResponse(req, "internal error: missing connection context")
 	}
 
-	srv.Attach(conn, attachReq.Projects)
+	srv.Attach(conn, attachReq.Projects, encoder, writeMu)
 	return successResponse(req, nil)
 }
 
@@ -651,8 +653,17 @@ func (s *Supervisor) broadcastChatEntry(agentID, project string, entry agent.Cha
 	s.mu.RUnlock()
 
 	if srv == nil {
+		slog.Debug("broadcastChatEntry: no server")
 		return
 	}
+
+	slog.Debug("broadcastChatEntry",
+		"agent", agentID,
+		"project", project,
+		"role", entry.Role,
+		"content_len", len(entry.Content),
+		"attached_clients", srv.AttachedCount(),
+	)
 
 	dto := &daemon.ChatEntryDTO{
 		Role:       entry.Role,

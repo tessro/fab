@@ -399,6 +399,8 @@ func TestClient_AttachDetach(t *testing.T) {
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
 		srv := ServerFromContext(ctx)
 		conn := ConnFromContext(ctx)
+		encoder := EncoderFromContext(ctx)
+		writeMu := WriteMuFromContext(ctx)
 
 		switch req.Type {
 		case MsgAttach:
@@ -407,7 +409,7 @@ func TestClient_AttachDetach(t *testing.T) {
 				data, _ := json.Marshal(req.Payload)
 				json.Unmarshal(data, &payload)
 			}
-			srv.Attach(conn, payload.Projects)
+			srv.Attach(conn, payload.Projects, encoder, writeMu)
 			return &Response{Success: true}
 		case MsgDetach:
 			srv.Detach(conn)
@@ -460,9 +462,11 @@ func TestClient_RecvEvent(t *testing.T) {
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
 		srv := ServerFromContext(ctx)
 		conn := ConnFromContext(ctx)
+		encoder := EncoderFromContext(ctx)
+		writeMu := WriteMuFromContext(ctx)
 
 		if req.Type == MsgAttach {
-			srv.Attach(conn, nil)
+			srv.Attach(conn, nil, encoder, writeMu)
 			return &Response{Success: true}
 		}
 		return &Response{Success: false, Error: "unknown"}
