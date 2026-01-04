@@ -27,7 +27,14 @@ type Project struct {
 	// +checklocks:mu
 	Worktrees []Worktree // Pool of worktrees for agents
 
-	mu sync.RWMutex // Protects Worktrees and Running
+	mu sync.RWMutex // Protects Running and Worktrees
+}
+
+// AddWorktree appends a worktree to the pool (for testing).
+func (p *Project) AddWorktree(wt Worktree) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Worktrees = append(p.Worktrees, wt)
 }
 
 // Worktree represents a git worktree used by an agent.

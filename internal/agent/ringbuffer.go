@@ -68,7 +68,8 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 }
 
 // storeLine adds a completed line to the buffer.
-// Must be called with lock held.
+//
+// +checklocks:rb.mu
 func (rb *RingBuffer) storeLine(line []byte) {
 	// Make a copy to avoid retaining references
 	stored := make([]byte, len(line))

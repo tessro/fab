@@ -90,6 +90,8 @@ func (r *Registry) load() error {
 }
 
 // save writes the current registry state to the config file.
+//
+// +checklocks:r.mu
 func (r *Registry) save() error {
 	// Ensure directory exists
 	dir := filepath.Dir(r.configPath)

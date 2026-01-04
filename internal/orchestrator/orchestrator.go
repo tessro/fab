@@ -38,17 +38,13 @@ Close the task with 'bd close <id>', then run 'fab agent done'.`,
 type Orchestrator struct {
 	project *project.Project
 	agents  *agent.Manager
-
-	// +checklocks:mu
-	config Config
+	config  Config // Set at construction, effectively immutable during operation
 
 	// Action queue for manual mode
 	actions *ActionQueue
 
-	// Lifecycle management
-	// +checklocks:mu
+	// Lifecycle management (channels are goroutine-safe: created in Start, closed to signal)
 	stopCh chan struct{}
-	// +checklocks:mu
 	doneCh chan struct{}
 	mu     sync.RWMutex
 

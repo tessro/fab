@@ -34,6 +34,25 @@ var projectListCmd = &cobra.Command{
 	RunE:  runProjectList,
 }
 
+var projectStopCmd = &cobra.Command{
+	Use:   "stop <name>",
+	Short: "Stop orchestration for a project",
+	Long:  "Stop agent orchestration for the specified project. Running agents will be gracefully stopped.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runProjectStop,
+}
+
+var projectRemoveForce bool
+var projectRemoveDeleteWorktrees bool
+
+var projectRemoveCmd = &cobra.Command{
+	Use:   "remove <name>",
+	Short: "Remove a project from fab",
+	Long:  "Unregister a project from the fab daemon. Optionally delete associated worktrees.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runProjectRemove,
+}
+
 func runProjectAdd(cmd *cobra.Command, args []string) error {
 	path := args[0]
 
@@ -99,11 +118,93 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runProjectStop(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+
+	client := MustConnect()
+	defer client.Close()
+
+	if err := client.Stop(projectName, false); err != nil {
+		return fmt.Errorf("stop project: %w", err)
+	}
+
+	fmt.Printf("🚌 Stopped orchestration for project: %s\n", projectName)
+	return nil
+}
+
+func runProjectRemove(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+
+	client := MustConnect()
+	defer client.Close()
+
+	// Check if project exists and get info
+	result, err := client.ProjectList()
+	if err != nil {
+		return fmt.Errorf("list projects: %w", err)
+	}
+
+	var found bool
+	var project struct {
+		Running bool
+		Path    string
+	}
+	for _, p := range result.Projects {
+		if p.Name == projectName {
+			found = true
+			project.Running = p.Running
+			project.Path = p.Path
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("project not found: %s", projectName)
+	}
+
+	// Check for running agents
+	if project.Running {
+		return fmt.Errorf("project %s has running agents; stop it first with: fab project stop %s", projectName, projectName)
+	}
+
+	// Confirm with user unless --force
+	if !projectRemoveForce {
+		fmt.Printf("Remove project %s?\n", projectName)
+		fmt.Printf("   Path: %s\n", project.Path)
+		if projectRemoveDeleteWorktrees {
+			fmt.Println("   Worktrees will be deleted")
+		}
+		fmt.Print("Type 'yes' to confirm: ")
+
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	if err := client.ProjectRemove(projectName, projectRemoveDeleteWorktrees); err != nil {
+		return fmt.Errorf("remove project: %w", err)
+	}
+
+	fmt.Printf("🚌 Removed project: %s\n", projectName)
+	if projectRemoveDeleteWorktrees {
+		fmt.Println("   Worktrees deleted")
+	}
+	return nil
+}
+
 func init() {
 	projectAddCmd.Flags().StringVarP(&projectAddName, "name", "n", "", "Project name (default: directory name)")
 	projectAddCmd.Flags().IntVarP(&projectAddMaxAgents, "max-agents", "m", 3, "Maximum concurrent agents")
 
+	projectRemoveCmd.Flags().BoolVarP(&projectRemoveForce, "force", "f", false, "Skip confirmation prompt")
+	projectRemoveCmd.Flags().BoolVar(&projectRemoveDeleteWorktrees, "delete-worktrees", false, "Delete associated worktrees")
+
 	projectCmd.AddCommand(projectAddCmd)
 	projectCmd.AddCommand(projectListCmd)
+	projectCmd.AddCommand(projectStopCmd)
+	projectCmd.AddCommand(projectRemoveCmd)
 	rootCmd.AddCommand(projectCmd)
 }

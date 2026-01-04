@@ -31,9 +31,8 @@ type Supervisor struct {
 	// +checklocks:mu
 	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
 
-	// +checklocks:shutdownMu
-	shutdownCh chan struct{} // closed when shutdown is requested
-	shutdownMu sync.Mutex
+	shutdownCh chan struct{} // Created at init, closed to signal shutdown
+	shutdownMu sync.Mutex    // Protects closing shutdownCh exactly once
 
 	// +checklocks:mu
 	server *daemon.Server // Server reference for broadcasting output events

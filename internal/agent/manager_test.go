@@ -11,7 +11,7 @@ import (
 func newTestProject(name string, worktreeCount int) *project.Project {
 	p := project.NewProject(name, "/tmp/"+name)
 	for i := 0; i < worktreeCount; i++ {
-		p.Worktrees = append(p.Worktrees, project.Worktree{
+		p.AddWorktree(project.Worktree{
 			Path:  p.WorktreesDir() + "/wt-" + string(rune('0'+i)),
 			InUse: false,
 		})

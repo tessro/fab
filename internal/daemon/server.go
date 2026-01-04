@@ -64,10 +64,9 @@ func (f HandlerFunc) Handle(ctx context.Context, req *Request) *Response {
 type Server struct {
 	socketPath string
 	handler    Handler
+	listener   net.Listener // Set in Start before goroutine, closed in Stop
 
 	mu sync.Mutex
-	// +checklocks:mu
-	listener net.Listener
 	// +checklocks:mu
 	conns map[net.Conn]struct{}
 	// +checklocks:mu

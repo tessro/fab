@@ -138,7 +138,9 @@ func (p *Project) ensureWorktreeExists(wtPath string) error {
 	return nil
 }
 
-// cleanupWorktrees removes all worktrees. Must be called with lock held.
+// cleanupWorktrees removes all worktrees.
+//
+// +checklocks:p.mu
 func (p *Project) cleanupWorktrees() error {
 	var lastErr error
 

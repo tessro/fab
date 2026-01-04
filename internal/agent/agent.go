@@ -103,12 +103,10 @@ type Agent struct {
 	// +checklocks:mu
 	onStateChange func(old, new State) // Optional callback for state changes
 
-	// Read loop management
-	// +checklocks:readLoopMu
+	// Read loop management (channels are goroutine-safe: created before goroutine, closed to signal)
 	readLoopStop chan struct{} // Signals read loop to stop
-	// +checklocks:readLoopMu
 	readLoopDone chan struct{} // Closed when read loop exits
-	readLoopMu   sync.Mutex    // Protects read loop channels
+	readLoopMu   sync.Mutex    // Protects starting/checking read loop state
 
 	// Exit information
 	// +checklocks:mu
@@ -213,7 +211,8 @@ func (a *Agent) Transition(newState State) error {
 }
 
 // canTransition checks if transitioning to newState is valid.
-// Must be called with lock held.
+//
+// +checklocks:a.mu
 func (a *Agent) canTransition(newState State) bool {
 	allowed, ok := validTransitions[a.State]
 	if !ok {
