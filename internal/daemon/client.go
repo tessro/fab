@@ -386,16 +386,35 @@ func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 
 // AgentDone signals that an agent has completed its task.
 // This is called by agents to notify the orchestrator they are done.
-func (c *Client) AgentDone(reason string) error {
+func (c *Client) AgentDone(agentID, taskID, errorMsg string) error {
 	resp, err := c.Send(&Request{
-		Type:    MsgAgentDone,
-		Payload: AgentDoneRequest{Reason: reason},
+		Type: MsgAgentDone,
+		Payload: AgentDoneRequest{
+			AgentID: agentID,
+			TaskID:  taskID,
+			Error:   errorMsg,
+		},
 	})
 	if err != nil {
 		return err
 	}
 	if !resp.Success {
 		return fmt.Errorf("agent done failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// AgentSendMessage sends a user message to an agent via stream-json.
+func (c *Client) AgentSendMessage(id, content string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentSendMessage,
+		Payload: AgentSendMessageRequest{ID: id, Content: content},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("agent send message failed: %s", resp.Error)
 	}
 	return nil
 }

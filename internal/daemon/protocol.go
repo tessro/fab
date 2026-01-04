@@ -30,8 +30,9 @@ const (
 	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
 	// TUI streaming
-	MsgAttach MessageType = "attach" // Subscribe to agent output streams
-	MsgDetach MessageType = "detach" // Unsubscribe from streams
+	MsgAttach           MessageType = "attach"              // Subscribe to agent output streams
+	MsgDetach           MessageType = "detach"              // Unsubscribe from streams
+	MsgAgentSendMessage MessageType = "agent.send_message"
 
 	// Orchestrator (agent signals and staged actions)
 	MsgAgentDone         MessageType = "agent.done"           // Agent signals task completion
@@ -193,6 +194,12 @@ type AgentInputRequest struct {
 	Input string `json:"input"` // Raw input to send to PTY
 }
 
+// AgentSendMessageRequest is the payload for agent.send_message requests.
+type AgentSendMessageRequest struct {
+	ID      string `json:"id"`      // Agent ID
+	Content string `json:"content"` // Message text to send
+}
+
 // AgentOutputRequest is the payload for agent.output requests.
 type AgentOutputRequest struct {
 	ID string `json:"id"`
@@ -211,11 +218,22 @@ type AttachRequest struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type    string `json:"type"` // "output", "state", "created", "deleted"
-	AgentID string `json:"agent_id"`
-	Project string `json:"project"`
-	Data    string `json:"data,omitempty"`  // For output events
-	State   string `json:"state,omitempty"` // For state events
+	Type      string        `json:"type"` // "output", "state", "created", "deleted"
+	AgentID   string        `json:"agent_id"`
+	Project   string        `json:"project"`
+	Data      string        `json:"data,omitempty"`       // For output events
+	State     string        `json:"state,omitempty"`      // For state events
+	ChatEntry *ChatEntryDTO `json:"chat_entry,omitempty"` // For "message" events
+}
+
+// ChatEntryDTO is the wire format for chat entries sent to TUI clients
+type ChatEntryDTO struct {
+	Role       string `json:"role"`                  // "assistant", "user", "tool"
+	Content    string `json:"content,omitempty"`     // Text content
+	ToolName   string `json:"tool_name,omitempty"`   // Tool name (e.g., "Bash")
+	ToolInput  string `json:"tool_input,omitempty"`  // Tool input summary
+	ToolResult string `json:"tool_result,omitempty"` // Tool output
+	Timestamp  string `json:"timestamp"`             // RFC3339 format
 }
 
 // ActionType identifies the type of staged orchestrator action.
@@ -242,7 +260,9 @@ type StagedAction struct {
 // AgentDoneRequest is the payload for agent.done requests.
 // Sent by agents to signal task completion.
 type AgentDoneRequest struct {
-	Reason string `json:"reason,omitempty"` // Optional completion reason
+	AgentID string `json:"agent_id,omitempty"` // Agent ID (from FAB_AGENT_ID env)
+	TaskID  string `json:"task_id,omitempty"`  // Task ID that was completed
+	Error   string `json:"error,omitempty"`    // Error message if task failed
 }
 
 // StagedActionsRequest is the payload for orchestrator.actions requests.

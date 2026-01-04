@@ -71,32 +71,36 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
-var doneReason string
+var (
+	doneErrorMsg string
+	doneTaskID   string
+)
 
 var agentDoneCmd = &cobra.Command{
 	Use:   "done",
-	Short: "Signal task completion to the orchestrator",
-	Long: `Signal to the orchestrator that this agent has completed its task.
-
-This command is typically called by agents after finishing their work:
-  1. Run quality gates (tests, linting, etc.)
-  2. Push changes
-  3. Close the task with 'bd close <id>'
-  4. Run 'fab agent done'
-
-The orchestrator will clean up the agent and spawn a new one if capacity is available.`,
-	RunE: runAgentDone,
+	Short: "Signal that the agent has completed its task",
+	Long:  "Called by Claude Code to signal task completion. Uses FAB_AGENT_ID env var.",
+	RunE:  runAgentDone,
 }
 
 func runAgentDone(cmd *cobra.Command, args []string) error {
+	agentID := os.Getenv("FAB_AGENT_ID")
+	if agentID == "" {
+		return fmt.Errorf("FAB_AGENT_ID environment variable not set")
+	}
+
 	client := MustConnect()
 	defer client.Close()
 
-	if err := client.AgentDone(doneReason); err != nil {
+	if err := client.AgentDone(agentID, doneTaskID, doneErrorMsg); err != nil {
 		return fmt.Errorf("agent done: %w", err)
 	}
 
-	fmt.Println("🚌 Agent done signaled")
+	if doneErrorMsg != "" {
+		fmt.Printf("🚌 Agent %s signaled error: %s\n", agentID, doneErrorMsg)
+	} else {
+		fmt.Printf("🚌 Agent %s signaled completion\n", agentID)
+	}
 	return nil
 }
 
@@ -104,7 +108,8 @@ func init() {
 	agentListCmd.Flags().StringVarP(&agentListProject, "project", "p", "", "Filter by project name")
 	agentCmd.AddCommand(agentListCmd)
 
-	agentDoneCmd.Flags().StringVar(&doneReason, "reason", "", "Optional completion reason")
+	agentDoneCmd.Flags().StringVar(&doneErrorMsg, "error", "", "Error message if task failed")
+	agentDoneCmd.Flags().StringVar(&doneTaskID, "task", "", "Task ID that was completed")
 	agentCmd.AddCommand(agentDoneCmd)
 
 	rootCmd.AddCommand(agentCmd)

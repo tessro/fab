@@ -774,12 +774,20 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
 	}
 
-	// Find the agent from the connection's worktree
-	// For now, we need the agent ID from somewhere - typically the agent knows its own ID
-	// The fab agent done command should include the agent ID or we look it up from the worktree
+	if doneReq.AgentID == "" {
+		return errorResponse(req, "agent_id is required")
+	}
 
-	// TODO: Look up agent by worktree from the connection context
-	// For now, we'll add an AgentID field to the request
+	// Find the agent and its orchestrator
+	orch := s.getOrchestratorForAgent(doneReq.AgentID)
+	if orch == nil {
+		return errorResponse(req, "agent not found or no orchestrator")
+	}
+
+	// Notify the orchestrator
+	if err := orch.HandleAgentDone(doneReq.AgentID, doneReq.TaskID, doneReq.Error); err != nil {
+		return errorResponse(req, fmt.Sprintf("handle agent done: %v", err))
+	}
 
 	return successResponse(req, nil)
 }
