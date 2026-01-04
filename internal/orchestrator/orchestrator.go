@@ -111,7 +111,7 @@ func (o *Orchestrator) Start() error {
 }
 
 // Stop gracefully stops the orchestration loop.
-// Blocks until the loop has stopped.
+// Blocks until the loop has stopped or a timeout is reached.
 func (o *Orchestrator) Stop() {
 	o.mu.Lock()
 	if !o.running {
@@ -123,8 +123,13 @@ func (o *Orchestrator) Stop() {
 	doneCh := o.doneCh
 	o.mu.Unlock()
 
-	// Wait for the loop to exit
-	<-doneCh
+	// Wait for the loop to exit with timeout
+	select {
+	case <-doneCh:
+		// Loop exited cleanly
+	case <-time.After(5 * time.Second):
+		// Timeout - continue to avoid hanging shutdown
+	}
 
 	o.mu.Lock()
 	o.running = false

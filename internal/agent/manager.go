@@ -284,12 +284,15 @@ func (m *Manager) Stop(id string) error {
 
 	slog.Debug("stopping agent", "agent", id)
 
-	// Stop the PTY
+	// Stop the PTY first (this unblocks any pending reads)
 	if err := agent.Stop(); err != nil && !errors.Is(err, ErrPTYNotStarted) {
 		slog.Error("failed to stop agent PTY", "agent", id, "error", err)
 		_ = agent.MarkError()
 		return err
 	}
+
+	// Stop the read loop goroutine (with timeout to avoid hanging)
+	agent.StopReadLoop()
 
 	// Mark as done if it was active
 	if agent.IsActive() {

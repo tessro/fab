@@ -731,6 +731,23 @@ func (s *Supervisor) stopOrchestrator(projectName string) {
 	s.mu.Unlock()
 }
 
+// Shutdown gracefully stops all orchestrators and agents.
+// This should be called during daemon shutdown.
+func (s *Supervisor) Shutdown() {
+	// Get list of running orchestrators
+	s.mu.RLock()
+	projectNames := make([]string, 0, len(s.orchestrators))
+	for name := range s.orchestrators {
+		projectNames = append(projectNames, name)
+	}
+	s.mu.RUnlock()
+
+	// Stop each orchestrator (which also stops its agents)
+	for _, name := range projectNames {
+		s.stopOrchestrator(name)
+	}
+}
+
 // getOrchestrator returns the orchestrator for a project, or nil if not running.
 func (s *Supervisor) getOrchestrator(projectName string) *orchestrator.Orchestrator {
 	s.mu.RLock()

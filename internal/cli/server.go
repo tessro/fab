@@ -151,10 +151,8 @@ func runDaemon() error {
 		fmt.Println("🚌 shutdown requested, stopping...")
 	}
 
-	// Stop all agents gracefully
-	for _, proj := range reg.List() {
-		mgr.StopAll(proj.Name)
-	}
+	// Stop all orchestrators and agents gracefully
+	sup.Shutdown()
 
 	fmt.Println("🚌 fab daemon stopped")
 	return nil

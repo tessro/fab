@@ -4,6 +4,7 @@ package agent
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -800,7 +801,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 }
 
 // StopReadLoop stops the read loop goroutine.
-// It blocks until the loop has exited.
+// It blocks until the loop has exited or a timeout is reached.
 // Safe to call if the loop is not running.
 func (a *Agent) StopReadLoop() {
 	a.readLoopMu.Lock()
@@ -820,9 +821,15 @@ func (a *Agent) StopReadLoop() {
 		close(stopCh)
 	}
 
-	// Wait for loop to exit
+	// Wait for loop to exit with timeout
 	if doneCh != nil {
-		<-doneCh
+		select {
+		case <-doneCh:
+			// Loop exited cleanly
+		case <-time.After(2 * time.Second):
+			// Timeout - log and continue to avoid hanging shutdown
+			slog.Warn("read loop did not exit within timeout", "agent", a.ID)
+		}
 	}
 }
 
