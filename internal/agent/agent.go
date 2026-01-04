@@ -372,12 +372,13 @@ func (a *Agent) Start(initialPrompt string) error {
 		},
 	}
 
-	// Add permission rules to allow Read/Edit within worktree scope
+	// Add permission rules to allow Read/Edit/Write within worktree scope
 	if workDir != "" {
 		settings["permissions"] = map[string]any{
 			"allow": []string{
 				fmt.Sprintf("Read(//%s/**)", workDir),
 				fmt.Sprintf("Edit(//%s/**)", workDir),
+				fmt.Sprintf("Write(//%s/**)", workDir),
 			},
 		}
 	}
