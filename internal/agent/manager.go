@@ -278,7 +278,7 @@ func (m *Manager) Delete(id string) error {
 	return nil
 }
 
-// Stop stops an agent's PTY and marks it as done or error.
+// Stop stops an agent's process and marks it as done or error.
 // If the agent is active, it's stopped gracefully.
 func (m *Manager) Stop(id string) error {
 	agent, err := m.Get(id)
@@ -288,9 +288,9 @@ func (m *Manager) Stop(id string) error {
 
 	slog.Debug("stopping agent", "agent", id)
 
-	// Stop the PTY first (this unblocks any pending reads)
-	if err := agent.Stop(); err != nil && !errors.Is(err, ErrPTYNotStarted) {
-		slog.Error("failed to stop agent PTY", "agent", id, "error", err)
+	// Stop the process first (this unblocks any pending reads)
+	if err := agent.Stop(); err != nil && !errors.Is(err, ErrProcessNotStarted) {
+		slog.Error("failed to stop agent process", "agent", id, "error", err)
 		_ = agent.MarkError()
 		return err
 	}

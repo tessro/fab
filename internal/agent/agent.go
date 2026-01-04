@@ -2,6 +2,8 @@
 package agent
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -9,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -58,15 +59,15 @@ var validTransitions = map[State][]State{
 
 // Errors returned by agent operations.
 var (
-	ErrInvalidTransition = errors.New("invalid state transition")
-	ErrAgentNotRunning   = errors.New("agent is not running")
-	ErrAgentAlreadyDone  = errors.New("agent has already completed")
-	ErrPTYNotStarted     = errors.New("PTY has not been started")
-	ErrPTYAlreadyStarted = errors.New("PTY is already running")
-	ErrProcessExited     = errors.New("process exited unexpectedly")
+	ErrInvalidTransition  = errors.New("invalid state transition")
+	ErrAgentNotRunning    = errors.New("agent is not running")
+	ErrAgentAlreadyDone   = errors.New("agent has already completed")
+	ErrProcessNotStarted  = errors.New("process has not been started")
+	ErrProcessAlreadyRuns = errors.New("process is already running")
+	ErrProcessExited      = errors.New("process exited unexpectedly")
 )
 
-// Agent represents a Claude Code instance running in a PTY.
+// Agent represents a Claude Code instance with pipe-based I/O.
 type Agent struct {
 	ID        string            // Unique identifier (e.g., "a1b2c3")
 	Project   *project.Project  // Parent project
@@ -82,16 +83,16 @@ type Agent struct {
 	// +checklocks:mu
 	UpdatedAt time.Time // Last state change
 
-	// PTY management
+	// Process management with pipes
 	// +checklocks:mu
-	ptyFile *os.File // PTY file descriptor for I/O
+	stdin io.WriteCloser // Pipe to send input to Claude Code
+	// +checklocks:mu
+	stdout io.ReadCloser // Pipe to read output from Claude Code
 	// +checklocks:mu
 	cmd *exec.Cmd // The Claude Code process
-	// +checklocks:mu
-	size *pty.Winsize // Current terminal size
 
-	// Output buffer captures recent PTY output for display/scrollback
-	buffer *RingBuffer
+	// Chat history stores parsed messages for display/scrollback
+	history *ChatHistory
 
 	// Done detection
 	// +checklocks:mu
@@ -126,7 +127,7 @@ func New(id string, proj *project.Project, wt *project.Worktree) *Agent {
 		Mode:      DefaultMode,
 		StartedAt: now,
 		UpdatedAt: now,
-		buffer:    NewRingBuffer(DefaultBufferSize),
+		history:   NewChatHistory(DefaultChatHistorySize),
 	}
 }
 
@@ -329,14 +330,9 @@ type AgentInfo struct {
 	UpdatedAt time.Time
 }
 
-// DefaultPTYSize is the default terminal size for spawned PTYs.
-var DefaultPTYSize = &pty.Winsize{
-	Rows: 24,
-	Cols: 80,
-}
-
-// Start spawns Claude Code in a PTY within the agent's worktree.
+// Start spawns Claude Code with pipe-based I/O within the agent's worktree.
 // The agent must be in Starting state.
+// If initialPrompt is provided, it will be sent as the first message.
 func (a *Agent) Start(initialPrompt string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -344,8 +340,8 @@ func (a *Agent) Start(initialPrompt string) error {
 	if a.State != StateStarting {
 		return ErrInvalidTransition
 	}
-	if a.ptyFile != nil {
-		return ErrPTYAlreadyStarted
+	if a.cmd != nil {
+		return ErrProcessAlreadyRuns
 	}
 
 	// Determine working directory
@@ -356,57 +352,75 @@ func (a *Agent) Start(initialPrompt string) error {
 		workDir = a.Project.Path
 	}
 
-	// Build claude command with initial prompt
-	args := []string{}
-	if initialPrompt != "" {
-		args = append(args, "-p", initialPrompt)
-	}
-
-	cmd := exec.Command("claude", args...)
+	// Build claude command with stream-json mode
+	cmd := exec.Command("claude", "-p",
+		"--output-format", "stream-json",
+		"--input-format", "stream-json")
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
 
-	// Set terminal size
-	size := DefaultPTYSize
-	if a.size != nil {
-		size = a.size
-	}
+	// Set environment variable for agent identification
+	cmd.Env = append(os.Environ(), "FAB_AGENT_ID="+a.ID)
 
-	// Start the PTY
-	ptmx, err := pty.StartWithSize(cmd, size)
+	// Set up pipes
+	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
 
-	a.ptyFile = ptmx
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		stdin.Close()
+		return err
+	}
+
+	// Start the process
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		return err
+	}
+
+	a.stdin = stdin
+	a.stdout = stdout
 	a.cmd = cmd
-	a.size = size
 	a.UpdatedAt = time.Now()
+
+	// Send initial prompt if provided
+	if initialPrompt != "" {
+		if err := a.sendMessageLocked(initialPrompt); err != nil {
+			// Log but don't fail - process is running
+		}
+	}
 
 	return nil
 }
 
-// Stop terminates the Claude Code process and closes the PTY.
+// Stop terminates the Claude Code process and closes the pipes.
 func (a *Agent) Stop() error {
 	a.mu.Lock()
 
-	if a.ptyFile == nil {
+	if a.cmd == nil {
 		a.mu.Unlock()
-		return ErrPTYNotStarted
+		return ErrProcessNotStarted
 	}
 
 	// Mark as stopping to prevent read loop from calling Wait()
 	a.stopping = true
 
-	// Close PTY (this signals the process)
-	if err := a.ptyFile.Close(); err != nil {
-		// Continue cleanup even if close fails
+	// Close pipes (this signals the process)
+	if a.stdin != nil {
+		a.stdin.Close()
+		a.stdin = nil
+	}
+	if a.stdout != nil {
+		a.stdout.Close()
+		a.stdout = nil
 	}
 
 	// Get process reference before releasing lock
 	cmd := a.cmd
-	a.ptyFile = nil
 	a.cmd = nil
 	a.UpdatedAt = time.Now()
 	a.mu.Unlock()
@@ -421,60 +435,65 @@ func (a *Agent) Stop() error {
 	return nil
 }
 
-// Write sends input to the PTY.
+// SendMessage sends a user message to Claude Code via stdin as JSON.
+func (a *Agent) SendMessage(content string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sendMessageLocked(content)
+}
+
+// sendMessageLocked sends a message while holding the lock.
+//
+// +checklocks:a.mu
+func (a *Agent) sendMessageLocked(content string) error {
+	if a.stdin == nil {
+		return ErrProcessNotStarted
+	}
+
+	msg := InputMessage{
+		Type:    "user_input",
+		Content: content,
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	// Write JSON followed by newline
+	data = append(data, '\n')
+	_, err = a.stdin.Write(data)
+	return err
+}
+
+// Write sends raw input to the process stdin.
+// Deprecated: Use SendMessage for structured input.
 func (a *Agent) Write(p []byte) (int, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.ptyFile == nil {
-		return 0, ErrPTYNotStarted
+	if a.stdin == nil {
+		return 0, ErrProcessNotStarted
 	}
-	return a.ptyFile.Write(p)
+	return a.stdin.Write(p)
 }
 
-// Read reads output from the PTY.
+// Read reads raw output from the process stdout.
 func (a *Agent) Read(p []byte) (int, error) {
 	a.mu.RLock()
-	ptyFile := a.ptyFile
+	stdout := a.stdout
 	a.mu.RUnlock()
 
-	if ptyFile == nil {
-		return 0, ErrPTYNotStarted
+	if stdout == nil {
+		return 0, ErrProcessNotStarted
 	}
-	return ptyFile.Read(p)
+	return stdout.Read(p)
 }
 
-// PTY returns the PTY file for direct access (e.g., io.Copy).
-// Returns nil if the PTY hasn't been started.
-func (a *Agent) PTY() io.ReadWriter {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.ptyFile == nil {
-		return nil
-	}
-	return a.ptyFile
-}
-
-// Resize changes the PTY terminal size.
+// Resize is a no-op for pipe-based I/O.
+// Pipes don't have terminal dimensions.
 func (a *Agent) Resize(rows, cols uint16) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.ptyFile == nil {
-		return ErrPTYNotStarted
-	}
-
-	newSize := &pty.Winsize{
-		Rows: rows,
-		Cols: cols,
-	}
-
-	if err := pty.Setsize(a.ptyFile, newSize); err != nil {
-		return err
-	}
-
-	a.size = newSize
+	// No-op: pipes don't support terminal resizing
 	return nil
 }
 
@@ -565,22 +584,35 @@ func (a *Agent) IsCommandNotFound() bool {
 	return false
 }
 
-// Buffer returns the output ring buffer for direct access.
-// The buffer is safe for concurrent use.
-func (a *Agent) Buffer() *RingBuffer {
-	return a.buffer
+// History returns the chat history for direct access.
+// The history is safe for concurrent use.
+func (a *Agent) History() *ChatHistory {
+	return a.history
 }
 
-// Output returns the last n lines of captured output.
-// If n <= 0, returns all captured output.
+// Output returns the last n chat entries as formatted text.
+// If n <= 0, returns all entries.
 func (a *Agent) Output(n int) []byte {
-	return a.buffer.Last(n)
+	entries := a.history.Entries(n)
+	var result []byte
+	for _, entry := range entries {
+		if entry.Content != "" {
+			result = append(result, []byte(entry.Content+"\n")...)
+		}
+		if entry.ToolName != "" {
+			result = append(result, []byte("["+entry.ToolName+"] "+entry.ToolInput+"\n")...)
+		}
+		if entry.ToolResult != "" {
+			result = append(result, []byte(entry.ToolResult+"\n")...)
+		}
+	}
+	return result
 }
 
-// CaptureOutput writes data to both the PTY and the output buffer.
-// This is typically called in the supervisor's read loop.
-func (a *Agent) CaptureOutput(p []byte) {
-	a.buffer.Write(p)
+// AddChatEntry adds a parsed chat entry to the history.
+// This is typically called by the read loop when parsing stream output.
+func (a *Agent) AddChatEntry(entry ChatEntry) {
+	a.history.Add(entry)
 }
 
 // SetDetector configures the pattern detector for done detection.
@@ -606,7 +638,7 @@ func (a *Agent) OnDoneDetect(fn func(match *Match)) {
 	a.onDoneDetect = fn
 }
 
-// CheckDone checks the output buffer for completion patterns.
+// CheckDone checks the chat history for completion patterns.
 // Returns the match if a completion pattern is found, nil otherwise.
 // Does not transition state - caller decides whether to mark done.
 func (a *Agent) CheckDone() *Match {
@@ -618,7 +650,15 @@ func (a *Agent) CheckDone() *Match {
 		return nil
 	}
 
-	return detector.CheckBuffer(a.buffer)
+	// Convert recent chat entries to lines for pattern matching
+	entries := a.history.Entries(10)
+	var lines [][]byte
+	for _, entry := range entries {
+		if entry.Content != "" {
+			lines = append(lines, []byte(entry.Content))
+		}
+	}
+	return detector.CheckLines(lines)
 }
 
 // CheckDoneAndTransition checks for done patterns and transitions to Done state if found.
@@ -648,10 +688,10 @@ func (a *Agent) CheckDoneAndTransition() *Match {
 	return match
 }
 
-// CheckNewOutput checks only the most recent lines for completion patterns.
+// CheckNewOutput checks only the most recent entries for completion patterns.
 // More efficient than CheckDone when called frequently on new output.
-// The numLines parameter specifies how many recent lines to check.
-func (a *Agent) CheckNewOutput(numLines int) *Match {
+// The numEntries parameter specifies how many recent entries to check.
+func (a *Agent) CheckNewOutput(numEntries int) *Match {
 	a.mu.RLock()
 	detector := a.detector
 	a.mu.RUnlock()
@@ -660,40 +700,46 @@ func (a *Agent) CheckNewOutput(numLines int) *Match {
 		return nil
 	}
 
-	lines := a.buffer.Lines(numLines)
+	entries := a.history.Entries(numEntries)
+	var lines [][]byte
+	for _, entry := range entries {
+		if entry.Content != "" {
+			lines = append(lines, []byte(entry.Content))
+		}
+	}
 	return detector.CheckLines(lines)
 }
 
 // ReadLoopConfig configures the read loop behavior.
 type ReadLoopConfig struct {
-	// OnOutput is called whenever data is read from the PTY.
-	// The callback receives the raw bytes read. It should not block.
+	// OnEntry is called whenever a chat entry is parsed from stream output.
+	// The callback receives the parsed entry. It should not block.
+	OnEntry func(entry ChatEntry)
+
+	// OnOutput is called with the raw JSONL data for each line.
+	// This is useful for broadcasting raw output.
 	OnOutput func(data []byte)
 
-	// OnError is called when a read error occurs (other than EOF).
+	// OnError is called when a read/parse error occurs (other than EOF).
 	// If nil, errors are silently ignored.
 	OnError func(err error)
 
-	// BufferSize is the size of the read buffer. Default: 4096.
-	BufferSize int
-
-	// CheckDoneLines is the number of recent lines to check for done patterns.
+	// CheckDoneEntries is the number of recent entries to check for done patterns.
 	// Default: 5. Set to 0 to disable done detection in the read loop.
-	CheckDoneLines int
+	CheckDoneEntries int
 }
 
 // DefaultReadLoopConfig returns the default read loop configuration.
 func DefaultReadLoopConfig() ReadLoopConfig {
 	return ReadLoopConfig{
-		BufferSize:     4096,
-		CheckDoneLines: 5,
+		CheckDoneEntries: 5,
 	}
 }
 
-// StartReadLoop starts a goroutine that continuously reads from the PTY.
-// Data is captured to the ring buffer and the OnOutput callback is called.
-// The loop runs until StopReadLoop is called or the PTY returns EOF/error.
-// Returns an error if the read loop is already running or PTY is not started.
+// StartReadLoop starts a goroutine that continuously reads JSONL from stdout.
+// Each line is parsed as a StreamMessage and converted to ChatEntry items.
+// The loop runs until StopReadLoop is called or stdout returns EOF/error.
+// Returns an error if the read loop is already running or process is not started.
 func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
 	a.readLoopMu.Lock()
 	defer a.readLoopMu.Unlock()
@@ -708,21 +754,18 @@ func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
 		}
 	}
 
-	// Verify PTY is started
+	// Verify process is started
 	a.mu.RLock()
-	ptyFile := a.ptyFile
+	stdout := a.stdout
 	a.mu.RUnlock()
 
-	if ptyFile == nil {
-		return ErrPTYNotStarted
+	if stdout == nil {
+		return ErrProcessNotStarted
 	}
 
 	// Apply defaults
-	if cfg.BufferSize <= 0 {
-		cfg.BufferSize = 4096
-	}
-	if cfg.CheckDoneLines <= 0 {
-		cfg.CheckDoneLines = 5
+	if cfg.CheckDoneEntries <= 0 {
+		cfg.CheckDoneEntries = 5
 	}
 
 	// Create control channels
@@ -734,13 +777,22 @@ func (a *Agent) StartReadLoop(cfg ReadLoopConfig) error {
 	return nil
 }
 
-// runReadLoop is the main read loop goroutine.
+// runReadLoop is the main read loop goroutine that parses JSONL output.
 func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 	defer close(a.readLoopDone)
 
-	buf := make([]byte, cfg.BufferSize)
+	// Get stdout reference
+	a.mu.RLock()
+	stdout := a.stdout
+	a.mu.RUnlock()
 
-	for {
+	if stdout == nil {
+		return
+	}
+
+	scanner := bufio.NewScanner(stdout)
+
+	for scanner.Scan() {
 		// Check for stop signal
 		select {
 		case <-a.readLoopStop:
@@ -748,82 +800,82 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		default:
 		}
 
-		// Read from PTY (this may block)
-		n, err := a.Read(buf)
-
-		if n > 0 {
-			data := buf[:n]
-
-			// Capture to ring buffer
-			a.CaptureOutput(data)
-
-			// Call output callback
-			if cfg.OnOutput != nil {
-				cfg.OnOutput(data)
-			}
-
-			// Transition to running if we were starting
-			if a.GetState() == StateStarting {
-				_ = a.MarkRunning()
-			}
-
-			// Check for done patterns
-			if cfg.CheckDoneLines > 0 {
-				if match := a.CheckNewOutput(cfg.CheckDoneLines); match != nil {
-					// Get callback while holding read lock
-					a.mu.RLock()
-					callback := a.onDoneDetect
-					a.mu.RUnlock()
-
-					// Invoke callback before transition
-					if callback != nil {
-						callback(match)
-					}
-
-					// Attempt transition
-					_ = a.MarkDone()
-					return
-				}
-			}
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
 
-		if err != nil {
-			if err == io.EOF {
-				// PTY closed - wait for process and check exit status
-				if a.IsActive() {
-					exitErr := a.waitForProcess()
-					if exitErr != nil {
-						// Non-zero exit or signal - this is an error
-						a.setExitError(exitErr)
-						_ = a.MarkError()
-					} else {
-						// Clean exit (exit code 0)
-						_ = a.MarkDone()
-					}
-				}
-				return
-			}
+		// Call raw output callback
+		if cfg.OnOutput != nil {
+			cfg.OnOutput(line)
+		}
 
-			// Handle read errors
+		// Parse the JSONL line as a StreamMessage
+		msg, err := ParseStreamMessage(line)
+		if err != nil {
 			if cfg.OnError != nil {
 				cfg.OnError(err)
 			}
+			continue
+		}
 
-			// Check if we should stop
-			select {
-			case <-a.readLoopStop:
-				return
-			default:
+		if msg == nil {
+			continue
+		}
+
+		// Convert to chat entries and add to history
+		entries := msg.ToChatEntries()
+		for _, entry := range entries {
+			a.AddChatEntry(entry)
+
+			// Call entry callback
+			if cfg.OnEntry != nil {
+				cfg.OnEntry(entry)
 			}
+		}
 
-			// For other errors, check if PTY is still valid
-			a.mu.RLock()
-			ptyFile := a.ptyFile
-			a.mu.RUnlock()
+		// Transition to running if we were starting
+		if a.GetState() == StateStarting {
+			_ = a.MarkRunning()
+		}
 
-			if ptyFile == nil {
+		// Check for done patterns
+		if cfg.CheckDoneEntries > 0 {
+			if match := a.CheckNewOutput(cfg.CheckDoneEntries); match != nil {
+				// Get callback while holding read lock
+				a.mu.RLock()
+				callback := a.onDoneDetect
+				a.mu.RUnlock()
+
+				// Invoke callback before transition
+				if callback != nil {
+					callback(match)
+				}
+
+				// Attempt transition
+				_ = a.MarkDone()
 				return
 			}
+		}
+	}
+
+	// Scanner finished - check for errors or EOF
+	if err := scanner.Err(); err != nil {
+		if cfg.OnError != nil {
+			cfg.OnError(err)
+		}
+	}
+
+	// Stdout closed - wait for process and check exit status
+	if a.IsActive() {
+		exitErr := a.waitForProcess()
+		if exitErr != nil {
+			// Non-zero exit or signal - this is an error
+			a.setExitError(exitErr)
+			_ = a.MarkError()
+		} else {
+			// Clean exit (exit code 0)
+			_ = a.MarkDone()
 		}
 	}
 }
