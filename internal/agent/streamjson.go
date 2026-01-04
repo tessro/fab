@@ -9,8 +9,18 @@ import (
 )
 
 // StreamMessage represents a parsed message from Claude Code's stream-json output.
+// The format has type at the top level ("system", "assistant", "user", "result")
+// with message content nested in a "message" field for assistant/user types.
 type StreamMessage struct {
-	Type       string         `json:"type"`                  // "message"
+	Type    string          `json:"type"`              // "system", "assistant", "user", "result"
+	Subtype string          `json:"subtype,omitempty"` // For system messages: "init", "hook_response"
+	Message *NestedMessage  `json:"message,omitempty"` // For assistant/user types
+	Result  string          `json:"result,omitempty"`  // For result type
+	IsError bool            `json:"is_error,omitempty"`
+}
+
+// NestedMessage contains the actual API message content.
+type NestedMessage struct {
 	Role       string         `json:"role"`                  // "assistant", "user"
 	Content    []ContentBlock `json:"content"`               // Message content blocks
 	Model      string         `json:"model,omitempty"`       // Model name
@@ -84,15 +94,21 @@ func (m *StreamMessage) ToChatEntries() []ChatEntry {
 		return nil
 	}
 
+	// Skip system/result messages - only process assistant/user messages
+	if m.Message == nil {
+		return nil
+	}
+
 	now := time.Now()
 	var entries []ChatEntry
+	msg := m.Message
 
-	for _, block := range m.Content {
+	for _, block := range msg.Content {
 		switch block.Type {
 		case "text":
 			if block.Text != "" {
 				entries = append(entries, ChatEntry{
-					Role:      m.Role,
+					Role:      msg.Role,
 					Content:   block.Text,
 					Timestamp: now,
 				})
@@ -235,7 +251,10 @@ func formatGenericInput(data map[string]any) string {
 
 // IsToolUse returns true if the message contains any tool_use blocks.
 func (m *StreamMessage) IsToolUse() bool {
-	for _, block := range m.Content {
+	if m.Message == nil {
+		return false
+	}
+	for _, block := range m.Message.Content {
 		if block.Type == "tool_use" {
 			return true
 		}
@@ -245,7 +264,10 @@ func (m *StreamMessage) IsToolUse() bool {
 
 // IsToolResult returns true if the message contains any tool_result blocks.
 func (m *StreamMessage) IsToolResult() bool {
-	for _, block := range m.Content {
+	if m.Message == nil {
+		return false
+	}
+	for _, block := range m.Message.Content {
 		if block.Type == "tool_result" {
 			return true
 		}
@@ -255,8 +277,11 @@ func (m *StreamMessage) IsToolResult() bool {
 
 // GetText returns all text content from the message, concatenated.
 func (m *StreamMessage) GetText() string {
+	if m.Message == nil {
+		return ""
+	}
 	var texts []string
-	for _, block := range m.Content {
+	for _, block := range m.Message.Content {
 		if block.Type == "text" && block.Text != "" {
 			texts = append(texts, block.Text)
 		}
@@ -266,8 +291,11 @@ func (m *StreamMessage) GetText() string {
 
 // GetToolUses returns all tool_use blocks from the message.
 func (m *StreamMessage) GetToolUses() []ContentBlock {
+	if m.Message == nil {
+		return nil
+	}
 	var tools []ContentBlock
-	for _, block := range m.Content {
+	for _, block := range m.Message.Content {
 		if block.Type == "tool_use" {
 			tools = append(tools, block)
 		}
@@ -277,8 +305,11 @@ func (m *StreamMessage) GetToolUses() []ContentBlock {
 
 // GetToolResults returns all tool_result blocks from the message.
 func (m *StreamMessage) GetToolResults() []ContentBlock {
+	if m.Message == nil {
+		return nil
+	}
 	var results []ContentBlock
-	for _, block := range m.Content {
+	for _, block := range m.Message.Content {
 		if block.Type == "tool_result" {
 			results = append(results, block)
 		}
