@@ -50,8 +50,16 @@ type ChatEntry struct {
 
 // InputMessage is sent to Claude Code via stdin in stream-json mode.
 type InputMessage struct {
-	Type    string `json:"type"`    // "user_input"
-	Content string `json:"content"` // User message text
+	Type              string        `json:"type"`                // "user"
+	Message           MessageBody   `json:"message"`             // Message content
+	SessionID         string        `json:"session_id"`          // Session identifier
+	ParentToolUseID   *string       `json:"parent_tool_use_id"`  // null for regular messages
+}
+
+// MessageBody contains the actual message content.
+type MessageBody struct {
+	Role    string `json:"role"`    // "user"
+	Content string `json:"content"` // Message text
 }
 
 // ParseStreamMessage parses a single JSONL line from Claude Code's stream-json output.

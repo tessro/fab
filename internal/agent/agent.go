@@ -346,8 +346,8 @@ func (a *Agent) Start(initialPrompt string) error {
 		workDir = a.Project.Path
 	}
 
-	// Build claude command with stream-json mode
-	cmd := exec.Command("claude", "-p",
+	// Build claude command with stream-json mode (no -p for multi-turn)
+	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json")
 	if workDir != "" {
@@ -445,8 +445,13 @@ func (a *Agent) sendMessageLocked(content string) error {
 	}
 
 	msg := InputMessage{
-		Type:    "user_input",
-		Content: content,
+		Type: "user",
+		Message: MessageBody{
+			Role:    "user",
+			Content: content,
+		},
+		SessionID:       "default",
+		ParentToolUseID: nil,
 	}
 
 	data, err := json.Marshal(msg)
