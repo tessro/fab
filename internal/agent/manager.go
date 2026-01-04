@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"sync"
 
 	"github.com/tessro/fab/internal/project"
@@ -109,8 +110,10 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 	wt, err := proj.GetAvailableWorktree(id)
 	if err != nil {
 		if errors.Is(err, project.ErrNoWorktreeAvailable) {
+			slog.Warn("no worktree available for new agent", "project", proj.Name)
 			return nil, ErrNoCapacity
 		}
+		slog.Error("failed to get worktree", "project", proj.Name, "error", err)
 		return nil, err
 	}
 
@@ -118,6 +121,12 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 
 	// Register state change callback to emit events
 	agent.OnStateChange(func(old, new State) {
+		slog.Debug("agent state changed",
+			"agent", agent.ID,
+			"project", proj.Name,
+			"from", old,
+			"to", new,
+		)
 		m.emit(Event{
 			Type:     EventStateChanged,
 			Agent:    agent,
@@ -130,6 +139,12 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 	m.agents[id] = agent
 	m.projects[proj.Name] = append(m.projects[proj.Name], agent)
 	m.mu.Unlock()
+
+	slog.Info("agent created",
+		"agent", id,
+		"project", proj.Name,
+		"worktree", wt.Path,
+	)
 
 	m.emit(Event{
 		Type:  EventCreated,
@@ -225,12 +240,16 @@ func (m *Manager) Delete(id string) error {
 		return ErrAgentNotFound
 	}
 
+	projectName := ""
+	if agent.Project != nil {
+		projectName = agent.Project.Name
+	}
+
 	// Remove from agents map
 	delete(m.agents, id)
 
 	// Remove from project list
 	if agent.Project != nil {
-		projectName := agent.Project.Name
 		agents := m.projects[projectName]
 		for i, a := range agents {
 			if a.ID == id {
@@ -244,6 +263,8 @@ func (m *Manager) Delete(id string) error {
 	}
 
 	m.mu.Unlock()
+
+	slog.Info("agent deleted", "agent", id, "project", projectName)
 
 	m.emit(Event{
 		Type:  EventDeleted,
@@ -261,8 +282,11 @@ func (m *Manager) Stop(id string) error {
 		return err
 	}
 
+	slog.Debug("stopping agent", "agent", id)
+
 	// Stop the PTY
 	if err := agent.Stop(); err != nil && !errors.Is(err, ErrPTYNotStarted) {
+		slog.Error("failed to stop agent PTY", "agent", id, "error", err)
 		_ = agent.MarkError()
 		return err
 	}
@@ -271,6 +295,8 @@ func (m *Manager) Stop(id string) error {
 	if agent.IsActive() {
 		_ = agent.MarkDone()
 	}
+
+	slog.Info("agent stopped", "agent", id, "state", agent.GetState())
 
 	return nil
 }

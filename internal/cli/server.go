@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/registry"
 	"github.com/tessro/fab/internal/supervisor"
 )
@@ -95,6 +96,13 @@ func daemonize() error {
 
 // runDaemon runs the daemon server in the foreground.
 func runDaemon() error {
+	// Initialize logging
+	logCleanup, err := logging.Setup("")
+	if err != nil {
+		return fmt.Errorf("setup logging: %w", err)
+	}
+	defer logCleanup()
+
 	pidPath := daemon.DefaultPIDPath()
 
 	// Write PID file

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -135,6 +136,8 @@ func (s *Server) Start() error {
 	s.started = true
 	s.mu.Unlock()
 
+	slog.Info("daemon server started", "socket", s.socketPath)
+
 	go s.acceptLoop()
 
 	return nil
@@ -149,14 +152,17 @@ func (s *Server) acceptLoop() {
 			case <-s.done:
 				return // Server shutting down
 			default:
-				// Log error and continue? For now, just continue
+				slog.Error("accept connection failed", "error", err)
 				continue
 			}
 		}
 
 		s.mu.Lock()
 		s.conns[conn] = struct{}{}
+		connCount := len(s.conns)
 		s.mu.Unlock()
+
+		slog.Debug("client connected", "connections", connCount)
 
 		go s.handleConnection(conn)
 	}
@@ -169,7 +175,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 		s.mu.Lock()
 		delete(s.conns, conn)
 		delete(s.attached, conn)
+		connCount := len(s.conns)
 		s.mu.Unlock()
+		slog.Debug("client disconnected", "connections", connCount)
 	}()
 
 	decoder := json.NewDecoder(conn)
@@ -185,6 +193,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			if err == io.EOF {
 				return // Client disconnected
 			}
+			slog.Warn("decode request failed", "error", err)
 			// Send error response for malformed request
 			resp := &Response{
 				Success: false,
@@ -193,6 +202,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 			encoder.Encode(resp)
 			return
 		}
+
+		slog.Debug("request received", "type", req.Type, "id", req.ID)
 
 		// Use base context (could add per-request timeout here)
 		ctx := baseCtx
@@ -216,7 +227,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 			resp.ID = req.ID
 		}
 
+		if !resp.Success {
+			slog.Warn("request failed", "type", req.Type, "error", resp.Error)
+		}
+
 		if err := encoder.Encode(resp); err != nil {
+			slog.Debug("write response failed", "error", err)
 			return // Client disconnected or write error
 		}
 	}
@@ -230,7 +246,10 @@ func (s *Server) Stop() error {
 		return nil
 	}
 	s.started = false
+	connCount := len(s.conns)
 	s.mu.Unlock()
+
+	slog.Info("daemon server stopping", "active_connections", connCount)
 
 	// Signal acceptLoop to stop
 	close(s.done)
@@ -251,6 +270,8 @@ func (s *Server) Stop() error {
 
 	// Remove socket file
 	os.Remove(s.socketPath)
+
+	slog.Info("daemon server stopped")
 
 	return nil
 }
