@@ -808,9 +808,36 @@ func (s *Supervisor) stopOrchestrator(projectName string) {
 	s.mu.Unlock()
 }
 
+// ShutdownTimeout is the maximum time to wait for graceful shutdown.
+const ShutdownTimeout = 30 * time.Second
+
 // Shutdown gracefully stops all orchestrators and agents.
 // This should be called during daemon shutdown.
 func (s *Supervisor) Shutdown() {
+	s.ShutdownWithTimeout(ShutdownTimeout)
+}
+
+// ShutdownWithTimeout stops all orchestrators and agents with a timeout.
+// Returns true if shutdown completed gracefully, false if timed out.
+func (s *Supervisor) ShutdownWithTimeout(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		s.shutdownInternal()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		slog.Warn("shutdown timed out, some agents may not have stopped gracefully",
+			"timeout", timeout)
+		return false
+	}
+}
+
+// shutdownInternal performs the actual shutdown work.
+func (s *Supervisor) shutdownInternal() {
 	// Get list of running orchestrators
 	s.mu.RLock()
 	projectNames := make([]string, 0, len(s.orchestrators))
