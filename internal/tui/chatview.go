@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 
 	"github.com/tessro/fab/internal/daemon"
 )
@@ -234,12 +235,26 @@ func (v *ChatView) updateContent() {
 
 // renderEntry renders a single chat entry to a string.
 func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO) string {
+	// Calculate available width for content (viewport width minus some padding)
+	contentWidth := v.viewport.Width - 2
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+
 	switch entry.Role {
 	case "assistant":
-		return chatAssistantStyle.Render("Claude: ") + entry.Content
+		prefix := "Claude: "
+		prefixLen := len(prefix)
+		// Wrap content, accounting for prefix on first line
+		wrapped := wrapText(entry.Content, contentWidth-prefixLen, prefixLen)
+		return chatAssistantStyle.Render(prefix) + wrapped
 
 	case "user":
-		return chatUserStyle.Render("You: ") + entry.Content
+		prefix := "You: "
+		prefixLen := len(prefix)
+		// Wrap content, accounting for prefix on first line
+		wrapped := wrapText(entry.Content, contentWidth-prefixLen, prefixLen)
+		return chatUserStyle.Render(prefix) + wrapped
 
 	case "tool":
 		var parts []string
@@ -259,6 +274,29 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO) string {
 	default:
 		return entry.Content
 	}
+}
+
+// wrapText wraps text to the given width with optional indentation for continuation lines.
+func wrapText(text string, width, indent int) string {
+	if width <= 0 {
+		return text
+	}
+
+	// Wrap to available width
+	wrapped := wordwrap.String(text, width)
+
+	// If no indent needed, return as-is
+	if indent <= 0 {
+		return wrapped
+	}
+
+	// Add indent to continuation lines
+	indentStr := strings.Repeat(" ", indent)
+	lines := strings.Split(wrapped, "\n")
+	for i := 1; i < len(lines); i++ {
+		lines[i] = indentStr + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // truncateToolInput truncates tool input for display.
