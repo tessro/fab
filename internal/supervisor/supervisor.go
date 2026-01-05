@@ -111,6 +111,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentOutput(ctx, req)
 	case daemon.MsgAgentSendMessage:
 		return s.handleAgentSendMessage(ctx, req)
+	case daemon.MsgAgentChatHistory:
+		return s.handleAgentChatHistory(ctx, req)
 
 	// TUI streaming
 	case daemon.MsgAttach:
@@ -565,6 +567,44 @@ func (s *Supervisor) handleAgentSendMessage(ctx context.Context, req *daemon.Req
 	}
 
 	return successResponse(req, nil)
+}
+
+// handleAgentChatHistory returns the chat history for an agent.
+func (s *Supervisor) handleAgentChatHistory(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var histReq daemon.AgentChatHistoryRequest
+	if err := unmarshalPayload(req.Payload, &histReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if histReq.ID == "" {
+		return errorResponse(req, "agent ID required")
+	}
+
+	a, err := s.agents.Get(histReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("agent not found: %s", histReq.ID))
+	}
+
+	// Get entries from the agent's history
+	entries := a.History().Entries(histReq.Limit)
+
+	// Convert to DTO format
+	dtos := make([]daemon.ChatEntryDTO, len(entries))
+	for i, e := range entries {
+		dtos[i] = daemon.ChatEntryDTO{
+			Role:       e.Role,
+			Content:    e.Content,
+			ToolName:   e.ToolName,
+			ToolInput:  e.ToolInput,
+			ToolResult: e.ToolResult,
+			Timestamp:  e.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	return successResponse(req, daemon.AgentChatHistoryResponse{
+		AgentID: histReq.ID,
+		Entries: dtos,
+	})
 }
 
 // handleAttach subscribes a client to streaming events.
