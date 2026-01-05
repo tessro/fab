@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -24,6 +25,7 @@ type ChatView struct {
 	pendingPermission *daemon.PermissionRequest // pending permission request
 	inputView         string                    // rendered input line view
 	inputHeight       int                       // height of input line (for layout)
+	historyFetchStart time.Time                 // when history fetch started (for merging with streaming entries)
 }
 
 // NewChatView creates a new chat view component.
@@ -95,6 +97,7 @@ func (v *ChatView) SetAgent(agentID, project string) {
 		v.agentID = agentID
 		v.project = project
 		v.entries = make([]daemon.ChatEntryDTO, 0)
+		v.historyFetchStart = time.Now()
 		v.updateContent()
 	}
 }
@@ -179,9 +182,34 @@ func (v *ChatView) AppendEntry(entry daemon.ChatEntryDTO) {
 	}
 }
 
-// SetEntries replaces all entries in the view.
+// SetEntries replaces entries with history, preserving streaming entries that arrived
+// after the history fetch started.
 func (v *ChatView) SetEntries(entries []daemon.ChatEntryDTO) {
+	// Find the latest timestamp in the history
+	var historyEnd time.Time
+	for _, e := range entries {
+		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
+			if t.After(historyEnd) {
+				historyEnd = t
+			}
+		}
+	}
+
+	// Preserve streaming entries that arrived after history fetch started AND are newer than history
+	var streamingEntries []daemon.ChatEntryDTO
+	for _, e := range v.entries {
+		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
+			// Keep entries that arrived via streaming and are newer than history
+			if t.After(v.historyFetchStart) && t.After(historyEnd) {
+				streamingEntries = append(streamingEntries, e)
+			}
+		}
+	}
+
+	// Merge: history + any newer streaming entries
 	v.entries = entries
+	v.entries = append(v.entries, streamingEntries...)
+
 	v.updateContent()
 	v.viewport.GotoBottom()
 }
