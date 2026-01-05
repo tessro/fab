@@ -191,10 +191,12 @@ func runDaemon() error {
 		fmt.Println("🚌 shutdown requested, stopping...")
 	}
 
-	// Stop all orchestrators and agents gracefully
-	sup.Shutdown()
-
-	fmt.Println("🚌 fab daemon stopped")
+	// Stop all orchestrators and agents gracefully with timeout
+	if sup.ShutdownWithTimeout(supervisor.ShutdownTimeout) {
+		fmt.Println("🚌 fab daemon stopped")
+	} else {
+		fmt.Println("🚌 fab daemon stopped (some agents may not have stopped gracefully)")
+	}
 	return nil
 }
 
