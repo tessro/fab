@@ -44,13 +44,17 @@ type HookDecision struct {
 }
 
 var hookCmd = &cobra.Command{
-	Use:   "hook",
+	Use:   "hook <hook-name>",
 	Short: "Handle Claude Code hook callbacks",
 	Long: `Handle permission request hooks from Claude Code.
 
 This command is invoked by Claude Code when it needs permission to use a tool.
 It reads the hook input from stdin, forwards it to the fab daemon for user
 approval via the TUI, and returns the decision to Claude Code.
+
+Supported hook names:
+  - PreToolUse: Called before a tool is used
+  - PermissionRequest: Called when permission is requested (legacy)
 
 Example Claude settings.json:
 {
@@ -61,19 +65,40 @@ Example Claude settings.json:
         "hooks": [
           {
             "type": "command",
-            "command": "fab hook"
+            "command": "fab hook PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "fab hook PermissionRequest"
           }
         ]
       }
     ]
   }
 }`,
-	Args:   cobra.NoArgs,
+	Args:   cobra.ExactArgs(1),
 	RunE:   runHook,
 	Hidden: true, // Hide from main help since it's for Claude Code integration
 }
 
 func runHook(cmd *cobra.Command, args []string) error {
+	hookName := args[0]
+
+	slog.Debug("hook invoked", "hook", hookName)
+
+	// Validate hook name
+	if hookName != "PreToolUse" && hookName != "PermissionRequest" {
+		// Pass through for unsupported hook types
+		return outputHookResponse(hookName, "allow", "", false)
+	}
+
 	// Read hook input from stdin
 	input, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -86,11 +111,12 @@ func runHook(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse hook input: %w", err)
 	}
 
-	// Only handle PermissionRequest hooks
-	if hookInput.HookEventName != "PreToolUse" && hookInput.HookEventName != "PermissionRequest" {
-		// Pass through for other hook types
-		return outputHookResponse("allow", "", false)
-	}
+	slog.Debug("hook received",
+		"hook", hookName,
+		"event", hookInput.HookEventName,
+		"tool", hookInput.ToolName,
+		"input", string(hookInput.ToolInput),
+	)
 
 	// Evaluate permission rules before contacting daemon
 	evaluator := rules.NewEvaluator()
@@ -108,9 +134,9 @@ func runHook(cmd *cobra.Command, args []string) error {
 	} else if matched {
 		switch action {
 		case rules.ActionAllow:
-			return outputHookResponse("allow", "", false)
+			return outputHookResponse(hookName, "allow", "", false)
 		case rules.ActionDeny:
-			return outputHookResponse("deny", "blocked by permission rule", false)
+			return outputHookResponse(hookName, "deny", "blocked by permission rule", false)
 			// ActionPass falls through to daemon
 		}
 	}
@@ -121,12 +147,18 @@ func runHook(cmd *cobra.Command, args []string) error {
 	client, err := ConnectClient()
 	if err != nil {
 		// If daemon is not running, deny by default for safety
-		return outputHookResponse("deny", "fab daemon is not running", false)
+		return outputHookResponse(hookName, "deny", "fab daemon is not running", false)
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	// Get agent ID from environment
 	agentID := os.Getenv("FAB_AGENT_ID")
+
+	slog.Info("permission request sent to daemon",
+		"agent", agentID,
+		"tool", hookInput.ToolName,
+		"input", string(hookInput.ToolInput),
+	)
 
 	// Send permission request to daemon and wait for response
 	resp, err := client.RequestPermission(&daemon.PermissionRequestPayload{
@@ -136,19 +168,33 @@ func runHook(cmd *cobra.Command, args []string) error {
 		ToolUseID: hookInput.ToolUseID,
 	})
 	if err != nil {
+		slog.Warn("permission request failed",
+			"agent", agentID,
+			"tool", hookInput.ToolName,
+			"error", err,
+		)
 		// On error, deny for safety
-		return outputHookResponse("deny", fmt.Sprintf("permission request failed: %v", err), false)
+		return outputHookResponse(hookName, "deny", fmt.Sprintf("permission request failed: %v", err), false)
 	}
 
+	slog.Info("permission response received",
+		"hook", hookName,
+		"agent", agentID,
+		"tool", hookInput.ToolName,
+		"behavior", resp.Behavior,
+		"message", resp.Message,
+		"interrupt", resp.Interrupt,
+	)
+
 	// Output the response
-	return outputHookResponse(resp.Behavior, resp.Message, resp.Interrupt)
+	return outputHookResponse(hookName, resp.Behavior, resp.Message, resp.Interrupt)
 }
 
 // outputHookResponse writes the hook response to stdout in Claude Code format.
-func outputHookResponse(behavior, message string, interrupt bool) error {
+func outputHookResponse(hookName, behavior, message string, interrupt bool) error {
 	output := HookOutput{
 		HookSpecificOutput: HookSpecificOutput{
-			HookEventName: "PreToolUse",
+			HookEventName: hookName,
 			Decision: HookDecision{
 				Behavior:  behavior,
 				Message:   message,
