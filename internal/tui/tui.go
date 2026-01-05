@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tessro/fab/internal/daemon"
@@ -96,6 +97,9 @@ type Model struct {
 
 	// Spinner animation frame counter
 	spinnerFrame int
+
+	// Key bindings
+	keys KeyBindings
 }
 
 // New creates a new TUI model.
@@ -107,6 +111,7 @@ func New() Model {
 		inputLine: NewInputLine(),
 		helpBar:   NewHelpBar(),
 		focus:     FocusAgentList,
+		keys:      DefaultKeyBindings(),
 	}
 }
 
@@ -303,13 +308,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Handle input line when focused
 		if m.focus == FocusInputLine {
-			switch msg.String() {
-			case "esc":
+			switch {
+			case key.Matches(msg, m.keys.Cancel):
 				// Blur input and return to agent list
 				m.inputLine.SetFocused(false)
 				m.focus = FocusAgentList
 				m.chatView.SetInputView(m.inputLine.View(), 1)
-			case "enter":
+			case key.Matches(msg, m.keys.Submit):
 				// Submit input to agent
 				if m.client != nil && m.chatView.AgentID() != "" {
 					input := m.inputLine.Value()
@@ -326,7 +331,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				}
-			case "tab":
+			case key.Matches(msg, m.keys.Tab):
 				// Cycle to agent list
 				m.inputLine.SetFocused(false)
 				m.focus = FocusAgentList
@@ -340,15 +345,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
-		switch msg.String() {
-		case "q", "ctrl+c":
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			// Close client to unblock any pending RecvEvent() calls
 			if m.client != nil {
 				m.client.Close()
 			}
 			return m, tea.Quit
 
-		case "tab":
+		case key.Matches(msg, m.keys.Tab):
 			// Cycle focus: agent list -> chat view -> input line -> agent list
 			switch m.focus {
 			case FocusAgentList:
@@ -365,7 +370,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
-		case "i":
+		case key.Matches(msg, m.keys.FocusChat):
 			// Focus input line (vim-style)
 			if m.chatView.AgentID() != "" {
 				m.chatView.SetFocused(false)
@@ -374,43 +379,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
-		case "y":
+		case key.Matches(msg, m.keys.Approve):
 			// Approve pending permission or action for selected agent
-			if m.focus != FocusInputLine {
-				agentID := m.chatView.AgentID()
-				// Permissions take priority over actions
-				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
-					slog.Debug("approving permission",
-						"permission_id", perm.ID,
-						"tool", perm.ToolName,
-					)
-					cmds = append(cmds, m.allowPermission(perm.ID))
-				} else if action := m.pendingActionForAgent(agentID); action != nil {
-					slog.Debug("approving action",
-						"action_id", action.ID,
-						"action_agent", action.AgentID,
-					)
-					cmds = append(cmds, m.approveAction(action.ID))
-				}
+			agentID := m.chatView.AgentID()
+			// Permissions take priority over actions
+			if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+				slog.Debug("approving permission",
+					"permission_id", perm.ID,
+					"tool", perm.ToolName,
+				)
+				cmds = append(cmds, m.allowPermission(perm.ID))
+			} else if action := m.pendingActionForAgent(agentID); action != nil {
+				slog.Debug("approving action",
+					"action_id", action.ID,
+					"action_agent", action.AgentID,
+				)
+				cmds = append(cmds, m.approveAction(action.ID))
 			}
 
-		case "n":
+		case key.Matches(msg, m.keys.Reject):
 			// Reject pending permission or action for selected agent
-			if m.focus != FocusInputLine {
-				agentID := m.chatView.AgentID()
-				// Permissions take priority over actions
-				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
-					slog.Debug("denying permission",
-						"permission_id", perm.ID,
-						"tool", perm.ToolName,
-					)
-					cmds = append(cmds, m.denyPermission(perm.ID))
-				} else if action := m.pendingActionForAgent(agentID); action != nil {
-					cmds = append(cmds, m.rejectAction(action.ID))
-				}
+			agentID := m.chatView.AgentID()
+			// Permissions take priority over actions
+			if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+				slog.Debug("denying permission",
+					"permission_id", perm.ID,
+					"tool", perm.ToolName,
+				)
+				cmds = append(cmds, m.denyPermission(perm.ID))
+			} else if action := m.pendingActionForAgent(agentID); action != nil {
+				cmds = append(cmds, m.rejectAction(action.ID))
 			}
 
-		case "enter":
+		case key.Matches(msg, m.keys.Select):
 			// Select current agent for chat view
 			if m.focus == FocusAgentList {
 				if agent := m.agentList.Selected(); agent != nil {
@@ -423,7 +424,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "j", "down":
+		case key.Matches(msg, m.keys.Down):
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveDown()
@@ -431,7 +432,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.ScrollDown(1)
 			}
 
-		case "k", "up":
+		case key.Matches(msg, m.keys.Up):
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveUp()
@@ -439,7 +440,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.ScrollUp(1)
 			}
 
-		case "g", "home":
+		case key.Matches(msg, m.keys.Top):
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToTop()
@@ -447,7 +448,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.ScrollToTop()
 			}
 
-		case "G", "end":
+		case key.Matches(msg, m.keys.Bottom):
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToBottom()
@@ -455,12 +456,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.ScrollToBottom()
 			}
 
-		case "ctrl+u", "pgup":
+		case key.Matches(msg, m.keys.PageUp):
 			if m.focus == FocusChatView {
 				m.chatView.PageUp()
 			}
 
-		case "ctrl+d", "pgdown":
+		case key.Matches(msg, m.keys.PageDown):
 			if m.focus == FocusChatView {
 				m.chatView.PageDown()
 			}
