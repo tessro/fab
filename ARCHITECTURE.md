@@ -107,20 +107,22 @@ type Worktree struct {
 
 ## Supervisor Logic
 
-1. **Kickstart**: When an agent is idle, send prompt:
+**Agent-driven task picking**: Agents autonomously select their own tasks using `bd ready`. This design keeps the supervisor simple and leverages beads' dependency tracking - agents see only unblocked tasks and pick based on priority. No central scheduler is needed.
+
+1. **Kickstart**: When an agent is spawned or becomes idle, send prompt:
    ```
    Run `bd ready` to find a task, then work on it.
-   When done, close it with `bd close <id>`.
+   When done, close it with `bd close <id>`, then run `fab agent done`.
    ```
 
-2. **Done detection** (hybrid approach):
-   - Pattern match: `bd close <id>` in PTY output
-   - Idle timeout: no output for 30s after prompt returns
-   - Beads hook: optional hook that signals completion
+2. **Done detection**:
+   - Primary: `fab agent done` IPC message from agent
+   - Fallback: idle timeout (no output for configured duration)
 
 3. **On done**:
-   - Send `/clear` to reset context
-   - Return to kickstart loop
+   - Merge agent's branch to main (local merge workflow)
+   - Return worktree to pool
+   - Spawn replacement agent if orchestration is active
 
 4. **User intervention**: User can type in any agent's PTY at any time; supervisor pauses kickstart for that agent until user is done (detected via PTY input silence).
 
@@ -164,7 +166,6 @@ fab/
 │   │   └── ringbuffer.go        # Output buffer
 │   ├── supervisor/
 │   │   ├── supervisor.go        # Main orchestration loop
-│   │   ├── scheduler.go         # Task scheduling
 │   │   └── done.go              # Completion detection
 │   ├── usage/
 │   │   └── usage.go             # JSONL parsing for usage stats
@@ -224,9 +225,9 @@ require (
 5. CLI: `fab attach`
 
 ### Phase 5: Orchestration
-1. Done detection (pattern matching, idle timeout)
-2. Kickstart logic (`/clear` + prompt)
-3. Scheduler integration with `bd ready`
+1. Done detection (IPC message, idle timeout fallback)
+2. Kickstart logic (agent-driven task picking via `bd ready`)
+3. Local merge workflow on task completion
 4. CLI: `fab start <project>/stop <project>`
 
 ### Phase 6: Usage & Polish
