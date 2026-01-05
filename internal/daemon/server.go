@@ -147,7 +147,7 @@ func (s *Server) Start() error {
 
 	// Set socket permissions (owner only)
 	if err := os.Chmod(s.socketPath, 0600); err != nil {
-		_ = listener.Close()
+		listener.Close()
 		return fmt.Errorf("set socket permissions: %w", err)
 	}
 
@@ -194,7 +194,7 @@ func (s *Server) acceptLoop() {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer logging.LogPanic("daemon-connection-handler", nil)
 	defer func() {
-		_ = conn.Close()
+		conn.Close()
 		s.mu.Lock()
 		delete(s.conns, conn)
 		delete(s.attached, conn)
@@ -287,13 +287,13 @@ func (s *Server) Stop() error {
 
 	// Close listener to unblock Accept
 	if s.listener != nil {
-		_ = s.listener.Close()
+		s.listener.Close()
 	}
 
 	// Close all active connections
 	s.mu.Lock()
 	for conn := range s.conns {
-		_ = conn.Close()
+		conn.Close()
 	}
 	s.conns = make(map[net.Conn]struct{})
 	s.attached = make(map[net.Conn]*attachedClient)

@@ -115,7 +115,7 @@ func (r *Registry) save() error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	encoder := toml.NewEncoder(f)
 	return encoder.Encode(config)

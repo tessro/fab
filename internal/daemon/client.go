@@ -651,7 +651,7 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 
 	// Close any existing event stream
 	if c.eventConn != nil {
-		_ = c.eventConn.Close()
+		c.eventConn.Close()
 		if c.eventDone != nil {
 			close(c.eventDone)
 		}
@@ -673,18 +673,18 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 		Payload: AttachRequest{Projects: projects},
 	}
 	if err := encoder.Encode(req); err != nil {
-		_ = conn.Close()
+		conn.Close()
 		return nil, fmt.Errorf("encode attach request: %w", err)
 	}
 
 	// Wait for attach response
 	var resp Response
 	if err := decoder.Decode(&resp); err != nil {
-		_ = conn.Close()
+		conn.Close()
 		return nil, fmt.Errorf("decode attach response: %w", err)
 	}
 	if !resp.Success {
-		_ = conn.Close()
+		conn.Close()
 		return nil, fmt.Errorf("attach failed: %s", resp.Error)
 	}
 
@@ -699,7 +699,7 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 	// Start reader goroutine
 	go func() {
 		defer close(events)
-		defer func() { _ = conn.Close() }()
+		defer conn.Close()
 
 		for {
 			select {
@@ -739,7 +739,7 @@ func (c *Client) StopEventStream() {
 		c.eventDone = nil
 	}
 	if c.eventConn != nil {
-		_ = c.eventConn.Close()
+		c.eventConn.Close()
 		c.eventConn = nil
 	}
 }

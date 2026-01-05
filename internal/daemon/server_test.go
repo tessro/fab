@@ -34,7 +34,7 @@ func TestServer_StartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	_ = conn.Close()
+	conn.Close()
 
 	if err := srv.Stop(); err != nil {
 		t.Fatalf("Stop() error = %v", err)
@@ -77,7 +77,7 @@ func TestServer_RequestResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.Close()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -149,7 +149,7 @@ func TestServer_ContextContainsConnAndServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.Close()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -197,7 +197,7 @@ func TestServer_AttachBroadcast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.Close()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -266,7 +266,7 @@ func TestServer_AttachWithProjectFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer conn.Close()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)

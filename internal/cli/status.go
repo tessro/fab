@@ -31,7 +31,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	status, err := client.Status()
 	if err != nil {

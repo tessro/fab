@@ -64,7 +64,7 @@ func TestConnectClient(t *testing.T) {
 		if err != nil {
 			t.Fatalf("connect: %v", err)
 		}
-		defer func() { _ = client.Close() }()
+		defer client.Close()
 
 		if !client.IsConnected() {
 			t.Error("client should be connected")

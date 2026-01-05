@@ -87,7 +87,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	result, err := client.ProjectAdd(absPath, projectAddName, projectAddMaxAgents)
 	if err != nil {
@@ -103,7 +103,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 
 func runProjectList(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	result, err := client.ProjectList()
 	if err != nil {
@@ -136,7 +136,7 @@ func runProjectStart(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	var project string
 	if len(args) > 0 {
@@ -161,7 +161,7 @@ func runProjectStop(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	var project string
 	if len(args) > 0 {
@@ -184,7 +184,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
 
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	// Check if project exists and get info
 	result, err := client.ProjectList()

@@ -21,7 +21,7 @@ var tuiCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer func() { _ = client.Close() }()
+		defer client.Close()
 		return tui.RunWithClient(client)
 	},
 }

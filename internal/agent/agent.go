@@ -404,14 +404,14 @@ func (a *Agent) Start(initialPrompt string) error {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		_ = stdin.Close()
+		stdin.Close()
 		return err
 	}
 
 	// Start the process
 	if err := cmd.Start(); err != nil {
-		_ = stdin.Close()
-		_ = stdout.Close()
+		stdin.Close()
+		stdout.Close()
 		return err
 	}
 
@@ -443,11 +443,11 @@ func (a *Agent) Stop() error {
 
 	// Close pipes (this signals the process)
 	if a.stdin != nil {
-		_ = a.stdin.Close()
+		a.stdin.Close()
 		a.stdin = nil
 	}
 	if a.stdout != nil {
-		_ = a.stdout.Close()
+		a.stdout.Close()
 		a.stdout = nil
 	}
 

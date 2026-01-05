@@ -84,6 +84,6 @@ func IsDaemonRunning() bool {
 	if err := client.Connect(); err != nil {
 		return false
 	}
-	_ = client.Close()
+	client.Close()
 	return true
 }

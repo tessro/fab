@@ -26,7 +26,7 @@ var agentListCmd = &cobra.Command{
 
 func runAgentList(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	resp, err := client.AgentList(agentListProject)
 	if err != nil {
@@ -90,7 +90,7 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 
 	if err := client.AgentDone(agentID, doneTaskID, doneErrorMsg); err != nil {
 		return fmt.Errorf("agent done: %w", err)

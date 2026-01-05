@@ -70,7 +70,7 @@ func ParseFile(path string) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	var usage Usage
 	scanner := bufio.NewScanner(f)
@@ -308,7 +308,7 @@ func parseFileInWindow(path string, window BillingWindow) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	var usage Usage
 	scanner := bufio.NewScanner(f)

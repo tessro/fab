@@ -36,7 +36,7 @@ var serverStopCmd = &cobra.Command{
 	Long:  "Stop the running fab daemon server. This will terminate all agents.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := MustConnect()
-		defer func() { _ = client.Close() }()
+		defer client.Close()
 
 		if err := client.Shutdown(); err != nil {
 			return fmt.Errorf("shutdown daemon: %w", err)
