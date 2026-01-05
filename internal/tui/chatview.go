@@ -179,9 +179,33 @@ func (v *ChatView) AppendEntry(entry daemon.ChatEntryDTO) {
 	}
 }
 
-// SetEntries replaces all entries in the view.
+// SetEntries merges historical entries with any streaming entries that may have
+// arrived while the history was being fetched. This prevents a race condition
+// where switching agents triggers a history fetch, but streaming events arrive
+// before the history response - without merging, those streaming events would
+// be lost when SetEntries replaces v.entries.
 func (v *ChatView) SetEntries(entries []daemon.ChatEntryDTO) {
-	v.entries = entries
+	if len(entries) == 0 {
+		// No history to load; keep any streaming entries that arrived
+		v.updateContent()
+		v.viewport.GotoBottom()
+		return
+	}
+
+	// Find the timestamp of the most recent history entry
+	lastHistoryTS := entries[len(entries)-1].Timestamp
+
+	// Keep any existing entries that are newer than the history
+	// (these are streaming entries that arrived during the fetch)
+	var streamingEntries []daemon.ChatEntryDTO
+	for _, entry := range v.entries {
+		if entry.Timestamp > lastHistoryTS {
+			streamingEntries = append(streamingEntries, entry)
+		}
+	}
+
+	// Merge: history entries + any streaming entries that arrived after
+	v.entries = append(entries, streamingEntries...)
 	v.updateContent()
 	v.viewport.GotoBottom()
 }
