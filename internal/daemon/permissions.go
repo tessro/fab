@@ -190,15 +190,8 @@ func (m *PermissionManager) Cleanup() int {
 
 	for id, pending := range m.pending {
 		if now.Sub(pending.request.RequestedAt) > m.timeout {
-			// Send timeout response
-			select {
-			case pending.response <- &PermissionResponse{
-				ID:       id,
-				Behavior: "deny",
-				Message:  "permission request timed out",
-			}:
-			default:
-			}
+			// Close channel without sending a response - this causes the agent to fail
+			// rather than receiving a rejection that it might try to work around
 			close(pending.response)
 			delete(m.pending, id)
 			removed++
