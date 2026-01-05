@@ -273,13 +273,38 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 }
 
 // ApproveAction approves and executes a staged action.
+// The action is only removed from the queue on successful execution,
+// allowing retries if execution fails due to transient errors.
+// If the agent is in a terminal state (done/error), the action is removed
+// and an appropriate error is returned.
 func (o *Orchestrator) ApproveAction(actionID string) error {
-	action, ok := o.actions.Remove(actionID)
+	action, ok := o.actions.Get(actionID)
 	if !ok {
 		return ErrActionNotFound
 	}
 
-	return o.executeAction(action)
+	// Check if agent can accept input before attempting execution
+	a, err := o.agents.Get(action.AgentID)
+	if err != nil {
+		// Agent no longer exists - remove stale action
+		o.actions.Remove(actionID)
+		return fmt.Errorf("agent %s not found: %w", action.AgentID, err)
+	}
+
+	if a.IsTerminal() {
+		// Agent is done or errored - remove stale action
+		o.actions.Remove(actionID)
+		return fmt.Errorf("agent %s is in %s state", action.AgentID, a.GetState())
+	}
+
+	// Execute the action
+	if err := o.executeAction(action); err != nil {
+		return fmt.Errorf("failed to execute action: %w", err)
+	}
+
+	// Success - remove from queue
+	o.actions.Remove(actionID)
+	return nil
 }
 
 // RejectAction rejects and removes a staged action.
