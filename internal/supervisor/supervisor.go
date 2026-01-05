@@ -679,9 +679,10 @@ func (s *Supervisor) handleAgentEvent(event agent.Event) {
 	case agent.EventCreated:
 		info := event.Agent.Info()
 		streamEvent = &daemon.StreamEvent{
-			Type:    "created",
-			AgentID: info.ID,
-			Project: info.Project,
+			Type:      "created",
+			AgentID:   info.ID,
+			Project:   info.Project,
+			StartedAt: info.StartedAt.Format(time.RFC3339),
 		}
 	case agent.EventStateChanged:
 		info := event.Agent.Info()

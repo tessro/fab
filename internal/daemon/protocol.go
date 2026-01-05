@@ -249,6 +249,7 @@ type StreamEvent struct {
 	Project           string             `json:"project"`
 	Data              string             `json:"data,omitempty"`               // For output events
 	State             string             `json:"state,omitempty"`              // For state events
+	StartedAt         string             `json:"started_at,omitempty"`         // For created events (RFC3339)
 	ChatEntry         *ChatEntryDTO      `json:"chat_entry,omitempty"`         // For "chat_entry" events
 	PermissionRequest *PermissionRequest `json:"permission_request,omitempty"` // For "permission_request" events
 }

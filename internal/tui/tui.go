@@ -612,13 +612,19 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
 
 	case "created":
-		// A new agent was created - refresh the list
-		// For now, just add a placeholder; a full refresh would be better
+		// A new agent was created - add to list with proper StartedAt
 		agents := m.agentList.Agents()
+		startedAt := time.Now() // fallback
+		if event.StartedAt != "" {
+			if t, err := time.Parse(time.RFC3339, event.StartedAt); err == nil {
+				startedAt = t
+			}
+		}
 		agents = append(agents, daemon.AgentStatus{
-			ID:      event.AgentID,
-			Project: event.Project,
-			State:   "starting",
+			ID:        event.AgentID,
+			Project:   event.Project,
+			State:     "starting",
+			StartedAt: startedAt,
 		})
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
