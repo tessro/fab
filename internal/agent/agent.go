@@ -372,16 +372,8 @@ func (a *Agent) Start(initialPrompt string) error {
 		},
 	}
 
-	// Add permission rules to allow Read/Edit/Write within worktree scope
-	if workDir != "" {
-		settings["permissions"] = map[string]any{
-			"allow": []string{
-				fmt.Sprintf("Read(//%s/**)", workDir),
-				fmt.Sprintf("Edit(//%s/**)", workDir),
-				fmt.Sprintf("Write(//%s/**)", workDir),
-			},
-		}
-	}
+	// NOTE: Permission rules are handled via the PreToolUse hook and
+	// ~/.config/fab/permissions.toml rather than inline Claude Code permissions.
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
@@ -754,7 +746,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		slog.Debug("readloop: raw line", "line", string(line))
 		msg, err := ParseStreamMessage(line)
 		if err != nil {
-			slog.Debug("readloop: parse error", "error", err)
+			slog.Warn("readloop: parse error", "agent", a.ID, "error", err, "line", string(line))
 			if cfg.OnError != nil {
 				cfg.OnError(err)
 			}
@@ -765,6 +757,47 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			continue
 		}
 
+		// Log system messages (init, hook_response) that don't produce chat entries
+		if msg.Type == "system" {
+			slog.Info("readloop: system message",
+				"agent", a.ID,
+				"subtype", msg.Subtype,
+			)
+		}
+
+		// Log result messages including error status
+		if msg.Type == "result" {
+			logLevel := slog.LevelInfo
+			if msg.IsError {
+				logLevel = slog.LevelWarn
+			}
+			slog.Log(nil, logLevel, "readloop: result message",
+				"agent", a.ID,
+				"is_error", msg.IsError,
+				"result", truncateForLog(msg.Result, 200),
+			)
+		}
+
+		// Log token usage when present
+		if msg.Message != nil && msg.Message.Usage != nil {
+			u := msg.Message.Usage
+			slog.Info("readloop: token usage",
+				"agent", a.ID,
+				"input_tokens", u.InputTokens,
+				"output_tokens", u.OutputTokens,
+				"cache_creation", u.CacheCreationInputTokens,
+				"cache_read", u.CacheReadInputTokens,
+			)
+		}
+
+		// Log stop reason when present
+		if msg.Message != nil && msg.Message.StopReason != "" {
+			slog.Info("readloop: stop reason",
+				"agent", a.ID,
+				"stop_reason", msg.Message.StopReason,
+			)
+		}
+
 		// Convert to chat entries and add to history
 		entries := msg.ToChatEntries()
 		contentBlocks := 0
@@ -772,6 +805,19 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		if msg.Message != nil {
 			contentBlocks = len(msg.Message.Content)
 			role = msg.Message.Role
+
+			// Log any unknown content block types
+			for _, block := range msg.Message.Content {
+				switch block.Type {
+				case "text", "tool_use", "tool_result", "thinking":
+					// Known types - no warning needed
+				default:
+					slog.Warn("readloop: unknown content block type",
+						"agent", a.ID,
+						"type", block.Type,
+					)
+				}
+			}
 		}
 		slog.Debug("readloop: parsed message",
 			"agent", a.ID,
@@ -852,4 +898,12 @@ func (a *Agent) IsReadLoopRunning() bool {
 	default:
 		return true
 	}
+}
+
+// truncateForLog truncates a string for logging, adding "..." if truncated.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
