@@ -12,11 +12,15 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
 )
+
+// StopTimeout is the duration to wait for graceful shutdown before force killing.
+const StopTimeout = 5 * time.Second
 
 // State represents the current state of an agent.
 type State string
@@ -440,8 +444,15 @@ func (a *Agent) Start(initialPrompt string) error {
 	return nil
 }
 
-// Stop terminates the Claude Code process and closes the pipes.
+// Stop terminates the Claude Code process gracefully with a timeout.
+// It first sends SIGTERM and waits for StopTimeout, then sends SIGKILL if needed.
 func (a *Agent) Stop() error {
+	return a.StopWithTimeout(StopTimeout)
+}
+
+// StopWithTimeout terminates the Claude Code process with a custom timeout.
+// It first sends SIGTERM and waits for the timeout, then sends SIGKILL if needed.
+func (a *Agent) StopWithTimeout(timeout time.Duration) error {
 	a.mu.Lock()
 
 	if a.cmd == nil {
@@ -468,14 +479,36 @@ func (a *Agent) Stop() error {
 	a.UpdatedAt = time.Now()
 	a.mu.Unlock()
 
-	// Kill process - don't wait, cleanup happens asynchronously
-	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Kill()
-		// Reap the zombie in background to avoid resource leak
-		go func() { _ = cmd.Wait() }()
+	if cmd == nil || cmd.Process == nil {
+		return nil
 	}
 
-	return nil
+	// Try graceful termination with SIGTERM first
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		// Process may have already exited, try to reap it
+		_ = cmd.Wait()
+		return nil
+	}
+
+	// Wait for process to exit with timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case <-done:
+		// Process exited gracefully
+		return nil
+	case <-time.After(timeout):
+		// Timeout - force kill
+		slog.Debug("process did not exit gracefully, sending SIGKILL",
+			"agent_id", a.ID,
+			"timeout", timeout)
+		_ = cmd.Process.Kill()
+		<-done // Wait for the goroutine to complete
+		return nil
+	}
 }
 
 // SendMessage sends a user message to Claude Code via stdin as JSON.
