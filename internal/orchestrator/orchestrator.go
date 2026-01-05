@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 	return Config{
 		DefaultAgentMode: agent.DefaultMode,
 		KickstartPrompt: `Run 'tk ready' to find a task, then work on it.
-When done, run all quality gates and push your work.
+When done, run all quality gates and commit your work.
 Close the task with 'tk close <id>', then run 'fab agent done'.`,
 	}
 }

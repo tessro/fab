@@ -73,7 +73,7 @@ fab creates a pool of git worktrees for each project. When orchestration starts,
 
 1. Runs `tk ready` to find an available task
 2. Works on the task in its isolated worktree
-3. Commits and pushes changes
+3. Commits changes
 4. Closes the task with `tk close`
 5. Signals completion with `fab agent done`
 
