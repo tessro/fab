@@ -1,8 +1,15 @@
 package tui
 
+import (
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+)
+
 // HelpBar displays context-sensitive keyboard shortcuts at the bottom of the TUI.
 type HelpBar struct {
 	width int
+	keys  KeyBindings
 
 	// Current context
 	focus             Focus
@@ -12,7 +19,9 @@ type HelpBar struct {
 
 // NewHelpBar creates a new help bar component.
 func NewHelpBar() HelpBar {
-	return HelpBar{}
+	return HelpBar{
+		keys: DefaultKeyBindings(),
+	}
 }
 
 // SetWidth updates the help bar width.
@@ -29,28 +38,35 @@ func (h *HelpBar) SetContext(focus Focus, pendingPermission, pendingAction bool)
 
 // View renders the help bar with context-sensitive keyboard shortcuts.
 func (h HelpBar) View() string {
-	var helpText string
+	var bindings []key.Binding
 
 	switch h.focus {
 	case FocusAgentList:
-		if h.pendingPermission {
-			helpText = "y: allow  n: deny  j/k: navigate  enter: view  q: quit"
-		} else if h.pendingAction {
-			helpText = "y: approve  n: reject  j/k: navigate  enter: view  q: quit"
+		if h.pendingPermission || h.pendingAction {
+			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Select, h.keys.Quit}
 		} else {
-			helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
+			bindings = []key.Binding{h.keys.Down, h.keys.Select, h.keys.FocusChat, h.keys.Tab, h.keys.Quit}
 		}
 	case FocusChatView:
-		if h.pendingPermission {
-			helpText = "y: allow  n: deny  j/k: scroll  tab: switch pane  q: quit"
-		} else if h.pendingAction {
-			helpText = "y: approve  n: reject  j/k: scroll  tab: switch pane  q: quit"
+		if h.pendingPermission || h.pendingAction {
+			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Tab, h.keys.Quit}
 		} else {
-			helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
+			bindings = []key.Binding{h.keys.Down, h.keys.PageUp, h.keys.FocusChat, h.keys.Tab, h.keys.Quit}
 		}
 	case FocusInputLine:
-		helpText = "enter: send  esc: cancel  tab: switch pane"
+		bindings = []key.Binding{h.keys.Submit, h.keys.Cancel, h.keys.Tab}
 	}
 
+	helpText := formatHelp(bindings)
 	return statusStyle.Width(h.width).Render(helpText)
+}
+
+// formatHelp formats a list of key bindings as help text.
+func formatHelp(bindings []key.Binding) string {
+	var parts []string
+	for _, b := range bindings {
+		help := b.Help()
+		parts = append(parts, help.Key+": "+help.Desc)
+	}
+	return strings.Join(parts, "  ")
 }
