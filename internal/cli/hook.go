@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/rules"
 )
 
@@ -89,20 +90,29 @@ Example Claude settings.json:
 }
 
 func runHook(cmd *cobra.Command, args []string) error {
+	// Setup file logging so logs are visible (stdout is for Claude Code JSON response)
+	cleanup, err := logging.Setup("")
+	if err == nil {
+		defer cleanup()
+	}
+
 	hookName := args[0]
 
-	slog.Debug("hook invoked", "hook", hookName)
+	// Read stdin first so we can log everything together
+	input, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("read stdin: %w", err)
+	}
+
+	slog.Debug("hook invoked",
+		"hook", hookName,
+		"stdin", string(input),
+	)
 
 	// Validate hook name
 	if hookName != "PreToolUse" && hookName != "PermissionRequest" {
 		// Pass through for unsupported hook types
 		return outputHookResponse(hookName, "allow", "", false)
-	}
-
-	// Read hook input from stdin
-	input, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return fmt.Errorf("read stdin: %w", err)
 	}
 
 	// Parse the hook input
