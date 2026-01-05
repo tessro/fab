@@ -44,7 +44,7 @@ go install github.com/tessro/fab/cmd/fab@latest
 3. **Start orchestration**
 
    ```bash
-   fab start myproject
+   fab project start myproject
    ```
 
 4. **Watch agents work**
@@ -59,8 +59,8 @@ go install github.com/tessro/fab/cmd/fab@latest
 |---------|-------------|
 | `fab server start` | Start the daemon process |
 | `fab server stop` | Stop the daemon |
-| `fab start <project>` | Start orchestration for a project |
-| `fab stop <project>` | Stop orchestration for a project |
+| `fab project start <name>` | Start orchestration for a project |
+| `fab project stop <name>` | Stop orchestration for a project |
 | `fab status` | Show daemon and project status |
 | `fab tui` | Launch interactive TUI |
 | `fab project add <path>` | Register a project |
