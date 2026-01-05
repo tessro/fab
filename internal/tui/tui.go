@@ -60,6 +60,9 @@ type PermissionResultMsg struct {
 	Err error
 }
 
+// tickMsg is sent on regular intervals to drive spinner animation.
+type tickMsg time.Time
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -89,6 +92,9 @@ type Model struct {
 
 	// Pending permission requests (for selected agent)
 	pendingPermissions []daemon.PermissionRequest
+
+	// Spinner animation frame counter
+	spinnerFrame int
 }
 
 // New creates a new TUI model.
@@ -111,13 +117,23 @@ func NewWithClient(client *daemon.Client) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.inputLine.input.Cursor.BlinkCmd()}
+	cmds := []tea.Cmd{
+		m.inputLine.input.Cursor.BlinkCmd(),
+		m.tickCmd(), // Start spinner animation
+	}
 	if m.client != nil {
 		// Fetch agent list first, then attach to stream
 		// (must be sequential to avoid concurrent decoder access)
 		cmds = append(cmds, m.fetchAgentList())
 	}
 	return tea.Batch(cmds...)
+}
+
+// tickCmd returns a command that sends a tick message after a delay.
+func (m Model) tickCmd() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // StreamStartMsg is sent when the event stream is started successfully.
@@ -519,6 +535,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Clear the chat view's pending permission
 		m.chatView.SetPendingPermission(nil)
+
+	case tickMsg:
+		// Advance spinner frame and schedule next tick
+		m.spinnerFrame++
+		m.agentList.SetSpinnerFrame(m.spinnerFrame)
+		cmds = append(cmds, m.tickCmd())
 	}
 
 	return m, tea.Batch(cmds...)

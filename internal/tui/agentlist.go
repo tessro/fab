@@ -9,12 +9,16 @@ import (
 	"github.com/tessro/fab/internal/daemon"
 )
 
+// Spinner frames for animated state indicators
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 // AgentList displays a navigable list of agents with status indicators.
 type AgentList struct {
-	width    int
-	height   int
-	agents   []daemon.AgentStatus
-	selected int
+	width        int
+	height       int
+	agents       []daemon.AgentStatus
+	selected     int
+	spinnerFrame int
 }
 
 // NewAgentList creates a new agent list component.
@@ -84,6 +88,11 @@ func (l *AgentList) MoveToBottom() {
 	if len(l.agents) > 0 {
 		l.selected = len(l.agents) - 1
 	}
+}
+
+// SetSpinnerFrame updates the current spinner animation frame.
+func (l *AgentList) SetSpinnerFrame(frame int) {
+	l.spinnerFrame = frame
 }
 
 // View renders the agent list.
@@ -158,10 +167,9 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 // stateIcon returns an icon for the agent state.
 func (l AgentList) stateIcon(state string) string {
 	switch state {
-	case "starting":
-		return "◐"
-	case "running":
-		return "●"
+	case "starting", "running":
+		// Animated spinner for active states
+		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "idle":
 		return "○"
 	case "done":
