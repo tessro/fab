@@ -142,6 +142,12 @@ func (p *Project) ensureWorktreeExists(wtPath string) error {
 // resetWorktree resets a worktree to origin/main with a clean working directory.
 // Must be called with lock held.
 func (p *Project) resetWorktree(wtPath string) error {
+	return p.resetWorktreeUnlocked(wtPath)
+}
+
+// resetWorktreeUnlocked resets a worktree to origin/main with a clean working directory.
+// This is safe to call without holding the lock since it only operates on the filesystem.
+func (p *Project) resetWorktreeUnlocked(wtPath string) error {
 	// Verify the repo is a valid git repository
 	repoDir := p.RepoDir()
 	gitDir := filepath.Join(repoDir, ".git")

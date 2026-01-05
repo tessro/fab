@@ -167,6 +167,77 @@ func TestReleaseWorktreeByAgent_NotFound(t *testing.T) {
 	}
 }
 
+func TestReturnWorktreeToPool(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
+		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
+	}
+
+	err := p.ReturnWorktreeToPool("agent1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Agent1's worktree should be released
+	if p.Worktrees[0].InUse {
+		t.Error("Worktree 0 InUse = true, want false")
+	}
+	if p.Worktrees[0].AgentID != "" {
+		t.Errorf("Worktree 0 AgentID = %q, want empty", p.Worktrees[0].AgentID)
+	}
+	// Agent2's worktree should be unaffected
+	if !p.Worktrees[1].InUse {
+		t.Error("Worktree 1 should still be in use")
+	}
+}
+
+func TestReturnWorktreeToPool_NotFound(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
+	}
+
+	err := p.ReturnWorktreeToPool("nonexistent")
+	if err != ErrWorktreeNotFound {
+		t.Errorf("err = %v, want ErrWorktreeNotFound", err)
+	}
+}
+
+func TestReturnWorktreeToPool_Reuse(t *testing.T) {
+	// Test the acquire-return-reacquire cycle
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt1", InUse: false, AgentID: ""},
+	}
+
+	// Acquire worktree
+	wt1, err := p.GetAvailableWorktree("agent1")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if wt1.Path != "/tmp/wt1" {
+		t.Errorf("wt1.Path = %q, want /tmp/wt1", wt1.Path)
+	}
+
+	// Return to pool
+	if err := p.ReturnWorktreeToPool("agent1"); err != nil {
+		t.Fatalf("return: %v", err)
+	}
+
+	// Reacquire - should get the same worktree
+	wt2, err := p.GetAvailableWorktree("agent2")
+	if err != nil {
+		t.Fatalf("reacquire: %v", err)
+	}
+	if wt2.Path != "/tmp/wt1" {
+		t.Errorf("wt2.Path = %q, want /tmp/wt1 (recycled)", wt2.Path)
+	}
+	if wt2.AgentID != "agent2" {
+		t.Errorf("wt2.AgentID = %q, want agent2", wt2.AgentID)
+	}
+}
+
 func TestWorktreePoolCycle(t *testing.T) {
 	// Test the full acquire-release cycle
 	p := NewProject("test", "")
