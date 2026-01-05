@@ -428,6 +428,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveDown()
+				if cmd := m.syncChatToSelection(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollDown(1)
 			}
@@ -436,6 +439,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveUp()
+				if cmd := m.syncChatToSelection(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollUp(1)
 			}
@@ -444,6 +450,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToTop()
+				if cmd := m.syncChatToSelection(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollToTop()
 			}
@@ -452,6 +461,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToBottom()
+				if cmd := m.syncChatToSelection(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollToBottom()
 			}
@@ -655,6 +667,23 @@ func countRunning(agents []daemon.AgentStatus) int {
 		}
 	}
 	return count
+}
+
+// syncChatToSelection updates the chat view to match the currently selected agent.
+// It returns a command to fetch the agent's chat history, or nil if no agent is selected.
+func (m *Model) syncChatToSelection() tea.Cmd {
+	agent := m.agentList.Selected()
+	if agent == nil {
+		return nil
+	}
+	// Only update if the agent changed
+	if agent.ID == m.chatView.AgentID() {
+		return nil
+	}
+	m.chatView.SetAgent(agent.ID, agent.Project)
+	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
+	m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
+	return m.fetchAgentChatHistory(agent.ID)
 }
 
 // pendingActionForAgent returns the first pending action for the given agent.
