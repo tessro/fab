@@ -20,14 +20,15 @@ var ErrWorktreeNotFound = errors.New("worktree not found")
 // Project represents a supervised coding project.
 type Project struct {
 	Name      string // Unique identifier (e.g., "myapp")
-	Path      string // Absolute path to project root
+	RemoteURL string // Git remote URL (e.g., "git@github.com:user/repo.git")
 	MaxAgents int    // Max concurrent agents (default: 3)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
 	Worktrees []Worktree // Pool of worktrees for agents
 
-	mu sync.RWMutex // Protects Running and Worktrees
+	mu      sync.RWMutex // Protects Running and Worktrees
+	mergeMu sync.Mutex   // Serializes merge operations
 }
 
 // AddWorktree appends a worktree to the pool (for testing).
@@ -39,30 +40,42 @@ func (p *Project) AddWorktree(wt Worktree) {
 
 // Worktree represents a git worktree used by an agent.
 type Worktree struct {
-	Path    string // Absolute path (e.g., "~/.fab/worktrees/myapp/wt-001")
+	Path    string // Absolute path (e.g., "~/.fab/projects/myapp/worktrees/wt-001")
 	InUse   bool   // Whether assigned to an agent
 	AgentID string // Agent ID if in use (empty if available)
 }
 
 // NewProject creates a new Project with default settings.
-func NewProject(name, path string) *Project {
+func NewProject(name, remoteURL string) *Project {
 	return &Project{
 		Name:      name,
-		Path:      path,
+		RemoteURL: remoteURL,
 		MaxAgents: DefaultMaxAgents,
 		Running:   false,
 		Worktrees: make([]Worktree, 0, DefaultMaxAgents),
 	}
 }
 
-// WorktreesDir returns the path to the worktrees directory.
-// Returns ~/.fab/worktrees/<projectName> or falls back to <project>/.fab-worktrees on error.
-func (p *Project) WorktreesDir() string {
+// ProjectDir returns the path to the project directory.
+// Returns ~/.fab/projects/<projectName>/
+func (p *Project) ProjectDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(p.Path, ".fab-worktrees")
+		return filepath.Join("/tmp", ".fab", "projects", p.Name)
 	}
-	return filepath.Join(home, ".fab", "worktrees", p.Name)
+	return filepath.Join(home, ".fab", "projects", p.Name)
+}
+
+// RepoDir returns the path to fab's clone of the repository.
+// Returns ~/.fab/projects/<projectName>/repo/
+func (p *Project) RepoDir() string {
+	return filepath.Join(p.ProjectDir(), "repo")
+}
+
+// WorktreesDir returns the path to the worktrees directory.
+// Returns ~/.fab/projects/<projectName>/worktrees/
+func (p *Project) WorktreesDir() string {
+	return filepath.Join(p.ProjectDir(), "worktrees")
 }
 
 // GetAvailableWorktree returns an available worktree and marks it as in use.

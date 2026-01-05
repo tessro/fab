@@ -110,7 +110,7 @@ type SupervisorStatus struct {
 // ProjectStatus contains per-project status info.
 type ProjectStatus struct {
 	Name         string        `json:"name"`
-	Path         string        `json:"path"`
+	RemoteURL    string        `json:"remote_url"`
 	Running      bool          `json:"running"` // Orchestration active
 	MaxAgents    int           `json:"max_agents"`
 	ActiveAgents int           `json:"active_agents"`
@@ -129,7 +129,7 @@ type AgentStatus struct {
 
 // ProjectAddRequest is the payload for project.add requests.
 type ProjectAddRequest struct {
-	Path      string `json:"path"`
+	RemoteURL string `json:"remote_url"`           // Git remote URL
 	Name      string `json:"name,omitempty"`       // Optional override
 	MaxAgents int    `json:"max_agents,omitempty"` // Default: 3
 }
@@ -137,7 +137,8 @@ type ProjectAddRequest struct {
 // ProjectAddResponse is the payload for project.add responses.
 type ProjectAddResponse struct {
 	Name      string   `json:"name"`
-	Path      string   `json:"path"`
+	RemoteURL string   `json:"remote_url"`
+	RepoDir   string   `json:"repo_dir"` // Local clone path
 	MaxAgents int      `json:"max_agents"`
 	Worktrees []string `json:"worktrees"` // Created worktree paths
 }
@@ -156,7 +157,7 @@ type ProjectListResponse struct {
 // ProjectInfo contains basic project info for listing.
 type ProjectInfo struct {
 	Name      string `json:"name"`
-	Path      string `json:"path"`
+	RemoteURL string `json:"remote_url"`
 	MaxAgents int    `json:"max_agents"`
 	Running   bool   `json:"running"`
 }
@@ -272,6 +273,13 @@ type AgentDoneRequest struct {
 	AgentID string `json:"agent_id,omitempty"` // Agent ID (from FAB_AGENT_ID env)
 	TaskID  string `json:"task_id,omitempty"`  // Task ID that was completed
 	Error   string `json:"error,omitempty"`    // Error message if task failed
+}
+
+// AgentDoneResponse is the payload for agent.done responses.
+type AgentDoneResponse struct {
+	Merged     bool   `json:"merged"`                 // True if merge to main succeeded
+	BranchName string `json:"branch_name,omitempty"`  // The branch that was processed
+	MergeError string `json:"merge_error,omitempty"`  // Conflict message if merge failed
 }
 
 // StagedActionsRequest is the payload for orchestrator.actions requests.

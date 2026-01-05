@@ -19,16 +19,19 @@ const (
 
 // Errors returned by registry operations.
 var (
-	ErrProjectExists   = errors.New("project already exists")
-	ErrProjectNotFound = errors.New("project not found")
-	ErrInvalidPath     = errors.New("invalid project path")
+	ErrProjectExists    = errors.New("project already exists")
+	ErrProjectNotFound  = errors.New("project not found")
+	ErrInvalidRemoteURL = errors.New("invalid remote URL")
+	ErrOldConfigFormat  = errors.New("old config format detected: please re-add projects with 'fab project add <url>'")
 )
 
 // ProjectEntry represents a project in the config file.
 type ProjectEntry struct {
 	Name      string `toml:"name"`
-	Path      string `toml:"path"`
+	RemoteURL string `toml:"remote_url"`
 	MaxAgents int    `toml:"max_agents,omitempty"`
+	// Deprecated: Path is only used to detect old config format
+	Path string `toml:"path,omitempty"`
 }
 
 // Config represents the fab configuration file.
@@ -79,7 +82,12 @@ func (r *Registry) load() error {
 	}
 
 	for _, entry := range config.Projects {
-		p := project.NewProject(entry.Name, entry.Path)
+		// Detect old config format (has Path but no RemoteURL)
+		if entry.Path != "" && entry.RemoteURL == "" {
+			return ErrOldConfigFormat
+		}
+
+		p := project.NewProject(entry.Name, entry.RemoteURL)
 		if entry.MaxAgents > 0 {
 			p.MaxAgents = entry.MaxAgents
 		}
@@ -106,7 +114,7 @@ func (r *Registry) save() error {
 	for _, p := range r.projects {
 		config.Projects = append(config.Projects, ProjectEntry{
 			Name:      p.Name,
-			Path:      p.Path,
+			RemoteURL: p.RemoteURL,
 			MaxAgents: p.MaxAgents,
 		})
 	}
@@ -122,22 +130,15 @@ func (r *Registry) save() error {
 }
 
 // Add registers a new project.
-// If name is empty, it defaults to the directory name.
-func (r *Registry) Add(path, name string, maxAgents int) (*project.Project, error) {
-	// Validate path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return nil, ErrInvalidPath
+// If name is empty, it defaults to the repository name from the URL.
+func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project, error) {
+	if remoteURL == "" {
+		return nil, ErrInvalidRemoteURL
 	}
 
-	info, err := os.Stat(absPath)
-	if err != nil || !info.IsDir() {
-		return nil, ErrInvalidPath
-	}
-
-	// Default name to directory basename
+	// Default name to repo name from URL
 	if name == "" {
-		name = filepath.Base(absPath)
+		name = repoNameFromURL(remoteURL)
 	}
 
 	// Default max agents
@@ -153,7 +154,7 @@ func (r *Registry) Add(path, name string, maxAgents int) (*project.Project, erro
 		return nil, ErrProjectExists
 	}
 
-	p := project.NewProject(name, absPath)
+	p := project.NewProject(name, remoteURL)
 	p.MaxAgents = maxAgents
 	r.projects[name] = p
 
@@ -163,6 +164,20 @@ func (r *Registry) Add(path, name string, maxAgents int) (*project.Project, erro
 	}
 
 	return p, nil
+}
+
+// repoNameFromURL extracts the repository name from a git URL.
+// Examples:
+//   - git@github.com:user/repo.git -> repo
+//   - https://github.com/user/repo.git -> repo
+//   - https://github.com/user/repo -> repo
+func repoNameFromURL(url string) string {
+	base := filepath.Base(url)
+	// Remove .git suffix if present
+	if len(base) > 4 && base[len(base)-4:] == ".git" {
+		return base[:len(base)-4]
+	}
+	return base
 }
 
 // Remove unregisters a project by name.

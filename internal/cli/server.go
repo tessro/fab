@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/agent"
@@ -45,6 +47,44 @@ var serverStopCmd = &cobra.Command{
 		fmt.Println("🚌 fab daemon stopped")
 		return nil
 	},
+}
+
+var serverRestartCmd = &cobra.Command{
+	Use:   "restart",
+	Short: "Restart the fab daemon server",
+	Long:  "Stop the fab daemon server if running, then start it again.",
+	RunE:  runServerRestart,
+}
+
+func runServerRestart(cmd *cobra.Command, args []string) error {
+	pidPath := daemon.DefaultPIDPath()
+
+	// Try to stop the daemon if it's running
+	client, err := ConnectClient()
+	if err == nil {
+		defer client.Close()
+		if err := client.Shutdown(); err != nil {
+			return fmt.Errorf("shutdown daemon: %w", err)
+		}
+
+		fmt.Println("🚌 fab daemon stopped")
+
+		// Wait for daemon to fully stop (up to 5 seconds)
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if !IsDaemonRunning() {
+				break
+			}
+		}
+	} else if !errors.Is(err, ErrDaemonNotRunning) {
+		return fmt.Errorf("connect to daemon: %w", err)
+	}
+
+	// Clean up any stale PID file
+	daemon.CleanStalePID(pidPath)
+
+	// Start the daemon
+	return daemonize()
 }
 
 func runServerStart(cmd *cobra.Command, args []string) error {
@@ -162,5 +202,6 @@ func init() {
 	serverStartCmd.Flags().BoolVarP(&serverStartForeground, "foreground", "f", false, "Run in foreground (don't daemonize)")
 	serverCmd.AddCommand(serverStartCmd)
 	serverCmd.AddCommand(serverStopCmd)
+	serverCmd.AddCommand(serverRestartCmd)
 	rootCmd.AddCommand(serverCmd)
 }

@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -66,39 +68,69 @@ var projectRemoveCmd = &cobra.Command{
 }
 
 func runProjectAdd(cmd *cobra.Command, args []string) error {
-	path := args[0]
+	input := args[0]
 
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("resolve path: %w", err)
-	}
+	var remoteURL string
 
-	// Verify path exists and is a directory
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("path does not exist: %s", absPath)
+	// Check if input looks like a git URL
+	if isGitURL(input) {
+		remoteURL = input
+	} else {
+		// Treat as local path, extract remote URL
+		absPath, err := filepath.Abs(input)
+		if err != nil {
+			return fmt.Errorf("resolve path: %w", err)
 		}
-		return fmt.Errorf("stat path: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", absPath)
+
+		// Verify path exists and is a directory
+		info, err := os.Stat(absPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("path does not exist: %s", absPath)
+			}
+			return fmt.Errorf("stat path: %w", err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("path is not a directory: %s", absPath)
+		}
+
+		// Extract remote URL from local repo
+		remoteURL, err = getRemoteURL(absPath)
+		if err != nil {
+			return fmt.Errorf("get remote URL from %s: %w", absPath, err)
+		}
 	}
 
 	client := MustConnect()
 	defer client.Close()
 
-	result, err := client.ProjectAdd(absPath, projectAddName, projectAddMaxAgents)
+	result, err := client.ProjectAdd(remoteURL, projectAddName, projectAddMaxAgents)
 	if err != nil {
 		return fmt.Errorf("add project: %w", err)
 	}
 
 	fmt.Printf("🚌 Added project: %s\n", result.Name)
-	fmt.Printf("   Path: %s\n", result.Path)
+	fmt.Printf("   Remote: %s\n", result.RemoteURL)
+	fmt.Printf("   Clone:  %s\n", result.RepoDir)
 	fmt.Printf("   Max agents: %d\n", result.MaxAgents)
 
 	return nil
+}
+
+// isGitURL returns true if the string looks like a git URL.
+func isGitURL(s string) bool {
+	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@")
+}
+
+// getRemoteURL extracts the origin remote URL from a local git repository.
+func getRemoteURL(path string) (string, error) {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = path
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("no git remote: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func runProjectList(cmd *cobra.Command, args []string) error {
@@ -112,18 +144,18 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 
 	if len(result.Projects) == 0 {
 		fmt.Println("No projects registered.")
-		fmt.Println("Add a project with: fab project add <path>")
+		fmt.Println("Add a project with: fab project add <url-or-path>")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tPATH\tAGENTS\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tREMOTE\tAGENTS\tSTATUS")
 	for _, p := range result.Projects {
 		status := "stopped"
 		if p.Running {
 			status = "running"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", p.Name, p.Path, p.MaxAgents, status)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", p.Name, p.RemoteURL, p.MaxAgents, status)
 	}
 	_ = w.Flush()
 
@@ -194,14 +226,14 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 
 	var found bool
 	var project struct {
-		Running bool
-		Path    string
+		Running   bool
+		RemoteURL string
 	}
 	for _, p := range result.Projects {
 		if p.Name == projectName {
 			found = true
 			project.Running = p.Running
-			project.Path = p.Path
+			project.RemoteURL = p.RemoteURL
 			break
 		}
 	}
@@ -218,7 +250,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	// Confirm with user unless --force
 	if !projectRemoveForce {
 		fmt.Printf("Remove project %s?\n", projectName)
-		fmt.Printf("   Path: %s\n", project.Path)
+		fmt.Printf("   Remote: %s\n", project.RemoteURL)
 		if projectRemoveDeleteWorktrees {
 			fmt.Println("   Worktrees will be deleted")
 		}

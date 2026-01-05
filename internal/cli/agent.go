@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"text/tabwriter"
 	"time"
 
@@ -89,6 +90,25 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("FAB_AGENT_ID environment variable not set")
 	}
 
+	// Pre-rebase: fetch and rebase onto origin/main to catch conflicts early
+	// Agent runs in worktree, so use current directory
+	fmt.Println("🚌 Rebasing onto origin/main...")
+
+	fetchCmd := exec.Command("git", "fetch", "origin")
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("fetch origin: %w\n%s", err, output)
+	}
+
+	rebaseCmd := exec.Command("git", "rebase", "origin/main")
+	if output, err := rebaseCmd.CombinedOutput(); err != nil {
+		// Rebase failed - abort and return error
+		abortCmd := exec.Command("git", "rebase", "--abort")
+		_ = abortCmd.Run()
+		return fmt.Errorf("rebase conflict - please resolve conflicts and try again:\n%s", output)
+	}
+
+	fmt.Println("🚌 Rebase successful, merging to main...")
+
 	client := MustConnect()
 	defer client.Close()
 
@@ -99,7 +119,7 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 	if doneErrorMsg != "" {
 		fmt.Printf("🚌 Agent %s signaled error: %s\n", agentID, doneErrorMsg)
 	} else {
-		fmt.Printf("🚌 Agent %s signaled completion\n", agentID)
+		fmt.Printf("🚌 Agent %s completed and merged to main\n", agentID)
 	}
 	return nil
 }

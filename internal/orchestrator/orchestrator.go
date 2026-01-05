@@ -2,6 +2,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -221,26 +222,54 @@ func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
 	}
 }
 
+// AgentDoneResult contains the outcome of HandleAgentDone.
+type AgentDoneResult struct {
+	Merged     bool   // True if merge to main succeeded
+	BranchName string // The branch that was processed
+	MergeError string // Conflict message if merge failed
+}
+
 // HandleAgentDone handles an agent signaling task completion.
-func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) error {
-	// Push the agent's branch before cleanup (if it has commits)
-	if branchName, pushed, err := o.project.PushAgentBranch(agentID); err != nil {
-		slog.Warn("failed to push agent branch", "agent", agentID, "error", err)
-	} else if pushed {
-		slog.Info("pushed agent branch", "agent", agentID, "branch", branchName)
+// If merge succeeds, cleans up the agent and spawns a replacement.
+// If merge fails, rebases the worktree and returns error (agent stays running to fix conflicts).
+func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*AgentDoneResult, error) {
+	result := &AgentDoneResult{}
+
+	// Try to merge agent's branch into main
+	mergeResult, err := o.project.MergeAgentBranch(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("merge attempt: %w", err)
 	}
 
-	// Stop and delete the agent
-	_ = o.agents.Stop(agentID) // Continue anyway to clean up
+	result.BranchName = mergeResult.BranchName
 
-	if err := o.agents.Delete(agentID); err != nil {
-		return err
+	if mergeResult.Merged {
+		// Success! Clean up the agent
+		result.Merged = true
+		slog.Info("merged agent branch to main", "agent", agentID, "branch", mergeResult.BranchName)
+
+		_ = o.agents.Stop(agentID)
+		if err := o.agents.Delete(agentID); err != nil {
+			return result, err
+		}
+
+		// Spawn a replacement agent
+		o.spawnAgentsToCapacity()
+	} else {
+		// Merge conflict - rebase worktree onto latest main
+		result.MergeError = mergeResult.Error.Error()
+
+		if err := o.project.RebaseWorktreeOnMain(agentID); err != nil {
+			slog.Warn("failed to rebase worktree after merge conflict", "agent", agentID, "error", err)
+		}
+
+		slog.Warn("merge conflict, agent must resolve",
+			"agent", agentID,
+			"branch", mergeResult.BranchName,
+			"error", mergeResult.Error)
 	}
 
-	// Spawn a replacement agent if capacity allows
-	o.spawnAgentsToCapacity()
-
-	return nil
+	return result, nil
 }
 
 // ApproveAction approves and executes a staged action.

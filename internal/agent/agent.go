@@ -347,7 +347,7 @@ func (a *Agent) Start(initialPrompt string) error {
 	if a.Worktree != nil {
 		workDir = a.Worktree.Path
 	} else if a.Project != nil {
-		workDir = a.Project.Path
+		workDir = a.Project.RepoDir()
 	}
 
 	// Get fab binary path for hook configuration

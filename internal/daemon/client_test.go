@@ -245,9 +245,10 @@ func TestClient_ProjectOperations(t *testing.T) {
 				Success: true,
 				Payload: ProjectAddResponse{
 					Name:      "test-proj",
-					Path:      "/path/to/test",
+					RemoteURL: "git@github.com:user/test.git",
+					RepoDir:   "/path/to/test/repo",
 					MaxAgents: 3,
-					Worktrees: []string{"/path/to/test/.fab-worktrees/1"},
+					Worktrees: []string{"/path/to/test/worktrees/wt-001"},
 				},
 			}
 		case MsgProjectList:
@@ -255,8 +256,8 @@ func TestClient_ProjectOperations(t *testing.T) {
 				Success: true,
 				Payload: ProjectListResponse{
 					Projects: []ProjectInfo{
-						{Name: "proj1", Path: "/p1", MaxAgents: 3, Running: true},
-						{Name: "proj2", Path: "/p2", MaxAgents: 2, Running: false},
+						{Name: "proj1", RemoteURL: "git@github.com:user/p1.git", MaxAgents: 3, Running: true},
+						{Name: "proj2", RemoteURL: "git@github.com:user/p2.git", MaxAgents: 2, Running: false},
 					},
 				},
 			}

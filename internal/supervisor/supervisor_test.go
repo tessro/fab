@@ -177,15 +177,18 @@ func TestSupervisor_HandleProjectAdd(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Create a temp git repository to act as project
+	// Create a temp git repository to act as "remote"
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
+
+	// Use file:// protocol for local "remote"
+	remoteURL := "file://" + projDir
 
 	req := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		ID:   "test-1",
 		Payload: map[string]any{
-			"path":       projDir,
+			"remote_url": remoteURL,
 			"name":       "test-project",
 			"max_agents": 5,
 		},
@@ -217,15 +220,15 @@ func TestSupervisor_HandleProjectList(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first (using git repo)
+	// Add a project first (using git repo as "remote")
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		Payload: map[string]any{
-			"path": projDir,
-			"name": "list-test",
+			"remote_url": "file://" + projDir,
+			"name":       "list-test",
 		},
 	}
 	sup.Handle(context.Background(), addReq)
@@ -259,15 +262,15 @@ func TestSupervisor_HandleProjectRemove(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first (using git repo)
+	// Add a project first (using git repo as "remote")
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		Payload: map[string]any{
-			"path": projDir,
-			"name": "remove-test",
+			"remote_url": "file://" + projDir,
+			"name":       "remove-test",
 		},
 	}
 	sup.Handle(context.Background(), addReq)
@@ -358,15 +361,15 @@ func TestSupervisor_HandleStart(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first (using git repo)
+	// Add a project first (using git repo as "remote")
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		Payload: map[string]any{
-			"path": projDir,
-			"name": "start-test",
+			"remote_url": "file://" + projDir,
+			"name":       "start-test",
 		},
 	}
 	sup.Handle(context.Background(), addReq)
@@ -409,15 +412,15 @@ func TestSupervisor_HandleStop(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add and start a project first (using git repo)
+	// Add and start a project first (using git repo as "remote")
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		Payload: map[string]any{
-			"path": projDir,
-			"name": "stop-test",
+			"remote_url": "file://" + projDir,
+			"name":       "stop-test",
 		},
 	}
 	sup.Handle(context.Background(), addReq)
@@ -463,14 +466,14 @@ func TestSupervisor_HandleProjectSet(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()
 
-	// Add a project first (using git repo)
+	// Add a project first (using git repo as "remote")
 	projDir, projCleanup := newTestGitRepo(t)
 	defer projCleanup()
 
 	addReq := &daemon.Request{
 		Type: daemon.MsgProjectAdd,
 		Payload: map[string]any{
-			"path":       projDir,
+			"remote_url": "file://" + projDir,
 			"name":       "set-test",
 			"max_agents": 3,
 		},

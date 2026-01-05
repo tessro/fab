@@ -29,10 +29,7 @@ func TestNew(t *testing.T) {
 func TestRegistry_Add(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
@@ -40,7 +37,7 @@ func TestRegistry_Add(t *testing.T) {
 	}
 
 	// Add project
-	p, err := r.Add(projectDir, "myproject", 0)
+	p, err := r.Add(remoteURL, "myproject", 0)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -49,8 +46,8 @@ func TestRegistry_Add(t *testing.T) {
 		t.Errorf("Name = %q, want %q", p.Name, "myproject")
 	}
 
-	if p.Path != projectDir {
-		t.Errorf("Path = %q, want %q", p.Path, projectDir)
+	if p.RemoteURL != remoteURL {
+		t.Errorf("RemoteURL = %q, want %q", p.RemoteURL, remoteURL)
 	}
 
 	if p.MaxAgents != project.DefaultMaxAgents {
@@ -70,26 +67,23 @@ func TestRegistry_Add(t *testing.T) {
 func TestRegistry_AddDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir, "myproject", 0); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0); err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir, "myproject", 0); err != ErrProjectExists {
+	if _, err := r.Add(remoteURL, "myproject", 0); err != ErrProjectExists {
 		t.Errorf("second Add() error = %v, want ErrProjectExists", err)
 	}
 }
 
-func TestRegistry_AddInvalidPath(t *testing.T) {
+func TestRegistry_AddEmptyURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
 
@@ -98,25 +92,22 @@ func TestRegistry_AddInvalidPath(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add("/nonexistent/path", "test", 0); err != ErrInvalidPath {
-		t.Errorf("Add() error = %v, want ErrInvalidPath", err)
+	if _, err := r.Add("", "test", 0); err != ErrInvalidRemoteURL {
+		t.Errorf("Add() error = %v, want ErrInvalidRemoteURL", err)
 	}
 }
 
 func TestRegistry_AddDefaultName(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "awesome-project")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/awesome-project.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	p, err := r.Add(projectDir, "", 0)
+	p, err := r.Add(remoteURL, "", 0)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -129,17 +120,14 @@ func TestRegistry_AddDefaultName(t *testing.T) {
 func TestRegistry_Remove(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir, "myproject", 0); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -169,17 +157,14 @@ func TestRegistry_RemoveNotFound(t *testing.T) {
 func TestRegistry_Get(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir, "myproject", 5); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 5); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -214,24 +199,16 @@ func TestRegistry_GetNotFound(t *testing.T) {
 func TestRegistry_List(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir1 := filepath.Join(tmpDir, "project1")
-	projectDir2 := filepath.Join(tmpDir, "project2")
-	if err := os.Mkdir(projectDir1, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(projectDir2, 0755); err != nil {
-		t.Fatal(err)
-	}
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir1, "project1", 0); err != nil {
+	if _, err := r.Add("git@github.com:user/project1.git", "project1", 0); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	if _, err := r.Add(projectDir2, "project2", 0); err != nil {
+	if _, err := r.Add("git@github.com:user/project2.git", "project2", 0); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -244,17 +221,14 @@ func TestRegistry_List(t *testing.T) {
 func TestRegistry_Update(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	r, err := NewWithPath(configPath)
 	if err != nil {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(projectDir, "myproject", 3); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 3); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -272,10 +246,7 @@ func TestRegistry_Update(t *testing.T) {
 func TestRegistry_Persistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	projectDir := filepath.Join(tmpDir, "myproject")
-	if err := os.Mkdir(projectDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	remoteURL := "git@github.com:user/myproject.git"
 
 	// Create registry and add project
 	r1, err := NewWithPath(configPath)
@@ -283,7 +254,7 @@ func TestRegistry_Persistence(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r1.Add(projectDir, "myproject", 7); err != nil {
+	if _, err := r1.Add(remoteURL, "myproject", 7); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -306,8 +277,8 @@ func TestRegistry_Persistence(t *testing.T) {
 		t.Errorf("Name = %q, want %q", p.Name, "myproject")
 	}
 
-	if p.Path != projectDir {
-		t.Errorf("Path = %q, want %q", p.Path, projectDir)
+	if p.RemoteURL != remoteURL {
+		t.Errorf("RemoteURL = %q, want %q", p.RemoteURL, remoteURL)
 	}
 
 	if p.MaxAgents != 7 {

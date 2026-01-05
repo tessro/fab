@@ -57,14 +57,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "PROJECT\tSTATUS\tAGENTS\tPATH")
+	_, _ = fmt.Fprintln(w, "PROJECT\tSTATUS\tAGENTS\tREMOTE")
 	for _, p := range status.Projects {
 		projectStatus := "stopped"
 		if p.Running {
 			projectStatus = "running"
 		}
 		agentInfo := fmt.Sprintf("%d/%d", p.ActiveAgents, p.MaxAgents)
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, projectStatus, agentInfo, p.Path)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, projectStatus, agentInfo, p.RemoteURL)
 	}
 	_ = w.Flush()
 

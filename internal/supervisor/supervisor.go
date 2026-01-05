@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -267,7 +268,7 @@ func (s *Supervisor) handleStatus(ctx context.Context, req *daemon.Request) *dae
 
 		projectStatuses = append(projectStatuses, daemon.ProjectStatus{
 			Name:         p.Name,
-			Path:         p.Path,
+			RemoteURL:    p.RemoteURL,
 			Running:      p.IsRunning(),
 			MaxAgents:    p.MaxAgents,
 			ActiveAgents: p.ActiveAgentCount(),
@@ -301,26 +302,44 @@ func (s *Supervisor) handleProjectAdd(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
 	}
 
-	if addReq.Path == "" {
-		return errorResponse(req, "project path required")
+	if addReq.RemoteURL == "" {
+		return errorResponse(req, "remote URL required")
 	}
 
-	proj, err := s.registry.Add(addReq.Path, addReq.Name, addReq.MaxAgents)
+	// Register project in config first (validates and generates name)
+	proj, err := s.registry.Add(addReq.RemoteURL, addReq.Name, addReq.MaxAgents)
 	if err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to add project: %v", err))
+	}
+
+	// Create project directory structure
+	projectDir := proj.ProjectDir()
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		_ = s.registry.Remove(proj.Name)
+		return errorResponse(req, fmt.Sprintf("failed to create project dir: %v", err))
+	}
+
+	// Clone the repository
+	repoDir := proj.RepoDir()
+	cmd := exec.Command("git", "clone", addReq.RemoteURL, repoDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		_ = s.registry.Remove(proj.Name)
+		_ = os.RemoveAll(projectDir)
+		return errorResponse(req, fmt.Sprintf("failed to clone: %v\n%s", err, output))
 	}
 
 	// Create worktree pool
 	worktrees, err := proj.CreateWorktreePool()
 	if err != nil {
-		// Remove the project from registry since worktree creation failed
 		_ = s.registry.Remove(proj.Name)
+		_ = os.RemoveAll(projectDir)
 		return errorResponse(req, fmt.Sprintf("failed to create worktree pool: %v", err))
 	}
 
 	return successResponse(req, daemon.ProjectAddResponse{
 		Name:      proj.Name,
-		Path:      proj.Path,
+		RemoteURL: proj.RemoteURL,
+		RepoDir:   proj.RepoDir(),
 		MaxAgents: proj.MaxAgents,
 		Worktrees: worktrees,
 	})
@@ -364,7 +383,7 @@ func (s *Supervisor) handleProjectList(ctx context.Context, req *daemon.Request)
 	for _, p := range projects {
 		infos = append(infos, daemon.ProjectInfo{
 			Name:      p.Name,
-			Path:      p.Path,
+			RemoteURL: p.RemoteURL,
 			MaxAgents: p.MaxAgents,
 			Running:   p.IsRunning(),
 		})
@@ -842,11 +861,29 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 	}
 
 	// Notify the orchestrator
-	if err := orch.HandleAgentDone(doneReq.AgentID, doneReq.TaskID, doneReq.Error); err != nil {
+	result, err := orch.HandleAgentDone(doneReq.AgentID, doneReq.TaskID, doneReq.Error)
+	if err != nil {
 		return errorResponse(req, fmt.Sprintf("handle agent done: %v", err))
 	}
 
-	return successResponse(req, nil)
+	resp := daemon.AgentDoneResponse{
+		Merged:     result.Merged,
+		BranchName: result.BranchName,
+		MergeError: result.MergeError,
+	}
+
+	if !result.Merged {
+		// Return success: false to signal agent should resolve conflicts
+		return &daemon.Response{
+			Type:    req.Type,
+			ID:      req.ID,
+			Success: false,
+			Error:   fmt.Sprintf("merge conflict on %s: %s", result.BranchName, result.MergeError),
+			Payload: resp,
+		}
+	}
+
+	return successResponse(req, resp)
 }
 
 // handleListStagedActions returns all pending staged actions.

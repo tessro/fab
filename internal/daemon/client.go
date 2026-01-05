@@ -242,10 +242,10 @@ func (c *Client) Stop(project string, all bool) error {
 }
 
 // ProjectAdd adds a project to the daemon.
-func (c *Client) ProjectAdd(path, name string, maxAgents int) (*ProjectAddResponse, error) {
+func (c *Client) ProjectAdd(remoteURL, name string, maxAgents int) (*ProjectAddResponse, error) {
 	resp, err := c.Send(&Request{
 		Type:    MsgProjectAdd,
-		Payload: ProjectAddRequest{Path: path, Name: name, MaxAgents: maxAgents},
+		Payload: ProjectAddRequest{RemoteURL: remoteURL, Name: name, MaxAgents: maxAgents},
 	})
 	if err != nil {
 		return nil, err
