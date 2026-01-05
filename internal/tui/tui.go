@@ -278,6 +278,18 @@ func (m *Model) pendingPermissionForAgent(agentID string) *daemon.PermissionRequ
 	return nil
 }
 
+// updateNeedsAttention rebuilds the map of agents that need user attention.
+func (m *Model) updateNeedsAttention() {
+	attention := make(map[string]bool)
+	for _, perm := range m.pendingPermissions {
+		attention[perm.AgentID] = true
+	}
+	for _, action := range m.stagedActions {
+		attention[action.AgentID] = true
+	}
+	m.agentList.SetNeedsAttention(attention)
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -508,6 +520,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stagedActions = msg.Actions
 			// Update chat view with pending action for current agent
 			m.chatView.SetPendingAction(m.pendingActionForAgent(m.chatView.AgentID()))
+			// Update attention indicators
+			m.updateNeedsAttention()
 		}
 
 	case ActionResultMsg:
@@ -535,6 +549,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Clear the chat view's pending permission
 		m.chatView.SetPendingPermission(nil)
+		// Update attention indicators
+		m.updateNeedsAttention()
 
 	case tickMsg:
 		// Advance spinner frame and schedule next tick
@@ -618,6 +634,8 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 			if event.AgentID == m.chatView.AgentID() {
 				m.chatView.SetPendingPermission(m.pendingPermissionForAgent(event.AgentID))
 			}
+			// Update attention indicators
+			m.updateNeedsAttention()
 		}
 	}
 }

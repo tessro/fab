@@ -8,6 +8,7 @@ var (
 	secondaryColor = lipgloss.Color("#10B981") // Green
 	mutedColor     = lipgloss.Color("#6B7280") // Gray
 	errorColor     = lipgloss.Color("#EF4444") // Red
+	warningColor   = lipgloss.Color("#F59E0B") // Amber/Yellow
 
 	// Header styles
 	headerContainerStyle = lipgloss.NewStyle().

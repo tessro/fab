@@ -14,17 +14,19 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 
 // AgentList displays a navigable list of agents with status indicators.
 type AgentList struct {
-	width        int
-	height       int
-	agents       []daemon.AgentStatus
-	selected     int
-	spinnerFrame int
+	width            int
+	height           int
+	agents           []daemon.AgentStatus
+	selected         int
+	spinnerFrame     int
+	needsAttention   map[string]bool // agents with pending permissions/actions
 }
 
 // NewAgentList creates a new agent list component.
 func NewAgentList() AgentList {
 	return AgentList{
-		selected: 0,
+		selected:       0,
+		needsAttention: make(map[string]bool),
 	}
 }
 
@@ -95,6 +97,11 @@ func (l *AgentList) SetSpinnerFrame(frame int) {
 	l.spinnerFrame = frame
 }
 
+// SetNeedsAttention updates which agents have pending approvals.
+func (l *AgentList) SetNeedsAttention(agentIDs map[string]bool) {
+	l.needsAttention = agentIDs
+}
+
 // View renders the agent list.
 func (l AgentList) View() string {
 	if len(l.agents) == 0 {
@@ -116,8 +123,8 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	isSelected := index == l.selected
 
 	// State indicator with color
-	stateIcon := l.stateIcon(agent.State)
-	stateStyle := l.stateStyle(agent.State)
+	stateIcon := l.stateIcon(agent.ID, agent.State)
+	stateStyle := l.stateStyle(agent.ID, agent.State)
 	stateStr := stateStyle.Render(stateIcon)
 
 	// Agent ID
@@ -165,7 +172,12 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 }
 
 // stateIcon returns an icon for the agent state.
-func (l AgentList) stateIcon(state string) string {
+func (l AgentList) stateIcon(agentID, state string) string {
+	// Check if agent needs user attention (pending permission/action)
+	if l.needsAttention[agentID] {
+		return "!"
+	}
+
 	switch state {
 	case "starting", "running":
 		// Animated spinner for active states
@@ -182,7 +194,12 @@ func (l AgentList) stateIcon(state string) string {
 }
 
 // stateStyle returns the style for a state indicator.
-func (l AgentList) stateStyle(state string) lipgloss.Style {
+func (l AgentList) stateStyle(agentID, state string) lipgloss.Style {
+	// Attention-grabbing style for agents needing approval
+	if l.needsAttention[agentID] {
+		return lipgloss.NewStyle().Foreground(warningColor).Bold(true)
+	}
+
 	switch state {
 	case "starting":
 		return lipgloss.NewStyle().Foreground(mutedColor)
