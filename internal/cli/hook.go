@@ -26,19 +26,31 @@ type HookInput struct {
 	ToolUseID      string          `json:"tool_use_id"`
 }
 
-// HookOutput is the output structure expected by Claude Code.
-type HookOutput struct {
-	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
+// PreToolUseOutput is the output structure for PreToolUse hooks.
+type PreToolUseOutput struct {
+	HookSpecificOutput PreToolUseSpecificOutput `json:"hookSpecificOutput"`
 }
 
-// HookSpecificOutput contains the hook-specific response.
-type HookSpecificOutput struct {
-	HookEventName string       `json:"hookEventName"`
-	Decision      HookDecision `json:"decision"`
+// PreToolUseSpecificOutput contains the PreToolUse-specific response.
+type PreToolUseSpecificOutput struct {
+	HookEventName            string `json:"hookEventName"`
+	PermissionDecision       string `json:"permissionDecision"`                 // "allow", "deny", or "ask"
+	PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"` // reason for the decision
 }
 
-// HookDecision contains the permission decision.
-type HookDecision struct {
+// PermissionRequestOutput is the output structure for PermissionRequest hooks.
+type PermissionRequestOutput struct {
+	HookSpecificOutput PermissionRequestSpecificOutput `json:"hookSpecificOutput"`
+}
+
+// PermissionRequestSpecificOutput contains the PermissionRequest-specific response.
+type PermissionRequestSpecificOutput struct {
+	HookEventName string                    `json:"hookEventName"`
+	Decision      PermissionRequestDecision `json:"decision"`
+}
+
+// PermissionRequestDecision contains the permission decision for PermissionRequest hooks.
+type PermissionRequestDecision struct {
 	Behavior  string `json:"behavior"` // "allow" or "deny"
 	Message   string `json:"message,omitempty"`
 	Interrupt bool   `json:"interrupt,omitempty"`
@@ -201,23 +213,41 @@ func runHook(cmd *cobra.Command, args []string) error {
 }
 
 // outputHookResponse writes the hook response to stdout in Claude Code format.
+// Note: PreToolUse and PermissionRequest hooks have different response formats.
 func outputHookResponse(hookName, behavior, message string, interrupt bool) error {
-	output := HookOutput{
-		HookSpecificOutput: HookSpecificOutput{
-			HookEventName: hookName,
-			Decision: HookDecision{
-				Behavior:  behavior,
-				Message:   message,
-				Interrupt: interrupt,
+	var data []byte
+	var err error
+
+	if hookName == "PreToolUse" {
+		// PreToolUse uses permissionDecision directly
+		output := PreToolUseOutput{
+			HookSpecificOutput: PreToolUseSpecificOutput{
+				HookEventName:            hookName,
+				PermissionDecision:       behavior,
+				PermissionDecisionReason: message,
 			},
-		},
+		}
+		data, err = json.Marshal(output)
+	} else {
+		// PermissionRequest uses decision.behavior
+		output := PermissionRequestOutput{
+			HookSpecificOutput: PermissionRequestSpecificOutput{
+				HookEventName: hookName,
+				Decision: PermissionRequestDecision{
+					Behavior:  behavior,
+					Message:   message,
+					Interrupt: interrupt,
+				},
+			},
+		}
+		data, err = json.Marshal(output)
 	}
 
-	data, err := json.Marshal(output)
 	if err != nil {
 		return fmt.Errorf("marshal response: %w", err)
 	}
 
+	slog.Debug("hook response", "stdout", string(data))
 	fmt.Println(string(data))
 	return nil
 }
