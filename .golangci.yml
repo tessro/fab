@@ -8,11 +8,10 @@ linters:
     - ineffassign
     - unused
     - errcheck
-
-linters-settings:
-  govet:
-    enable:
-      - copylock  # detect copies of sync.Mutex
+  settings:
+    govet:
+      enable:
+        - copylock  # detect copies of sync.Mutex
 
 # Run checklocks separately via:
 #   go install gvisor.dev/gvisor/tools/checklocks/cmd/checklocks@latest
