@@ -262,8 +262,8 @@ func (m *Manager) Delete(id string) error {
 			}
 		}
 
-		// Release worktree
-		_ = agent.Project.ReleaseWorktreeByAgent(id)
+		// Return worktree to pool with cleanup
+		_ = agent.Project.ReturnWorktreeToPool(id)
 	}
 
 	m.mu.Unlock()

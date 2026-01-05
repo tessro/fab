@@ -195,6 +195,28 @@ func (p *Project) createAgentBranch(wtPath, agentID string) error {
 	return nil
 }
 
+// deleteAgentBranch deletes an agent's branch from the repository.
+// Must be called with lock held.
+func (p *Project) deleteAgentBranch(agentID string) error {
+	// Verify the repo is a valid git repository
+	repoDir := p.RepoDir()
+	gitDir := filepath.Join(repoDir, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil // Not a git repo - skip (likely a test scenario)
+	}
+
+	branchName := "fab/" + agentID
+
+	// Delete the branch (force delete since it may not be fully merged)
+	cmd := exec.Command("git", "branch", "-D", branchName)
+	cmd.Dir = repoDir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("delete branch %s: %w\n%s", branchName, err, output)
+	}
+
+	return nil
+}
+
 // MergeResult represents the outcome of a merge attempt.
 type MergeResult struct {
 	Merged     bool   // True if merge succeeded and was pushed
