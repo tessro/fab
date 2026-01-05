@@ -12,11 +12,11 @@ import (
 // The format has type at the top level ("system", "assistant", "user", "result")
 // with message content nested in a "message" field for assistant/user types.
 type StreamMessage struct {
-	Type    string          `json:"type"`              // "system", "assistant", "user", "result"
-	Subtype string          `json:"subtype,omitempty"` // For system messages: "init", "hook_response"
-	Message *NestedMessage  `json:"message,omitempty"` // For assistant/user types
-	Result  string          `json:"result,omitempty"`  // For result type
-	IsError bool            `json:"is_error,omitempty"`
+	Type    string         `json:"type"`              // "system", "assistant", "user", "result"
+	Subtype string         `json:"subtype,omitempty"` // For system messages: "init", "hook_response"
+	Message *NestedMessage `json:"message,omitempty"` // For assistant/user types
+	Result  string         `json:"result,omitempty"`  // For result type
+	IsError bool           `json:"is_error,omitempty"`
 }
 
 // NestedMessage contains the actual API message content.
@@ -60,10 +60,10 @@ type ChatEntry struct {
 
 // InputMessage is sent to Claude Code via stdin in stream-json mode.
 type InputMessage struct {
-	Type              string        `json:"type"`                // "user"
-	Message           MessageBody   `json:"message"`             // Message content
-	SessionID         string        `json:"session_id"`          // Session identifier
-	ParentToolUseID   *string       `json:"parent_tool_use_id"`  // null for regular messages
+	Type            string      `json:"type"`               // "user"
+	Message         MessageBody `json:"message"`            // Message content
+	SessionID       string      `json:"session_id"`         // Session identifier
+	ParentToolUseID *string     `json:"parent_tool_use_id"` // null for regular messages
 }
 
 // MessageBody contains the actual message content.

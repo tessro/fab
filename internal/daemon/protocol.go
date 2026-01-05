@@ -33,10 +33,10 @@ const (
 	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
 	// TUI streaming
-	MsgAttach             MessageType = "attach"               // Subscribe to agent output streams
-	MsgDetach             MessageType = "detach"               // Unsubscribe from streams
-	MsgAgentSendMessage   MessageType = "agent.send_message"
-	MsgAgentChatHistory   MessageType = "agent.chat_history"   // Get chat history for an agent
+	MsgAttach           MessageType = "attach" // Subscribe to agent output streams
+	MsgDetach           MessageType = "detach" // Unsubscribe from streams
+	MsgAgentSendMessage MessageType = "agent.send_message"
+	MsgAgentChatHistory MessageType = "agent.chat_history" // Get chat history for an agent
 
 	// Orchestrator (agent signals and staged actions)
 	MsgAgentDone         MessageType = "agent.done"           // Agent signals task completion
@@ -294,9 +294,9 @@ type AgentDoneRequest struct {
 
 // AgentDoneResponse is the payload for agent.done responses.
 type AgentDoneResponse struct {
-	Merged     bool   `json:"merged"`                 // True if merge to main succeeded
-	BranchName string `json:"branch_name,omitempty"`  // The branch that was processed
-	MergeError string `json:"merge_error,omitempty"`  // Conflict message if merge failed
+	Merged     bool   `json:"merged"`                // True if merge to main succeeded
+	BranchName string `json:"branch_name,omitempty"` // The branch that was processed
+	MergeError string `json:"merge_error,omitempty"` // Conflict message if merge failed
 }
 
 // StagedActionsRequest is the payload for orchestrator.actions requests.
