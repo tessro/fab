@@ -10,7 +10,7 @@ Use the bus emoji 🚌 to brand the project:
 
 ## Project Context
 
-fab is a coding agent supervisor - it manages multiple Claude Code instances across projects with automatic task orchestration via beads.
+fab is a coding agent supervisor - it manages multiple Claude Code instances across projects with automatic task orchestration via ticket (tk).
 
 ## Code Style
 
@@ -24,15 +24,10 @@ fab is a coding agent supervisor - it manages multiple Claude Code instances acr
 - **Atomic commits**: One logical change per commit
 - **Conventional commits**: `type(scope): message`
   - Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`
-  - Scope: optional, e.g., `cli`, `tui`, `daemon`, `beads`
+  - Scope: optional, e.g., `cli`, `tui`, `daemon`, `ticket`
 - Keep subject line under 72 chars
-- Reference issue IDs in body when applicable (e.g., `Implements FAB-12`)
+- Reference issue IDs in body when applicable
 - **Push after committing** - don't let commits pile up locally
-
-## Beads
-
-- Issue IDs are auto-generated; do not prefix titles with IDs
-- Example: `bd create "Add foo feature"` not `bd create "FAB-99: Add foo feature"`
 
 ## Releases
 
@@ -44,4 +39,3 @@ fab is a coding agent supervisor - it manages multiple Claude Code instances acr
 - Config lives in `~/.config/fab/config.toml`
 - Daemon socket at `~/.fab/fab.sock`
 - Worktrees in `~/.fab/worktrees/<project>/`
-- Issue prefix: `FAB-`

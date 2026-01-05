@@ -126,8 +126,8 @@ patterns = [
     # File listing
     "ls:*",
     "tree:*",
-    # Beads issue tracker (local files only)
-    "bd:*",
+    # Ticket issue tracker (local files only)
+    "tk:*",
     # Safe text utilities
     "cat:*",
     "diff:*",
@@ -136,15 +136,6 @@ patterns = [
     "tail:*",
     "wc:*",
 ]
-
-# =============================================================================
-# SAFE SKILLS - Beads plugin (local file operations)
-# =============================================================================
-
-[[rules]]
-tool = "Skill"
-action = "allow"
-pattern = "beads::*"
 
 # =============================================================================
 # EXAMPLES

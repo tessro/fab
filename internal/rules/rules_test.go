@@ -99,7 +99,7 @@ func TestResolvePrimaryField(t *testing.T) {
 		{"grep pattern", "Grep", `{"pattern":"TODO"}`, "TODO"},
 		{"webfetch url", "WebFetch", `{"url":"https://example.com"}`, "https://example.com"},
 		{"task prompt", "Task", `{"prompt":"search for files"}`, "search for files"},
-		{"skill name", "Skill", `{"skill":"beads:ready"}`, "beads:ready"},
+		{"skill name", "Skill", `{"skill":"ticket:ready"}`, "ticket:ready"},
 		{"websearch query", "WebSearch", `{"query":"golang tutorials"}`, "golang tutorials"},
 		{"notebookedit path", "NotebookEdit", `{"notebook_path":"/home/user/analysis.ipynb"}`, "/home/user/analysis.ipynb"},
 		{"unknown tool", "Unknown", `{"foo":"bar"}`, ""},

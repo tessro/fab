@@ -1,12 +1,12 @@
 # 🚌 fab
 
-A coding agent supervisor that manages multiple Claude Code instances across projects with automatic task orchestration via [beads](https://github.com/tessro/beads).
+A coding agent supervisor that manages multiple Claude Code instances across projects with automatic task orchestration via ticket (tk).
 
 ## Features
 
 - **Multi-agent orchestration** - Run multiple Claude Code agents in parallel across different projects
 - **Worktree isolation** - Each agent gets its own git worktree for conflict-free parallel development
-- **Automatic task assignment** - Agents automatically pick up tasks from beads (`bd ready`)
+- **Automatic task assignment** - Agents automatically pick up tasks from ticket (`tk ready`)
 - **Done detection** - Recognizes when agents complete tasks and recycles them for new work
 - **Interactive TUI** - Monitor and interact with all agents from a single terminal interface
 - **Manual/auto modes** - Review agent actions before execution or let them run autonomously
@@ -71,10 +71,10 @@ go install github.com/tessro/fab/cmd/fab@latest
 
 fab creates a pool of git worktrees for each project. When orchestration starts, agents are spawned and assigned worktrees. Each agent:
 
-1. Runs `bd ready` to find an available task
+1. Runs `tk ready` to find an available task
 2. Works on the task in its isolated worktree
 3. Commits and pushes changes
-4. Closes the task with `bd close`
+4. Closes the task with `tk close`
 5. Signals completion with `fab agent done`
 
 The orchestrator then recycles the agent for the next task.

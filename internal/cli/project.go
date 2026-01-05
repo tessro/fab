@@ -41,7 +41,7 @@ var projectStartAll bool
 var projectStartCmd = &cobra.Command{
 	Use:   "start [project]",
 	Short: "Start orchestration for a project",
-	Long:  "Start agent orchestration for a registered project. Agents will pick up tasks from beads and work on them.",
+	Long:  "Start agent orchestration for a registered project. Agents will pick up tasks and work on them.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runProjectStart,
 }

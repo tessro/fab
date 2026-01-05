@@ -12,7 +12,7 @@ priority: 2
 Add a dedicated "manager" agent that:
 - Is always available for interactive conversation with the user
 - Knows about all registered projects and their status
-- Has access to beads across all projects (bd list, bd show, etc.)
+- Has access to tickets across all projects (tk list, tk show, etc.)
 - Can invoke fab CLI commands (fab status, fab start, fab stop, etc.)
 - Helps user coordinate work across the fleet of agents
 - Not auto-orchestrated - purely user-driven

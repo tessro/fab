@@ -1,6 +1,6 @@
 # fab - Coding Agent Supervisor
 
-A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple projects, with automatic task orchestration via beads integration.
+A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple projects, with automatic task orchestration via ticket (tk) integration.
 
 ## Architecture
 
@@ -66,7 +66,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 ```
 
 **Key features:**
-- Top bar: status summary (agent counts), session stats (beads closed, commits made), usage meter
+- Top bar: status summary (agent counts), session stats (tickets closed, commits made), usage meter
 - Left rail: all agents grouped by project, state indicators [S]tarting/[R]unning/[I]dle/[D]one
 - Main pane: selected agent's PTY (scrollable, interactive)
 - In-game chat style input: `Enter` opens input line, type message, `Enter` again to send
@@ -74,7 +74,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 **Key bindings:**
 - `j/k` or arrows: navigate agents
 - `n`: spawn new agent (prompts for project)
-- `t`: create task via `bd create`
+- `t`: create task via `tk create`
 - `d`: delete selected agent
 - `Enter`: open input line for PTY (in-game chat style)
 - `Esc`: cancel input / return to navigation
@@ -107,12 +107,12 @@ type Worktree struct {
 
 ## Supervisor Logic
 
-**Agent-driven task picking**: Agents autonomously select their own tasks using `bd ready`. This design keeps the supervisor simple and leverages beads' dependency tracking - agents see only unblocked tasks and pick based on priority. No central scheduler is needed.
+**Agent-driven task picking**: Agents autonomously select their own tasks using `tk ready`. This design keeps the supervisor simple and leverages ticket's dependency tracking - agents see only unblocked tasks and pick based on priority. No central scheduler is needed.
 
 1. **Kickstart**: When an agent is spawned or becomes idle, send prompt:
    ```
-   Run `bd ready` to find a task, then work on it.
-   When done, close it with `bd close <id>`, then run `fab agent done`.
+   Run `tk ready` to find a task, then work on it.
+   When done, close it with `tk close <id>`, then run `fab agent done`.
    ```
 
 2. **Done detection**:
