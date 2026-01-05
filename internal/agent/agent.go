@@ -356,7 +356,7 @@ func (a *Agent) Start(initialPrompt string) error {
 		fabPath = "fab" // Fall back to PATH lookup
 	}
 
-	// Build settings with PreToolUse hook that routes to fab daemon
+	// Build settings with hooks that route to fab daemon
 	settings := map[string]any{
 		"hooks": map[string]any{
 			"PreToolUse": []any{
@@ -365,7 +365,18 @@ func (a *Agent) Start(initialPrompt string) error {
 					"hooks": []any{
 						map[string]any{
 							"type":    "command",
-							"command": fabPath + " hook",
+							"command": fabPath + " hook PreToolUse",
+						},
+					},
+				},
+			},
+			"PermissionRequest": []any{
+				map[string]any{
+					"matcher": "*",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": fabPath + " hook PermissionRequest",
 						},
 					},
 				},
