@@ -26,7 +26,7 @@ var agentListCmd = &cobra.Command{
 
 func runAgentList(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	resp, err := client.AgentList(agentListProject)
 	if err != nil {
@@ -43,7 +43,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tTASK\tAGE")
+	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tTASK\tAGE")
 
 	for _, a := range resp.Agents {
 		age := formatDuration(time.Since(a.StartedAt))
@@ -51,10 +51,10 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		if task == "" {
 			task = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, task, age)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, task, age)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 
@@ -90,7 +90,7 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.AgentDone(agentID, doneTaskID, doneErrorMsg); err != nil {
 		return fmt.Errorf("agent done: %w", err)

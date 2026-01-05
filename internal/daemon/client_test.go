@@ -36,7 +36,7 @@ func TestClient_ConnectClose(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// Create client
 	c := NewClient(sockPath)
@@ -112,13 +112,13 @@ func TestClient_Ping(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	ping, err := c.Ping()
 	if err != nil {
@@ -163,13 +163,13 @@ func TestClient_Status(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	status, err := c.Status()
 	if err != nil {
@@ -194,13 +194,13 @@ func TestClient_StartStop(t *testing.T) {
 		case MsgStart:
 			var payload StartRequest
 			data, _ := json.Marshal(req.Payload)
-			json.Unmarshal(data, &payload)
+			_ = json.Unmarshal(data, &payload)
 			lastStart = payload.Project
 			return &Response{Success: true}
 		case MsgStop:
 			var payload StopRequest
 			data, _ := json.Marshal(req.Payload)
-			json.Unmarshal(data, &payload)
+			_ = json.Unmarshal(data, &payload)
 			lastStop = payload.Project
 			return &Response{Success: true}
 		}
@@ -211,13 +211,13 @@ func TestClient_StartStop(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Start("my-project", false); err != nil {
 		t.Fatalf("start: %v", err)
@@ -272,13 +272,13 @@ func TestClient_ProjectOperations(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	t.Run("add", func(t *testing.T) {
 		result, err := c.ProjectAdd("/path/to/test", "test-proj", 3)
@@ -351,13 +351,13 @@ func TestClient_AgentOperations(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	t.Run("list", func(t *testing.T) {
 		result, err := c.AgentList("proj1")
@@ -407,7 +407,7 @@ func TestClient_AttachDetach(t *testing.T) {
 			var payload AttachRequest
 			if req.Payload != nil {
 				data, _ := json.Marshal(req.Payload)
-				json.Unmarshal(data, &payload)
+				_ = json.Unmarshal(data, &payload)
 			}
 			srv.Attach(conn, payload.Projects, encoder, writeMu)
 			return &Response{Success: true}
@@ -422,13 +422,13 @@ func TestClient_AttachDetach(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if c.IsAttached() {
 		t.Error("should not be attached initially")
@@ -476,13 +476,13 @@ func TestClient_RecvEvent(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Attach(nil); err != nil {
 		t.Fatalf("attach: %v", err)
@@ -529,13 +529,13 @@ func TestClient_Shutdown(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Shutdown(); err != nil {
 		t.Fatalf("shutdown: %v", err)
@@ -558,13 +558,13 @@ func TestClient_ErrorResponses(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	c := NewClient(sockPath)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// All operations should return errors
 	if _, err := c.Ping(); err == nil {

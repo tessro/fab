@@ -15,13 +15,12 @@ type ChatView struct {
 	entries           []daemon.ChatEntryDTO
 	width             int
 	height            int
-	scroll            int // current scroll offset (legacy, viewport handles this)
 	focused           bool
 	agentID           string
 	project           string
 	viewport          viewport.Model
 	ready             bool
-	pendingAction     *daemon.StagedAction     // pending action awaiting approval
+	pendingAction     *daemon.StagedAction      // pending action awaiting approval
 	pendingPermission *daemon.PermissionRequest // pending permission request
 	inputView         string                    // rendered input line view
 	inputHeight       int                       // height of input line (for layout)
@@ -189,12 +188,12 @@ func (v *ChatView) SetEntries(entries []daemon.ChatEntryDTO) {
 
 // ScrollUp scrolls the viewport up.
 func (v *ChatView) ScrollUp(n int) {
-	v.viewport.LineUp(n)
+	v.viewport.ScrollUp(n)
 }
 
 // ScrollDown scrolls the viewport down.
 func (v *ChatView) ScrollDown(n int) {
-	v.viewport.LineDown(n)
+	v.viewport.ScrollDown(n)
 }
 
 // ScrollToTop scrolls to the top.
@@ -209,12 +208,12 @@ func (v *ChatView) ScrollToBottom() {
 
 // PageUp scrolls up by one page.
 func (v *ChatView) PageUp() {
-	v.viewport.ViewUp()
+	v.viewport.PageUp()
 }
 
 // PageDown scrolls down by one page.
 func (v *ChatView) PageDown() {
-	v.viewport.ViewDown()
+	v.viewport.PageDown()
 }
 
 // updateContent refreshes the viewport content from entries.

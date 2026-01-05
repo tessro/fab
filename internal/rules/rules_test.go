@@ -256,7 +256,7 @@ pattern = "rm :*"
 			t.Run(tt.name, func(t *testing.T) {
 				primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
 
-				var gotAction Action= ActionPass
+				gotAction := ActionPass
 				gotMatch := false
 
 				for _, rule := range allRules {
@@ -307,7 +307,7 @@ func TestPatternsArray(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			primaryField := tt.command
-			var gotAction Action= ActionPass
+			gotAction := ActionPass
 			gotMatch := false
 
 			for _, rule := range rules {
@@ -360,7 +360,7 @@ func TestNoPatternMatchesAll(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotAction Action= ActionPass
+			gotAction := ActionPass
 
 			for _, rule := range rules {
 				if rule.Tool != tt.toolName {
@@ -407,7 +407,7 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
 
-			var gotAction Action= ActionPass
+			gotAction := ActionPass
 			gotMatch := false
 
 			for _, rule := range rules {

@@ -29,10 +29,6 @@ var (
 			Foreground(mutedColor).
 			Padding(0, 1)
 
-	// Main content area
-	contentStyle = lipgloss.NewStyle().
-			Padding(1, 2)
-
 	// Agent list styles
 	agentListContainerStyle = lipgloss.NewStyle()
 

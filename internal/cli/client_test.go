@@ -57,14 +57,14 @@ func TestConnectClient(t *testing.T) {
 		if err := srv.Start(); err != nil {
 			t.Fatalf("server start: %v", err)
 		}
-		defer srv.Stop()
+		defer func() { _ = srv.Stop() }()
 
 		SetSocketPath(sockPath)
 		client, err := ConnectClient()
 		if err != nil {
 			t.Fatalf("connect: %v", err)
 		}
-		defer client.Close()
+		defer func() { _ = client.Close() }()
 
 		if !client.IsConnected() {
 			t.Error("client should be connected")
@@ -95,7 +95,7 @@ func TestIsDaemonRunning(t *testing.T) {
 		if err := srv.Start(); err != nil {
 			t.Fatalf("server start: %v", err)
 		}
-		defer srv.Stop()
+		defer func() { _ = srv.Stop() }()
 
 		SetSocketPath(sockPath)
 		if !IsDaemonRunning() {

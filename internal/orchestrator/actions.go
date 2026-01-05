@@ -154,6 +154,6 @@ func (q *ActionQueue) Clear() {
 // generateActionID generates a unique action ID.
 func generateActionID() string {
 	bytes := make([]byte, 4)
-	rand.Read(bytes)
+	_, _ = rand.Read(bytes)
 	return hex.EncodeToString(bytes)
 }

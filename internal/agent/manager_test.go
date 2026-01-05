@@ -167,9 +167,9 @@ func TestManager_Count(t *testing.T) {
 		t.Error("expected 0 agents initially")
 	}
 
-	m.Create(proj)
-	m.Create(proj)
-	m.Create(proj)
+	_, _ = m.Create(proj)
+	_, _ = m.Create(proj)
+	_, _ = m.Create(proj)
 
 	if m.Count() != 3 {
 		t.Errorf("expected 3 agents, got %d", m.Count())
@@ -271,8 +271,8 @@ func TestManager_DeleteAll(t *testing.T) {
 	m := NewManager()
 	proj := newTestProject("test-proj", 3)
 
-	m.Create(proj)
-	m.Create(proj)
+	_, _ = m.Create(proj)
+	_, _ = m.Create(proj)
 
 	m.DeleteAll("test-proj")
 

@@ -34,7 +34,7 @@ func TestServer_StartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	conn.Close()
+	_ = conn.Close()
 
 	if err := srv.Stop(); err != nil {
 		t.Fatalf("Stop() error = %v", err)
@@ -70,14 +70,14 @@ func TestServer_RequestResponse(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// Connect and send request
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -118,7 +118,7 @@ func TestServer_DoubleStart(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// Second start should fail
 	if err := srv.Start(); err == nil {
@@ -143,13 +143,13 @@ func TestServer_ContextContainsConnAndServer(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -190,14 +190,14 @@ func TestServer_AttachBroadcast(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// Connect and attach
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -260,13 +260,13 @@ func TestServer_AttachWithProjectFilter(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	encoder := json.NewEncoder(conn)
 	decoder := json.NewDecoder(conn)
@@ -297,7 +297,7 @@ func TestServer_AttachWithProjectFilter(t *testing.T) {
 	})
 
 	// Set read deadline to avoid hanging if filtering works
-	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 
 	var event StreamEvent
 	if err := decoder.Decode(&event); err != nil {

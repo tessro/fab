@@ -31,7 +31,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	status, err := client.Status()
 	if err != nil {
@@ -57,16 +57,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "PROJECT\tSTATUS\tAGENTS\tPATH")
+	_, _ = fmt.Fprintln(w, "PROJECT\tSTATUS\tAGENTS\tPATH")
 	for _, p := range status.Projects {
 		projectStatus := "stopped"
 		if p.Running {
 			projectStatus = "running"
 		}
 		agentInfo := fmt.Sprintf("%d/%d", p.ActiveAgents, p.MaxAgents)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, projectStatus, agentInfo, p.Path)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, projectStatus, agentInfo, p.Path)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	// Show agents if requested
 	if statusShowAgents {
@@ -92,7 +92,7 @@ func printAgents(projects []daemon.ProjectStatus) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "AGENT\tPROJECT\tSTATE\tUPTIME\tTASK")
+	_, _ = fmt.Fprintln(w, "AGENT\tPROJECT\tSTATE\tUPTIME\tTASK")
 	for _, p := range projects {
 		for _, a := range p.Agents {
 			uptime := time.Since(a.StartedAt).Truncate(time.Second)
@@ -100,10 +100,10 @@ func printAgents(projects []daemon.ProjectStatus) {
 			if task == "" {
 				task = "-"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, uptime, task)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, uptime, task)
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 func init() {

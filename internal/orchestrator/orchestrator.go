@@ -222,9 +222,7 @@ func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
 // HandleAgentDone handles an agent signaling task completion.
 func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) error {
 	// Stop and delete the agent
-	if err := o.agents.Stop(agentID); err != nil {
-		// Continue anyway to clean up
-	}
+	_ = o.agents.Stop(agentID) // Continue anyway to clean up
 
 	if err := o.agents.Delete(agentID); err != nil {
 		return err

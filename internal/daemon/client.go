@@ -138,7 +138,7 @@ func (c *Client) Send(req *Request) (*Response, error) {
 	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
-	defer conn.SetDeadline(time.Time{}) // Always clear deadline on exit
+	defer func() { _ = conn.SetDeadline(time.Time{}) }() // Always clear deadline on exit
 
 	if err := encoder.Encode(req); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -257,7 +257,7 @@ func (c *Client) ProjectAdd(path, name string, maxAgents int) (*ProjectAddRespon
 	var result ProjectAddResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -290,7 +290,7 @@ func (c *Client) ProjectList() (*ProjectListResponse, error) {
 	var result ProjectListResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -326,7 +326,7 @@ func (c *Client) AgentList(project string) (*AgentListResponse, error) {
 	var result AgentListResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -347,7 +347,7 @@ func (c *Client) AgentCreate(project, task string) (*AgentCreateResponse, error)
 	var result AgentCreateResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -398,7 +398,7 @@ func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 	var result AgentOutputResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -454,7 +454,7 @@ func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, erro
 	var result StagedActionsResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -507,7 +507,7 @@ func (c *Client) RequestPermission(req *PermissionRequestPayload) (*PermissionRe
 	var result PermissionResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -549,7 +549,7 @@ func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse
 	var result PermissionListResponse
 	if resp.Payload != nil {
 		data, _ := json.Marshal(resp.Payload)
-		json.Unmarshal(data, &result)
+		_ = json.Unmarshal(data, &result)
 	}
 	return &result, nil
 }
@@ -621,17 +621,17 @@ func (c *Client) RecvEvent() (*StreamEvent, error) {
 	defer c.ioMu.Unlock()
 
 	// Set a short timeout so we periodically yield for Send operations
-	conn.SetReadDeadline(time.Now().Add(EventTimeout))
+	_ = conn.SetReadDeadline(time.Now().Add(EventTimeout))
 
 	var event StreamEvent
 	if err := decoder.Decode(&event); err != nil {
 		// Clear deadline on error
-		conn.SetReadDeadline(time.Time{})
+		_ = conn.SetReadDeadline(time.Time{})
 		return nil, fmt.Errorf("decode event: %w", err)
 	}
 
 	// Clear deadline on success
-	conn.SetReadDeadline(time.Time{})
+	_ = conn.SetReadDeadline(time.Time{})
 	return &event, nil
 }
 
@@ -651,7 +651,7 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 
 	// Close any existing event stream
 	if c.eventConn != nil {
-		c.eventConn.Close()
+		_ = c.eventConn.Close()
 		if c.eventDone != nil {
 			close(c.eventDone)
 		}
@@ -673,18 +673,18 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 		Payload: AttachRequest{Projects: projects},
 	}
 	if err := encoder.Encode(req); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("encode attach request: %w", err)
 	}
 
 	// Wait for attach response
 	var resp Response
 	if err := decoder.Decode(&resp); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("decode attach response: %w", err)
 	}
 	if !resp.Success {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("attach failed: %s", resp.Error)
 	}
 
@@ -699,7 +699,7 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 	// Start reader goroutine
 	go func() {
 		defer close(events)
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			select {
@@ -739,7 +739,7 @@ func (c *Client) StopEventStream() {
 		c.eventDone = nil
 	}
 	if c.eventConn != nil {
-		c.eventConn.Close()
+		_ = c.eventConn.Close()
 		c.eventConn = nil
 	}
 }

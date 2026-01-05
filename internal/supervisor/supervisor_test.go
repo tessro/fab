@@ -26,7 +26,7 @@ func newTestGitRepo(t *testing.T) (string, func()) {
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 		t.Fatalf("failed to init git repo: %v", err)
 	}
 
@@ -40,12 +40,12 @@ func newTestGitRepo(t *testing.T) (string, func()) {
 		"GIT_COMMITTER_EMAIL=test@test.com",
 	)
 	if err := cmd.Run(); err != nil {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 		t.Fatalf("failed to create initial commit: %v", err)
 	}
 
 	cleanup := func() {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	}
 
 	return dir, cleanup
@@ -64,7 +64,7 @@ func newTestSupervisor(t *testing.T) (*Supervisor, func()) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 	reg, err := registry.NewWithPath(configPath)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		t.Fatalf("failed to create registry: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func newTestSupervisor(t *testing.T) (*Supervisor, func()) {
 	sup := New(reg, agents)
 
 	cleanup := func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	}
 
 	return sup, cleanup

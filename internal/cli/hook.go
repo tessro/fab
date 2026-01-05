@@ -111,7 +111,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 			return outputHookResponse("allow", "", false)
 		case rules.ActionDeny:
 			return outputHookResponse("deny", "blocked by permission rule", false)
-		// ActionPass falls through to daemon
+			// ActionPass falls through to daemon
 		}
 	}
 
@@ -123,7 +123,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 		// If daemon is not running, deny by default for safety
 		return outputHookResponse("deny", "fab daemon is not running", false)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Get agent ID from environment
 	agentID := os.Getenv("FAB_AGENT_ID")

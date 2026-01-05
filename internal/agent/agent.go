@@ -3,6 +3,7 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -403,14 +404,14 @@ func (a *Agent) Start(initialPrompt string) error {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		stdin.Close()
+		_ = stdin.Close()
 		return err
 	}
 
 	// Start the process
 	if err := cmd.Start(); err != nil {
-		stdin.Close()
-		stdout.Close()
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return err
 	}
 
@@ -421,9 +422,8 @@ func (a *Agent) Start(initialPrompt string) error {
 
 	// Send initial prompt if provided
 	if initialPrompt != "" {
-		if err := a.sendMessageLocked(initialPrompt); err != nil {
-			// Log but don't fail - process is running
-		}
+		// Log but don't fail if send fails - process is running
+		_ = a.sendMessageLocked(initialPrompt)
 	}
 
 	return nil
@@ -443,11 +443,11 @@ func (a *Agent) Stop() error {
 
 	// Close pipes (this signals the process)
 	if a.stdin != nil {
-		a.stdin.Close()
+		_ = a.stdin.Close()
 		a.stdin = nil
 	}
 	if a.stdout != nil {
-		a.stdout.Close()
+		_ = a.stdout.Close()
 		a.stdout = nil
 	}
 
@@ -461,7 +461,7 @@ func (a *Agent) Stop() error {
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
 		// Reap the zombie in background to avoid resource leak
-		go cmd.Wait()
+		go func() { _ = cmd.Wait() }()
 	}
 
 	return nil
@@ -771,7 +771,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			if msg.IsError {
 				logLevel = slog.LevelWarn
 			}
-			slog.Log(nil, logLevel, "readloop: result message",
+			slog.Log(context.Background(), logLevel, "readloop: result message",
 				"agent", a.ID,
 				"is_error", msg.IsError,
 				"result", truncateForLog(msg.Result, 200),

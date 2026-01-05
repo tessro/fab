@@ -58,9 +58,8 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 
 	// Set up callback to start agent read loops when agent starts
 	s.orchConfig.OnAgentStarted = func(a *agent.Agent) {
-		if err := s.StartAgentReadLoop(a); err != nil {
-			// Log but don't fail - agent is still usable without broadcasting
-		}
+		// Log but don't fail - agent is still usable without broadcasting
+		_ = s.StartAgentReadLoop(a)
 	}
 
 	// Register event handler to broadcast agent events
@@ -639,24 +638,6 @@ func (s *Supervisor) handleAgentEvent(event agent.Event) {
 	if streamEvent != nil {
 		srv.Broadcast(streamEvent)
 	}
-}
-
-// broadcastOutput sends PTY output to attached clients.
-func (s *Supervisor) broadcastOutput(agentID, project string, data []byte) {
-	s.mu.RLock()
-	srv := s.server
-	s.mu.RUnlock()
-
-	if srv == nil {
-		return
-	}
-
-	srv.Broadcast(&daemon.StreamEvent{
-		Type:    "output",
-		AgentID: agentID,
-		Project: project,
-		Data:    string(data),
-	})
 }
 
 // broadcastChatEntry sends a chat entry to attached clients.

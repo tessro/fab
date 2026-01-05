@@ -46,7 +46,7 @@ func Setup(path string) (cleanup func(), err error) {
 	// Set as default logger
 	slog.SetDefault(slog.New(handler))
 
-	return func() { f.Close() }, nil
+	return func() { _ = f.Close() }, nil
 }
 
 // SetupMulti initializes logging to both file and an additional writer (e.g., stderr).
@@ -77,7 +77,7 @@ func SetupMulti(path string, extra io.Writer) (cleanup func(), err error) {
 
 	slog.SetDefault(slog.New(handler))
 
-	return func() { f.Close() }, nil
+	return func() { _ = f.Close() }, nil
 }
 
 // SetupTest configures logging for tests (writes to provided writer, text format).

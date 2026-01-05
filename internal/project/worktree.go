@@ -80,7 +80,7 @@ func (p *Project) CreateWorktreePool() ([]string, error) {
 		cmd.Dir = p.Path
 		if output, err := cmd.CombinedOutput(); err != nil {
 			// Clean up any worktrees we created
-			p.cleanupWorktrees()
+			_ = p.cleanupWorktrees()
 			return nil, fmt.Errorf("create worktree %s: %w\n%s", wtPath, err, output)
 		}
 
@@ -126,7 +126,7 @@ func (p *Project) ensureWorktreeExists(wtPath string) error {
 	// Prune stale worktree references first (in case git still has a ref to the deleted path)
 	pruneCmd := exec.Command("git", "worktree", "prune")
 	pruneCmd.Dir = p.Path
-	pruneCmd.Run() // Ignore errors from prune
+	_ = pruneCmd.Run() // Ignore errors from prune
 
 	// Recreate the git worktree with detached HEAD
 	cmd := exec.Command("git", "worktree", "add", "--detach", wtPath)
@@ -162,13 +162,13 @@ func (p *Project) cleanupWorktrees() error {
 	// Remove the worktrees directory if empty
 	wtDir := p.WorktreesDir()
 	if entries, err := os.ReadDir(wtDir); err == nil && len(entries) == 0 {
-		os.Remove(wtDir)
+		_ = os.Remove(wtDir)
 	}
 
 	// Prune stale worktree references
 	cmd := exec.Command("git", "worktree", "prune")
 	cmd.Dir = p.Path
-	cmd.Run() // Ignore errors from prune
+	_ = cmd.Run() // Ignore errors from prune
 
 	return lastErr
 }

@@ -311,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			// Close client to unblock any pending RecvEvent() calls
 			if m.client != nil {
-				m.client.Close()
+				_ = m.client.Close()
 			}
 			return m, tea.Quit
 
@@ -391,30 +391,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "j", "down":
-			if m.focus == FocusAgentList {
+			switch m.focus {
+			case FocusAgentList:
 				m.agentList.MoveDown()
-			} else if m.focus == FocusChatView {
+			case FocusChatView:
 				m.chatView.ScrollDown(1)
 			}
 
 		case "k", "up":
-			if m.focus == FocusAgentList {
+			switch m.focus {
+			case FocusAgentList:
 				m.agentList.MoveUp()
-			} else if m.focus == FocusChatView {
+			case FocusChatView:
 				m.chatView.ScrollUp(1)
 			}
 
 		case "g", "home":
-			if m.focus == FocusAgentList {
+			switch m.focus {
+			case FocusAgentList:
 				m.agentList.MoveToTop()
-			} else if m.focus == FocusChatView {
+			case FocusChatView:
 				m.chatView.ScrollToTop()
 			}
 
 		case "G", "end":
-			if m.focus == FocusAgentList {
+			switch m.focus {
+			case FocusAgentList:
 				m.agentList.MoveToBottom()
-			} else if m.focus == FocusChatView {
+			case FocusChatView:
 				m.chatView.ScrollToBottom()
 			}
 
@@ -709,4 +713,3 @@ func RunWithClient(client *daemon.Client) error {
 	_, err := p.Run()
 	return err
 }
-

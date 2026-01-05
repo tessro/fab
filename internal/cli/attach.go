@@ -22,7 +22,7 @@ var attachCmd = &cobra.Command{
 	Long:  "Connect to the daemon and stream live output from running agents. Optionally filter by project names.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := MustConnect()
-		defer client.Close()
+		defer func() { _ = client.Close() }()
 
 		// Attach to specified projects (or all if none specified)
 		if err := client.Attach(args); err != nil {

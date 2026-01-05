@@ -36,7 +36,7 @@ var serverStopCmd = &cobra.Command{
 	Long:  "Stop the running fab daemon server. This will terminate all agents.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := MustConnect()
-		defer client.Close()
+		defer func() { _ = client.Close() }()
 
 		if err := client.Shutdown(); err != nil {
 			return fmt.Errorf("shutdown daemon: %w", err)
@@ -109,7 +109,7 @@ func runDaemon() error {
 	if err := daemon.WritePID(pidPath); err != nil {
 		return fmt.Errorf("write pid file: %w", err)
 	}
-	defer daemon.RemovePID(pidPath)
+	defer func() { _ = daemon.RemovePID(pidPath) }()
 
 	// Load registry
 	reg, err := registry.New()
@@ -135,7 +135,7 @@ func runDaemon() error {
 	if err := srv.Start(); err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	fmt.Println("🚌 fab daemon running...")
 

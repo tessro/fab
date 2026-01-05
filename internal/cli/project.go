@@ -87,7 +87,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	result, err := client.ProjectAdd(absPath, projectAddName, projectAddMaxAgents)
 	if err != nil {
@@ -103,7 +103,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 
 func runProjectList(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	result, err := client.ProjectList()
 	if err != nil {
@@ -117,15 +117,15 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPATH\tAGENTS\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tPATH\tAGENTS\tSTATUS")
 	for _, p := range result.Projects {
 		status := "stopped"
 		if p.Running {
 			status = "running"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", p.Name, p.Path, p.MaxAgents, status)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", p.Name, p.Path, p.MaxAgents, status)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return nil
 }
@@ -136,7 +136,7 @@ func runProjectStart(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	var project string
 	if len(args) > 0 {
@@ -161,7 +161,7 @@ func runProjectStop(cmd *cobra.Command, args []string) error {
 	}
 
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	var project string
 	if len(args) > 0 {
@@ -184,7 +184,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
 
 	client := MustConnect()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Check if project exists and get info
 	result, err := client.ProjectList()
@@ -225,7 +225,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 		fmt.Print("Type 'yes' to confirm: ")
 
 		var confirm string
-		fmt.Scanln(&confirm)
+		_, _ = fmt.Scanln(&confirm)
 		if confirm != "yes" {
 			fmt.Println("Aborted.")
 			return nil

@@ -96,7 +96,7 @@ type Server struct {
 // attachedClient tracks a client subscribed to streaming events.
 type attachedClient struct {
 	encoder  *json.Encoder
-	projects []string // Filter: empty means all projects (immutable after creation)
+	projects []string    // Filter: empty means all projects (immutable after creation)
 	mu       *sync.Mutex // Shared mutex for all writes to the connection
 }
 
@@ -147,7 +147,7 @@ func (s *Server) Start() error {
 
 	// Set socket permissions (owner only)
 	if err := os.Chmod(s.socketPath, 0600); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("set socket permissions: %w", err)
 	}
 
@@ -194,7 +194,7 @@ func (s *Server) acceptLoop() {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer logging.LogPanic("daemon-connection-handler", nil)
 	defer func() {
-		conn.Close()
+		_ = conn.Close()
 		s.mu.Lock()
 		delete(s.conns, conn)
 		delete(s.attached, conn)
@@ -226,7 +226,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 				Error:   fmt.Sprintf("decode request: %v", err),
 			}
 			writeMu.Lock()
-			encoder.Encode(resp)
+			_ = encoder.Encode(resp)
 			writeMu.Unlock()
 			return
 		}
@@ -287,20 +287,20 @@ func (s *Server) Stop() error {
 
 	// Close listener to unblock Accept
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
 	}
 
 	// Close all active connections
 	s.mu.Lock()
 	for conn := range s.conns {
-		conn.Close()
+		_ = conn.Close()
 	}
 	s.conns = make(map[net.Conn]struct{})
 	s.attached = make(map[net.Conn]*attachedClient)
 	s.mu.Unlock()
 
 	// Remove socket file
-	os.Remove(s.socketPath)
+	_ = os.Remove(s.socketPath)
 
 	slog.Info("daemon server stopped")
 
@@ -369,7 +369,7 @@ func (s *Server) Broadcast(event *StreamEvent) {
 
 		// Set write deadline to avoid blocking on slow/stuck clients
 		conn := conns[i]
-		conn.SetWriteDeadline(time.Now().Add(BroadcastTimeout))
+		_ = conn.SetWriteDeadline(time.Now().Add(BroadcastTimeout))
 
 		// Send event (with per-client lock to prevent interleaving)
 		client.mu.Lock()
@@ -381,7 +381,7 @@ func (s *Server) Broadcast(event *StreamEvent) {
 		client.mu.Unlock()
 
 		// Clear write deadline
-		conn.SetWriteDeadline(time.Time{})
+		_ = conn.SetWriteDeadline(time.Time{})
 	}
 }
 
