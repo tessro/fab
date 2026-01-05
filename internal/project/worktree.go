@@ -185,6 +185,7 @@ func (p *Project) resetWorktree(wtPath string) error {
 // - If a sync-branch exists, checkout issues.jsonl from there for latest issues
 // - Then create a local SQLite database from the JSONL
 // We skip hooks and merge driver since those are shared via the git directory.
+// We pass --prefix to ensure the worktree uses the same prefix as the original repo.
 func (p *Project) initBeads(wtPath string) error {
 	beadsDir := filepath.Join(wtPath, ".beads")
 
@@ -204,8 +205,16 @@ func (p *Project) initBeads(wtPath string) error {
 		_ = cmd.Run()
 	}
 
+	// Extract the issue prefix from existing issues to ensure worktree uses the same prefix.
+	// Without this, bd init would use the worktree directory name (e.g., "wt-003") as prefix,
+	// which breaks syncing with the original repo.
+	args := []string{"init", "--from-jsonl", "--quiet", "--skip-hooks", "--skip-merge-driver"}
+	if prefix := p.beadsIssuePrefix(wtPath); prefix != "" {
+		args = append(args, "--prefix", prefix)
+	}
+
 	// Run bd init to create the local database from the JSONL
-	cmd := exec.Command("bd", "init", "--from-jsonl", "--quiet", "--skip-hooks", "--skip-merge-driver")
+	cmd := exec.Command("bd", args...)
 	cmd.Dir = wtPath
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("bd init: %w\n%s", err, output)
@@ -229,6 +238,59 @@ func (p *Project) beadsSyncBranch(wtPath string) string {
 				return val
 			}
 		}
+	}
+	return ""
+}
+
+// beadsIssuePrefix extracts the issue prefix from issues.jsonl by looking at existing IDs.
+// Returns empty string if no prefix can be determined.
+func (p *Project) beadsIssuePrefix(wtPath string) string {
+	jsonlPath := filepath.Join(wtPath, ".beads", "issues.jsonl")
+	data, err := os.ReadFile(jsonlPath)
+	if err != nil {
+		return ""
+	}
+
+	// Find first line with an "id" field and extract prefix
+	// Format: {"id":"FAB-xxx",...} or {"id":"fa-xxx",...}
+	for _, line := range splitLines(string(data)) {
+		if prefix := extractPrefixFromJSONL(line); prefix != "" {
+			return prefix
+		}
+	}
+	return ""
+}
+
+// extractPrefixFromJSONL extracts the issue prefix from a JSONL line.
+// Looks for "id":"PREFIX-xxx" pattern and returns PREFIX.
+func extractPrefixFromJSONL(line string) string {
+	// Look for "id":" pattern
+	const idKey = `"id":"`
+	idx := 0
+	for idx < len(line)-len(idKey) {
+		if line[idx:idx+len(idKey)] == idKey {
+			// Found "id":", now extract the value
+			valStart := idx + len(idKey)
+			valEnd := valStart
+			for valEnd < len(line) && line[valEnd] != '"' {
+				valEnd++
+			}
+			if valEnd > valStart {
+				id := line[valStart:valEnd]
+				// Find the last dash to split prefix from short ID
+				lastDash := -1
+				for i := len(id) - 1; i >= 0; i-- {
+					if id[i] == '-' {
+						lastDash = i
+						break
+					}
+				}
+				if lastDash > 0 {
+					return id[:lastDash]
+				}
+			}
+		}
+		idx++
 	}
 	return ""
 }
