@@ -33,9 +33,10 @@ const (
 	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
 	// TUI streaming
-	MsgAttach           MessageType = "attach"              // Subscribe to agent output streams
-	MsgDetach           MessageType = "detach"              // Unsubscribe from streams
-	MsgAgentSendMessage MessageType = "agent.send_message"
+	MsgAttach             MessageType = "attach"               // Subscribe to agent output streams
+	MsgDetach             MessageType = "detach"               // Unsubscribe from streams
+	MsgAgentSendMessage   MessageType = "agent.send_message"
+	MsgAgentChatHistory   MessageType = "agent.chat_history"   // Get chat history for an agent
 
 	// Orchestrator (agent signals and staged actions)
 	MsgAgentDone         MessageType = "agent.done"           // Agent signals task completion
@@ -223,6 +224,18 @@ type AgentOutputResponse struct {
 // AttachRequest is the payload for attach requests.
 type AttachRequest struct {
 	Projects []string `json:"projects,omitempty"` // Filter by projects, empty = all
+}
+
+// AgentChatHistoryRequest is the payload for agent.chat_history requests.
+type AgentChatHistoryRequest struct {
+	ID    string `json:"id"`              // Agent ID
+	Limit int    `json:"limit,omitempty"` // Max entries to return (0 = all)
+}
+
+// AgentChatHistoryResponse is the payload for agent.chat_history responses.
+type AgentChatHistoryResponse struct {
+	AgentID string         `json:"agent_id"`
+	Entries []ChatEntryDTO `json:"entries"`
 }
 
 // StreamEvent is sent to attached clients when agent output occurs.

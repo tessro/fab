@@ -438,6 +438,27 @@ func (c *Client) AgentSendMessage(id, content string) error {
 	return nil
 }
 
+// AgentChatHistory retrieves the chat history for an agent.
+func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentChatHistory,
+		Payload: AgentChatHistoryRequest{ID: id, Limit: limit},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("agent chat history failed: %s", resp.Error)
+	}
+
+	var result AgentChatHistoryResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
 // ListStagedActions returns pending actions for user approval.
 func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, error) {
 	resp, err := c.Send(&Request{

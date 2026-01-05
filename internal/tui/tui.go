@@ -199,13 +199,16 @@ func (m Model) sendAgentMessage(agentID, content string) tea.Cmd {
 }
 
 // fetchAgentChatHistory retrieves chat history for an agent.
-// Currently returns empty entries since chat history streaming handles real-time updates.
 func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
 	return func() tea.Msg {
-		// Chat history is streamed in real-time via chat_entry events.
-		// When an agent is selected, any new messages will appear via the stream.
-		// TODO: Add agent.chat_history endpoint to fetch existing history on connect.
-		return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
+		if m.client == nil {
+			return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
+		}
+		resp, err := m.client.AgentChatHistory(agentID, 0) // 0 = all entries
+		if err != nil {
+			return AgentChatHistoryMsg{AgentID: agentID, Err: err}
+		}
+		return AgentChatHistoryMsg{AgentID: agentID, Entries: resp.Entries}
 	}
 }
 
