@@ -79,6 +79,7 @@ type Model struct {
 	agentList AgentList
 	chatView  ChatView
 	inputLine InputLine
+	helpBar   HelpBar
 
 	// Daemon client for IPC
 	client   *daemon.Client
@@ -104,6 +105,7 @@ func New() Model {
 		agentList: NewAgentList(),
 		chatView:  NewChatView(),
 		inputLine: NewInputLine(),
+		helpBar:   NewHelpBar(),
 		focus:     FocusAgentList,
 	}
 }
@@ -673,33 +675,11 @@ func (m Model) View() string {
 	// Header
 	header := m.header.View()
 
-	// Check for pending permission or action on selected agent
+	// Update help bar context
 	pendingPermission := m.pendingPermissionForAgent(m.chatView.AgentID())
 	pendingAction := m.pendingActionForAgent(m.chatView.AgentID())
-
-	// Status bar with context-sensitive help
-	var helpText string
-	switch m.focus {
-	case FocusAgentList:
-		if pendingPermission != nil {
-			helpText = "y: allow  n: deny  j/k: navigate  enter: view  q: quit"
-		} else if pendingAction != nil {
-			helpText = "y: approve  n: reject  j/k: navigate  enter: view  q: quit"
-		} else {
-			helpText = "j/k: navigate  enter: view chat  i: input  tab: switch pane  q: quit"
-		}
-	case FocusChatView:
-		if pendingPermission != nil {
-			helpText = "y: allow  n: deny  j/k: scroll  tab: switch pane  q: quit"
-		} else if pendingAction != nil {
-			helpText = "y: approve  n: reject  j/k: scroll  tab: switch pane  q: quit"
-		} else {
-			helpText = "j/k/pgup/pgdn: scroll  i: input  tab: switch pane  q: quit"
-		}
-	case FocusInputLine:
-		helpText = "enter: send  esc: cancel  tab: switch pane"
-	}
-	status := statusStyle.Width(m.width).Render(helpText)
+	m.helpBar.SetContext(m.focus, pendingPermission != nil, pendingAction != nil)
+	status := m.helpBar.View()
 
 	// Side-by-side layout: agent list (left) | chat view (right)
 	agentList := m.agentList.View()
@@ -725,6 +705,7 @@ func (m *Model) updateLayout() {
 
 	m.agentList.SetSize(listWidth, contentHeight)
 	m.chatView.SetSize(chatWidth, contentHeight)
+	m.helpBar.SetWidth(m.width)
 
 	// Input line sized to fit inside chat pane (accounting for border)
 	inputLineHeight := 1
