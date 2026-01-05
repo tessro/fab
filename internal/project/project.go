@@ -137,6 +137,35 @@ func (p *Project) ReleaseWorktreeByAgent(agentID string) error {
 	return ErrWorktreeNotFound
 }
 
+// ReturnWorktreeToPool releases a worktree and resets it to a clean state.
+// This performs cleanup immediately rather than lazily on next allocation.
+// Returns ErrWorktreeNotFound if no worktree is assigned to that agent.
+func (p *Project) ReturnWorktreeToPool(agentID string) error {
+	p.mu.Lock()
+
+	var wtPath string
+	for i := range p.Worktrees {
+		if p.Worktrees[i].AgentID == agentID {
+			wtPath = p.Worktrees[i].Path
+			p.Worktrees[i].InUse = false
+			p.Worktrees[i].AgentID = ""
+			break
+		}
+	}
+	p.mu.Unlock()
+
+	if wtPath == "" {
+		return ErrWorktreeNotFound
+	}
+
+	// Reset worktree to pristine state (origin/main) outside the lock.
+	// Ignore errors - worktree is already marked available, and reset
+	// will be retried on next allocation if needed.
+	_ = p.resetWorktreeUnlocked(wtPath)
+
+	return nil
+}
+
 // AvailableWorktreeCount returns the number of available worktrees.
 func (p *Project) AvailableWorktreeCount() int {
 	p.mu.RLock()

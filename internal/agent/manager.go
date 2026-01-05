@@ -253,7 +253,8 @@ func (m *Manager) Delete(id string) error {
 	delete(m.agents, id)
 
 	// Remove from project list
-	if agent.Project != nil {
+	proj := agent.Project
+	if proj != nil {
 		agents := m.projects[projectName]
 		for i, a := range agents {
 			if a.ID == id {
@@ -261,12 +262,14 @@ func (m *Manager) Delete(id string) error {
 				break
 			}
 		}
-
-		// Release worktree
-		_ = agent.Project.ReleaseWorktreeByAgent(id)
 	}
 
 	m.mu.Unlock()
+
+	// Return worktree to pool (resets it to clean state)
+	if proj != nil {
+		_ = proj.ReturnWorktreeToPool(id)
+	}
 
 	slog.Info("agent deleted", "agent", id, "project", projectName)
 
