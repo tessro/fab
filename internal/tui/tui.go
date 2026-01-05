@@ -428,6 +428,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveDown()
+				if cmd := m.selectCurrentAgent(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollDown(1)
 			}
@@ -436,6 +439,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveUp()
+				if cmd := m.selectCurrentAgent(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollUp(1)
 			}
@@ -444,6 +450,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToTop()
+				if cmd := m.selectCurrentAgent(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollToTop()
 			}
@@ -452,6 +461,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case FocusAgentList:
 				m.agentList.MoveToBottom()
+				if cmd := m.selectCurrentAgent(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case FocusChatView:
 				m.chatView.ScrollToBottom()
 			}
@@ -668,6 +680,19 @@ func (m *Model) pendingActionForAgent(agentID string) *daemon.StagedAction {
 		}
 	}
 	return nil
+}
+
+// selectCurrentAgent updates the chat view with the currently selected agent
+// and returns a command to fetch its chat history.
+func (m *Model) selectCurrentAgent() tea.Cmd {
+	agent := m.agentList.Selected()
+	if agent == nil {
+		return nil
+	}
+	m.chatView.SetAgent(agent.ID, agent.Project)
+	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
+	m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
+	return m.fetchAgentChatHistory(agent.ID)
 }
 
 // View implements tea.Model.
