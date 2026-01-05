@@ -8,6 +8,45 @@ import (
 	"testing"
 )
 
+func TestRewritePattern(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		cwd     string
+		want    string
+	}{
+		// Worktree-scoped patterns (/ → cwd/)
+		{"worktree root", "/:*", "/home/user/project", "/home/user/project/:*"},
+		{"worktree subdir", "/src/:*", "/home/user/project", "/home/user/project/src/:*"},
+		{"worktree exact", "/file.txt", "/home/user/project", "/home/user/project/file.txt"},
+
+		// Absolute path patterns (// → /)
+		{"absolute root", "//:*", "/home/user/project", "/:*"},
+		{"absolute path", "//etc/passwd", "/home/user/project", "/etc/passwd"},
+		{"absolute subdir", "//tmp/:*", "/home/user/project", "/tmp/:*"},
+
+		// Pass-through patterns (no / prefix)
+		{"command pattern", "git :*", "/home/user/project", "git :*"},
+		{"url pattern", "https://example.com:*", "/home/user/project", "https://example.com:*"},
+		{"empty pattern", "", "/home/user/project", ""},
+		{"wildcard pattern", ":*", "/home/user/project", ":*"},
+
+		// Edge cases
+		{"worktree with empty cwd", "/:*", "", "/:*"},
+		{"single slash", "/", "/home/user/project", "/home/user/project/"},
+		{"double slash only", "//", "/home/user/project", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RewritePattern(tt.pattern, tt.cwd)
+			if got != tt.want {
+				t.Errorf("RewritePattern(%q, %q) = %q, want %q", tt.pattern, tt.cwd, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchPattern(t *testing.T) {
 	tests := []struct {
 		name    string

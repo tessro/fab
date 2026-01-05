@@ -14,6 +14,31 @@ const (
 	DefaultScriptTimeout = 5 * time.Second
 )
 
+// RewritePattern rewrites path patterns based on prefix:
+//   - "/path" → "<cwd>/path" (worktree-scoped)
+//   - "//path" → "/path" (absolute path, strip one /)
+//   - other patterns pass through unchanged
+//
+// This allows rules like pattern = "/:*" to match files within the
+// current working directory while pattern = "//:*" matches absolute paths.
+func RewritePattern(pattern, cwd string) string {
+	if len(pattern) == 0 {
+		return pattern
+	}
+
+	// Check for absolute path escape (// → /)
+	if strings.HasPrefix(pattern, "//") {
+		return pattern[1:] // Strip one leading /
+	}
+
+	// Check for worktree-scoped path (/ → cwd/)
+	if strings.HasPrefix(pattern, "/") && cwd != "" {
+		return cwd + pattern
+	}
+
+	return pattern
+}
+
 // MatchPattern checks if value matches the pattern.
 // If pattern ends with ":*", it's a prefix match.
 // Otherwise, it's an exact match.

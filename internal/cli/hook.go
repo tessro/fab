@@ -102,7 +102,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	action, matched, err := evaluator.Evaluate(ctx, projectName, hookInput.ToolName, hookInput.ToolInput)
+	action, matched, err := evaluator.Evaluate(ctx, projectName, hookInput.ToolName, hookInput.ToolInput, hookInput.Cwd)
 	if err != nil {
 		slog.Debug("rule evaluation error", "error", err)
 	} else if matched {

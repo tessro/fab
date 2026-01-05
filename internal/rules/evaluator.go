@@ -34,8 +34,9 @@ func NewEvaluator() *Evaluator {
 
 // Evaluate checks permission rules for a tool invocation.
 // projectName is optional; if empty, only global rules are checked.
+// cwd is the working directory for pattern rewriting (/ → cwd-scoped, // → absolute).
 // Returns (effect, matched, error) where matched indicates if any rule applied.
-func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, toolInput json.RawMessage) (Action, bool, error) {
+func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, toolInput json.RawMessage, cwd string) (Action, bool, error) {
 	// Load rules: project first, then global
 	var allRules []Rule
 
@@ -72,7 +73,9 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 
 	// Evaluate rules in order
 	primaryField := ResolvePrimaryField(toolName, toolInput)
-	slog.Debug("evaluating rules", "tool", toolName, "primaryField", primaryField, "ruleCount", len(allRules))
+	matchString := toolName + ":" + primaryField
+	slog.Info("tool use request", "match_string", matchString)
+	slog.Debug("evaluating rules", "tool", toolName, "primaryField", primaryField, "ruleCount", len(allRules), "cwd", cwd)
 
 	for _, rule := range allRules {
 		// Check if rule applies to this tool
@@ -95,12 +98,14 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 			// Script returned pass, continue to next rule
 			continue
 		} else if rule.Pattern != "" {
-			// Single pattern matcher
-			matched = MatchPattern(rule.Pattern, primaryField)
+			// Single pattern matcher - rewrite pattern with cwd
+			rewritten := RewritePattern(rule.Pattern, cwd)
+			matched = MatchPattern(rewritten, primaryField)
 		} else if len(rule.Patterns) > 0 {
 			// Multiple patterns - any match counts
 			for _, p := range rule.Patterns {
-				if MatchPattern(p, primaryField) {
+				rewritten := RewritePattern(p, cwd)
+				if MatchPattern(rewritten, primaryField) {
 					matched = true
 					break
 				}

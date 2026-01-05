@@ -9,6 +9,10 @@
 #   - "prefix:*" matches values starting with "prefix"
 #   - Exact string for exact match
 #
+# Path pattern prefixes (for file_path patterns):
+#   - "/path:*"  → worktree-scoped (rewritten to "<cwd>/path:*")
+#   - "//path:*" → absolute path (rewritten to "/path:*")
+#
 # Primary fields by tool:
 #   Bash: command | Read/Write/Edit: file_path | Glob/Grep: pattern
 #   WebFetch: url | WebSearch: query | Skill: skill | Task: prompt
@@ -54,6 +58,22 @@ action = "allow"
 [[rules]]
 tool = "Read"
 action = "allow"
+
+# =============================================================================
+# WORKTREE-SCOPED FILE OPERATIONS
+# =============================================================================
+
+# Allow writes within the current working directory (worktree)
+[[rules]]
+tool = "Write"
+action = "allow"
+pattern = "/:*"
+
+# Allow edits within the current working directory (worktree)
+[[rules]]
+tool = "Edit"
+action = "allow"
+pattern = "/:*"
 
 # =============================================================================
 # WEB - Read-only internet access
@@ -125,14 +145,20 @@ action = "allow"
 pattern = "beads::*"
 
 # =============================================================================
-# EXAMPLES: Add project-specific rules in ~/.fab/projects/<name>/permissions.toml
+# EXAMPLES
 # =============================================================================
 #
-# # Allow writes within project directory
+# # Allow writes to a specific absolute path (note: // for absolute)
 # [[rules]]
 # tool = "Write"
 # action = "allow"
-# pattern = "/path/to/project/:*"
+# pattern = "//tmp/:*"
+#
+# # Deny writes outside worktree (put before the /:* rule)
+# [[rules]]
+# tool = "Write"
+# action = "deny"
+# pattern = "//../:*"
 #
 # # Allow npm/pnpm commands
 # [[rules]]
