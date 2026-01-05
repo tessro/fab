@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
@@ -221,6 +223,13 @@ func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
 
 // HandleAgentDone handles an agent signaling task completion.
 func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) error {
+	// Push the agent's branch before cleanup (if it has commits)
+	if branchName, pushed, err := o.project.PushAgentBranch(agentID); err != nil {
+		slog.Warn("failed to push agent branch", "agent", agentID, "error", err)
+	} else if pushed {
+		slog.Info("pushed agent branch", "agent", agentID, "branch", branchName)
+	}
+
 	// Stop and delete the agent
 	_ = o.agents.Stop(agentID) // Continue anyway to clean up
 

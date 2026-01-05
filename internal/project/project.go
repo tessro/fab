@@ -79,6 +79,11 @@ func (p *Project) GetAvailableWorktree(agentID string) (*Worktree, error) {
 				// Skip this worktree if recreation fails, try next
 				continue
 			}
+			// Reset worktree to pristine state (origin/main)
+			// Log errors but don't fail - agent can still work with non-pristine state
+			_ = p.resetWorktree(p.Worktrees[i].Path)
+			// Create a branch for this agent's work
+			_ = p.createAgentBranch(p.Worktrees[i].Path, agentID)
 			p.Worktrees[i].InUse = true
 			p.Worktrees[i].AgentID = agentID
 			return &p.Worktrees[i], nil

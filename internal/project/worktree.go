@@ -138,6 +138,111 @@ func (p *Project) ensureWorktreeExists(wtPath string) error {
 	return nil
 }
 
+// resetWorktree resets a worktree to origin/main with a clean working directory.
+// Must be called with lock held.
+func (p *Project) resetWorktree(wtPath string) error {
+	// Verify the project path is a valid git repository
+	gitDir := filepath.Join(p.Path, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil // Not a git repo - skip (likely a test scenario)
+	}
+
+	// Fetch latest from origin (run in project root - worktrees share refs)
+	fetchCmd := exec.Command("git", "fetch", "origin")
+	fetchCmd.Dir = p.Path
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("fetch origin: %w\n%s", err, output)
+	}
+
+	// Reset worktree to origin/main
+	resetCmd := exec.Command("git", "reset", "--hard", "origin/main")
+	resetCmd.Dir = wtPath
+	if output, err := resetCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("reset to origin/main: %w\n%s", err, output)
+	}
+
+	// Clean untracked files and directories
+	cleanCmd := exec.Command("git", "clean", "-fd")
+	cleanCmd.Dir = wtPath
+	if output, err := cleanCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("clean untracked files: %w\n%s", err, output)
+	}
+
+	return nil
+}
+
+// createAgentBranch creates and checks out a branch for an agent's work.
+// Must be called with lock held.
+func (p *Project) createAgentBranch(wtPath, agentID string) error {
+	// Verify the project path is a valid git repository
+	gitDir := filepath.Join(p.Path, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil // Not a git repo - skip (likely a test scenario)
+	}
+
+	branchName := "fab/" + agentID
+
+	// Create and checkout the branch
+	cmd := exec.Command("git", "checkout", "-b", branchName)
+	cmd.Dir = wtPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create branch %s: %w\n%s", branchName, err, output)
+	}
+
+	return nil
+}
+
+// PushAgentBranch pushes the agent's branch to origin if it has commits.
+// Returns the branch name and whether it was pushed.
+func (p *Project) PushAgentBranch(agentID string) (branchName string, pushed bool, err error) {
+	p.mu.RLock()
+	var wtPath string
+	for _, wt := range p.Worktrees {
+		if wt.AgentID == agentID {
+			wtPath = wt.Path
+			break
+		}
+	}
+	p.mu.RUnlock()
+
+	if wtPath == "" {
+		return "", false, ErrWorktreeNotFound
+	}
+
+	// Verify the project path is a valid git repository
+	gitDir := filepath.Join(p.Path, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return "", false, nil // Not a git repo - skip
+	}
+
+	branchName = "fab/" + agentID
+
+	// Check if we have any commits ahead of origin/main
+	countCmd := exec.Command("git", "rev-list", "--count", "origin/main..HEAD")
+	countCmd.Dir = wtPath
+	output, err := countCmd.Output()
+	if err != nil {
+		// If this fails, assume no commits
+		return branchName, false, nil
+	}
+
+	// Trim whitespace and check count
+	count := string(output)
+	if len(count) > 0 && count[0] == '0' {
+		// No commits ahead of origin/main
+		return branchName, false, nil
+	}
+
+	// Push the branch to origin
+	pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
+	pushCmd.Dir = wtPath
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return branchName, false, fmt.Errorf("push branch: %w\n%s", err, output)
+	}
+
+	return branchName, true, nil
+}
+
 // cleanupWorktrees removes all worktrees.
 //
 // +checklocks:p.mu
