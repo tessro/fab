@@ -3,11 +3,24 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/tessro/fab/internal/daemon"
 )
+
+// shortTempDir creates a temp directory with a short path for socket tests.
+// Unix sockets have a path limit (~104 chars on macOS), and t.TempDir()
+// includes the full test name which can exceed this limit.
+func shortTempDir(t *testing.T) (string, func()) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "fab-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	return dir, func() { os.RemoveAll(dir) }
+}
 
 func TestNewClient(t *testing.T) {
 	// Reset socket path after test
@@ -46,7 +59,8 @@ func TestConnectClient(t *testing.T) {
 	})
 
 	t.Run("connects to running daemon", func(t *testing.T) {
-		tmpDir := t.TempDir()
+		tmpDir, cleanup := shortTempDir(t)
+		defer cleanup()
 		sockPath := filepath.Join(tmpDir, "test.sock")
 
 		handler := daemon.HandlerFunc(func(ctx context.Context, req *daemon.Request) *daemon.Response {
@@ -84,7 +98,8 @@ func TestIsDaemonRunning(t *testing.T) {
 	})
 
 	t.Run("returns true when daemon running", func(t *testing.T) {
-		tmpDir := t.TempDir()
+		tmpDir, cleanup := shortTempDir(t)
+		defer cleanup()
 		sockPath := filepath.Join(tmpDir, "test.sock")
 
 		handler := daemon.HandlerFunc(func(ctx context.Context, req *daemon.Request) *daemon.Response {

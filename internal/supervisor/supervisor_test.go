@@ -273,7 +273,10 @@ func TestSupervisor_HandleProjectRemove(t *testing.T) {
 			"name":       "remove-test",
 		},
 	}
-	sup.Handle(context.Background(), addReq)
+	addResp := sup.Handle(context.Background(), addReq)
+	if !addResp.Success {
+		t.Fatalf("failed to add project: %s", addResp.Error)
+	}
 
 	// Remove the project
 	req := &daemon.Request{

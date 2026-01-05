@@ -32,7 +32,7 @@ func TestClaimRegistry_Claim(t *testing.T) {
 func TestClaimRegistry_Release(t *testing.T) {
 	r := NewClaimRegistry()
 
-	r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-1", "agent-1")
 	r.Release("TICKET-1")
 
 	// After release, another agent can claim
@@ -44,9 +44,9 @@ func TestClaimRegistry_Release(t *testing.T) {
 func TestClaimRegistry_ReleaseByAgent(t *testing.T) {
 	r := NewClaimRegistry()
 
-	r.Claim("TICKET-1", "agent-1")
-	r.Claim("TICKET-2", "agent-1")
-	r.Claim("TICKET-3", "agent-2")
+	_ = r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-2", "agent-1")
+	_ = r.Claim("TICKET-3", "agent-2")
 
 	released := r.ReleaseByAgent("agent-1")
 	if released != 2 {
@@ -71,7 +71,7 @@ func TestClaimRegistry_ReleaseByAgent(t *testing.T) {
 func TestClaimRegistry_ClaimedBy(t *testing.T) {
 	r := NewClaimRegistry()
 
-	r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-1", "agent-1")
 
 	if got := r.ClaimedBy("TICKET-1"); got != "agent-1" {
 		t.Errorf("expected agent-1, got %s", got)
@@ -84,7 +84,7 @@ func TestClaimRegistry_ClaimedBy(t *testing.T) {
 func TestClaimRegistry_IsClaimed(t *testing.T) {
 	r := NewClaimRegistry()
 
-	r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-1", "agent-1")
 
 	if !r.IsClaimed("TICKET-1") {
 		t.Error("expected TICKET-1 to be claimed")
@@ -97,8 +97,8 @@ func TestClaimRegistry_IsClaimed(t *testing.T) {
 func TestClaimRegistry_List(t *testing.T) {
 	r := NewClaimRegistry()
 
-	r.Claim("TICKET-1", "agent-1")
-	r.Claim("TICKET-2", "agent-2")
+	_ = r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-2", "agent-2")
 
 	claims := r.List()
 	if len(claims) != 2 {
@@ -125,8 +125,8 @@ func TestClaimRegistry_Count(t *testing.T) {
 		t.Errorf("expected 0 claims, got %d", r.Count())
 	}
 
-	r.Claim("TICKET-1", "agent-1")
-	r.Claim("TICKET-2", "agent-2")
+	_ = r.Claim("TICKET-1", "agent-1")
+	_ = r.Claim("TICKET-2", "agent-2")
 
 	if r.Count() != 2 {
 		t.Errorf("expected 2 claims, got %d", r.Count())

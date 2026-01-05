@@ -10,8 +10,21 @@ import (
 	"time"
 )
 
+// shortTempDir creates a temp directory with a short path for socket tests.
+// Unix sockets have a path limit (~104 chars on macOS), and t.TempDir()
+// includes the full test name which can exceed this limit.
+func shortTempDir(t *testing.T) (string, func()) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "fab-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	return dir, func() { os.RemoveAll(dir) }
+}
+
 func TestServer_StartStop(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -47,7 +60,8 @@ func TestServer_StartStop(t *testing.T) {
 }
 
 func TestServer_RequestResponse(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -107,7 +121,8 @@ func TestServer_RequestResponse(t *testing.T) {
 }
 
 func TestServer_DoubleStart(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -127,7 +142,8 @@ func TestServer_DoubleStart(t *testing.T) {
 }
 
 func TestServer_ContextContainsConnAndServer(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	var gotConn net.Conn
@@ -172,7 +188,8 @@ func TestServer_ContextContainsConnAndServer(t *testing.T) {
 }
 
 func TestServer_AttachBroadcast(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -241,7 +258,8 @@ func TestServer_AttachBroadcast(t *testing.T) {
 }
 
 func TestServer_AttachWithProjectFilter(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortTempDir(t)
+	defer cleanup()
 	socketPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
