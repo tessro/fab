@@ -3,10 +3,23 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// shortTempDir creates a temp directory with a short path for socket tests.
+// Unix sockets have a path limit (~104 chars on macOS), and t.TempDir()
+// includes the full test name which can exceed this limit.
+func shortClientTempDir(t *testing.T) (string, func()) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "fab-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	return dir, func() { os.RemoveAll(dir) }
+}
 
 func TestNewClient(t *testing.T) {
 	t.Run("with explicit path", func(t *testing.T) {
@@ -25,7 +38,8 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClient_ConnectClose(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	// Start a server
@@ -90,7 +104,8 @@ func TestClient_SendWithoutConnect(t *testing.T) {
 }
 
 func TestClient_Ping(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -134,7 +149,8 @@ func TestClient_Ping(t *testing.T) {
 }
 
 func TestClient_Status(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -185,7 +201,8 @@ func TestClient_Status(t *testing.T) {
 }
 
 func TestClient_StartStop(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	var lastStart, lastStop string
@@ -235,7 +252,8 @@ func TestClient_StartStop(t *testing.T) {
 }
 
 func TestClient_ProjectOperations(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -316,7 +334,8 @@ func TestClient_ProjectOperations(t *testing.T) {
 }
 
 func TestClient_AgentOperations(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -394,7 +413,8 @@ func TestClient_AgentOperations(t *testing.T) {
 }
 
 func TestClient_AttachDetach(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -457,7 +477,8 @@ func TestClient_AttachDetach(t *testing.T) {
 }
 
 func TestClient_RecvEvent(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
@@ -514,7 +535,8 @@ func TestClient_RecvEvent(t *testing.T) {
 }
 
 func TestClient_Shutdown(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	shutdownCalled := false
@@ -548,7 +570,8 @@ func TestClient_Shutdown(t *testing.T) {
 }
 
 func TestClient_ErrorResponses(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir, cleanup := shortClientTempDir(t)
+	defer cleanup()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
