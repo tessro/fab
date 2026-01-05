@@ -192,7 +192,8 @@ func (p *Project) createAgentBranch(wtPath, agentID string) error {
 	return nil
 }
 
-// PushAgentBranch pushes the agent's branch to origin if it has commits.
+// PushAgentBranch rebases the agent's branch onto origin/main and pushes if it has commits.
+// If rebase fails due to conflicts, pushes the branch as-is (conflicts visible in PR).
 // Returns the branch name and whether it was pushed.
 func (p *Project) PushAgentBranch(agentID string) (branchName string, pushed bool, err error) {
 	p.mu.RLock()
@@ -217,6 +218,11 @@ func (p *Project) PushAgentBranch(agentID string) (branchName string, pushed boo
 
 	branchName = "fab/" + agentID
 
+	// Fetch latest from origin
+	fetchCmd := exec.Command("git", "fetch", "origin")
+	fetchCmd.Dir = p.Path
+	_ = fetchCmd.Run() // Ignore fetch errors, try to push anyway
+
 	// Check if we have any commits ahead of origin/main
 	countCmd := exec.Command("git", "rev-list", "--count", "origin/main..HEAD")
 	countCmd.Dir = wtPath
@@ -231,6 +237,16 @@ func (p *Project) PushAgentBranch(agentID string) (branchName string, pushed boo
 	if len(count) > 0 && count[0] == '0' {
 		// No commits ahead of origin/main
 		return branchName, false, nil
+	}
+
+	// Try to rebase onto origin/main for clean history
+	rebaseCmd := exec.Command("git", "rebase", "origin/main")
+	rebaseCmd.Dir = wtPath
+	if err := rebaseCmd.Run(); err != nil {
+		// Rebase failed (likely conflicts) - abort and push as-is
+		abortCmd := exec.Command("git", "rebase", "--abort")
+		abortCmd.Dir = wtPath
+		_ = abortCmd.Run()
 	}
 
 	// Push the branch to origin
