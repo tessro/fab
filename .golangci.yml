@@ -9,6 +9,10 @@ linters:
     - unused
     - errcheck
 
+  exclusions:
+    presets:
+      - std-error-handling
+
 # Run checklocks separately via:
 #   go install gvisor.dev/gvisor/tools/checklocks/cmd/checklocks@latest
 #   go vet -vettool=$(which checklocks) ./...
