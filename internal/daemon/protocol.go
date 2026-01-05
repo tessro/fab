@@ -48,6 +48,10 @@ const (
 	MsgPermissionRequest MessageType = "permission.request" // Hook requests permission decision
 	MsgPermissionRespond MessageType = "permission.respond" // TUI responds to permission request
 	MsgPermissionList    MessageType = "permission.list"    // List pending permission requests
+
+	// Ticket claims (prevent duplicate work across agents)
+	MsgAgentClaim MessageType = "agent.claim" // Claim a ticket for an agent
+	MsgClaimList  MessageType = "claim.list"  // List all active claims
 )
 
 // Request is the envelope for all IPC requests.
@@ -360,4 +364,27 @@ type PermissionListRequest struct {
 // PermissionListResponse is the payload for permission.list responses.
 type PermissionListResponse struct {
 	Requests []PermissionRequest `json:"requests"`
+}
+
+// AgentClaimRequest is the payload for agent.claim requests.
+type AgentClaimRequest struct {
+	AgentID  string `json:"agent_id"`  // Agent ID (from FAB_AGENT_ID env)
+	TicketID string `json:"ticket_id"` // Ticket to claim
+}
+
+// ClaimListRequest is the payload for claim.list requests.
+type ClaimListRequest struct {
+	Project string `json:"project,omitempty"` // Filter by project, empty = all
+}
+
+// ClaimListResponse is the payload for claim.list responses.
+type ClaimListResponse struct {
+	Claims []ClaimInfo `json:"claims"`
+}
+
+// ClaimInfo describes a single ticket claim.
+type ClaimInfo struct {
+	TicketID string `json:"ticket_id"`
+	AgentID  string `json:"agent_id"`
+	Project  string `json:"project"`
 }

@@ -77,6 +77,33 @@ var (
 	doneTaskID   string
 )
 
+var agentClaimCmd = &cobra.Command{
+	Use:   "claim <ticket-id>",
+	Short: "Claim a ticket for this agent",
+	Long:  "Claim a ticket to prevent other agents from working on it. Uses FAB_AGENT_ID env var.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runAgentClaim,
+}
+
+func runAgentClaim(cmd *cobra.Command, args []string) error {
+	agentID := os.Getenv("FAB_AGENT_ID")
+	if agentID == "" {
+		return fmt.Errorf("FAB_AGENT_ID environment variable not set")
+	}
+
+	ticketID := args[0]
+
+	client := MustConnect()
+	defer client.Close()
+
+	if err := client.AgentClaim(agentID, ticketID); err != nil {
+		return fmt.Errorf("claim failed: %w", err)
+	}
+
+	fmt.Printf("🚌 Claimed %s\n", ticketID)
+	return nil
+}
+
 var agentDoneCmd = &cobra.Command{
 	Use:   "done",
 	Short: "Signal that the agent has completed its task",
@@ -127,6 +154,8 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 func init() {
 	agentListCmd.Flags().StringVarP(&agentListProject, "project", "p", "", "Filter by project name")
 	agentCmd.AddCommand(agentListCmd)
+
+	agentCmd.AddCommand(agentClaimCmd)
 
 	agentDoneCmd.Flags().StringVar(&doneErrorMsg, "error", "", "Error message if task failed")
 	agentDoneCmd.Flags().StringVar(&doneTaskID, "task", "", "Task ID that was completed")

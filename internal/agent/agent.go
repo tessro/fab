@@ -709,6 +709,11 @@ type ReadLoopConfig struct {
 	// OnError is called when a read/parse error occurs (other than EOF).
 	// If nil, errors are silently ignored.
 	OnError func(err error)
+
+	// OnExit is called when the process exits (clean or crash).
+	// The callback receives nil for clean exit, non-nil error for crash.
+	// This is useful for releasing resources when an agent terminates unexpectedly.
+	OnExit func(err error)
 }
 
 // DefaultReadLoopConfig returns the default read loop configuration.
@@ -893,8 +898,9 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 	}
 
 	// Stdout closed - wait for process and check exit status
+	var exitErr error
 	if a.IsActive() {
-		exitErr := a.waitForProcess()
+		exitErr = a.waitForProcess()
 		if exitErr != nil {
 			// Non-zero exit or signal - this is an error
 			a.setExitError(exitErr)
@@ -903,6 +909,11 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			// Clean exit (exit code 0)
 			_ = a.MarkDone()
 		}
+	}
+
+	// Notify of process exit (for cleanup like releasing claims)
+	if cfg.OnExit != nil {
+		cfg.OnExit(exitErr)
 	}
 }
 

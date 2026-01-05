@@ -32,7 +32,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		DefaultAgentMode: agent.DefaultMode,
-		KickstartPrompt: `Run 'tk ready' to find a task, then work on it.
+		KickstartPrompt: `Run 'tk ready' to find available tasks.
+Pick one and run 'fab agent claim <id>' to claim it.
+If already claimed, pick another from the list.
 When done, run all quality gates and commit your work.
 Close the task with 'tk close <id>', then run 'fab agent done'.`,
 	}
@@ -46,6 +48,9 @@ type Orchestrator struct {
 
 	// Action queue for manual mode
 	actions *ActionQueue
+
+	// Ticket claim registry to prevent duplicate work
+	claims *ClaimRegistry
 
 	// Lifecycle management (channels are goroutine-safe: created in Start, closed to signal)
 	stopCh chan struct{}
@@ -63,7 +68,13 @@ func New(proj *project.Project, agents *agent.Manager, cfg Config) *Orchestrator
 		config:  cfg,
 		agents:  agents,
 		actions: NewActionQueue(),
+		claims:  NewClaimRegistry(),
 	}
+}
+
+// Claims returns the ticket claim registry.
+func (o *Orchestrator) Claims() *ClaimRegistry {
+	return o.claims
 }
 
 // Project returns the orchestrator's project.
@@ -253,10 +264,17 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 			return result, err
 		}
 
+		// Release claims AFTER successful merge and cleanup
+		released := o.claims.ReleaseByAgent(agentID)
+		if released > 0 {
+			slog.Debug("released ticket claims after merge", "agent", agentID, "count", released)
+		}
+
 		// Spawn a replacement agent
 		o.spawnAgentsToCapacity()
 	} else {
 		// Merge conflict - rebase worktree onto latest main
+		// Do NOT release claims - agent must fix conflicts
 		result.MergeError = mergeResult.Error.Error()
 
 		if err := o.project.RebaseWorktreeOnMain(agentID); err != nil {

@@ -423,6 +423,46 @@ func (c *Client) AgentDone(agentID, taskID, errorMsg string) error {
 	return nil
 }
 
+// AgentClaim claims a ticket for an agent to prevent duplicate work.
+// Returns an error if the ticket is already claimed by another agent.
+func (c *Client) AgentClaim(agentID, ticketID string) error {
+	resp, err := c.Send(&Request{
+		Type: MsgAgentClaim,
+		Payload: AgentClaimRequest{
+			AgentID:  agentID,
+			TicketID: ticketID,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
+// ClaimList returns all active ticket claims.
+func (c *Client) ClaimList(project string) (*ClaimListResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgClaimList,
+		Payload: ClaimListRequest{Project: project},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("claim list failed: %s", resp.Error)
+	}
+
+	var result ClaimListResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
 // AgentSendMessage sends a user message to an agent via stream-json.
 func (c *Client) AgentSendMessage(id, content string) error {
 	resp, err := c.Send(&Request{
