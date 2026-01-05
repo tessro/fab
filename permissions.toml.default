@@ -125,14 +125,16 @@ patterns = [
     "git describe:*",
     # File listing
     "ls:*",
+    "tree:*",
     # Beads issue tracker (local files only)
     "bd:*",
     # Safe text utilities
+    "cat:*",
+    "diff:*",
+    "grep:*",
     "head:*",
     "tail:*",
     "wc:*",
-    "diff:*",
-    "cat:*",
 ]
 
 # =============================================================================
