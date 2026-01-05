@@ -32,9 +32,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		DefaultAgentMode: agent.DefaultMode,
-		KickstartPrompt: `Run 'bd ready' to find a task, then work on it.
+		KickstartPrompt: `Run 'tk ready' to find a task, then work on it.
 When done, run all quality gates and push your work.
-Close the task with 'bd close <id>', then run 'fab agent done'.`,
+Close the task with 'tk close <id>', then run 'fab agent done'.`,
 	}
 }
 

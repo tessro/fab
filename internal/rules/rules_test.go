@@ -63,7 +63,7 @@ func TestMatchPattern(t *testing.T) {
 		{"prefix match success", "git :*", "git status", true},
 		{"prefix match with space", "git :*", "git commit -m 'test'", true},
 		{"prefix match exact prefix", "git:*", "git", true},
-		{"prefix match no space", "bd:*", "bd ready", true},
+		{"prefix match no space", "tk:*", "tk ready", true},
 		{"prefix match no space 2", "git:*", "git status", true},
 		{"prefix match failure", "git :*", "cargo build", false},
 		{"prefix match partial failure", "git :*", "gitignore", false},
@@ -387,7 +387,7 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 	// Create a mock evaluator that we can test directly
 	// by building rules and testing the evaluation logic
 	rules := []Rule{
-		{Tool: "Bash", Action: ActionAllow, Patterns: []string{"bd:*", "git:*"}},
+		{Tool: "Bash", Action: ActionAllow, Patterns: []string{"tk:*", "git:*"}},
 	}
 
 	tests := []struct {
@@ -397,8 +397,8 @@ func TestEvaluatorWithPatterns(t *testing.T) {
 		wantAction Action
 		wantMatch  bool
 	}{
-		{"bd ready matches", "Bash", `{"command":"bd ready"}`, ActionAllow, true},
-		{"bd list matches", "Bash", `{"command":"bd list"}`, ActionAllow, true},
+		{"tk ready matches", "Bash", `{"command":"tk ready"}`, ActionAllow, true},
+		{"tk list matches", "Bash", `{"command":"tk list"}`, ActionAllow, true},
 		{"git status matches", "Bash", `{"command":"git status"}`, ActionAllow, true},
 		{"other command no match", "Bash", `{"command":"cargo build"}`, ActionPass, false},
 	}

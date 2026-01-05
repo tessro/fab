@@ -23,7 +23,7 @@ handleStart() ──► Orchestrator.Start()
        │      │                       │
        │      ▼                       ▼
        │  Send kickstart         Delete agent
-       │  (agent runs bd)        (reclaim worktree)
+       │  (agent runs tk)        (reclaim worktree)
        │
 handleStop() ──► Orchestrator.Stop()
 ```
@@ -47,8 +47,8 @@ Actions that require confirmation (all are inputs to Claude Code):
 
 1. Orchestrator creates agent with available worktree
 2. Sends kickstart prompt (in manual mode, staged for approval)
-3. Agent runs `bd ready` to find a task
-4. Agent works on task, calls `bd update`, `bd close`
+3. Agent runs `tk ready` to find a task
+4. Agent works on task, calls `tk update`, `tk close`
 5. Agent calls `fab agent done` to signal completion
 6. Orchestrator receives done event, deletes agent, reclaims worktree
 7. If capacity available, creates new agent
@@ -56,9 +56,9 @@ Actions that require confirmation (all are inputs to Claude Code):
 ## Kickstart Prompt
 
 ```
-Run 'bd ready' to find a task, then work on it.
+Run 'tk ready' to find a task, then work on it.
 When done, run all quality gates and push your work.
-Close the task with 'bd close <id>', then run 'fab agent done'.
+Close the task with 'tk close <id>', then run 'fab agent done'.
 ```
 
 ## Package Structure

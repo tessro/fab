@@ -226,7 +226,7 @@ require (
 
 ### Phase 5: Orchestration
 1. Done detection (IPC message, idle timeout fallback)
-2. Kickstart logic (agent-driven task picking via `bd ready`)
+2. Kickstart logic (agent-driven task picking via `tk ready`)
 3. Local merge workflow on task completion
 4. CLI: `fab start <project>/stop <project>`
 
