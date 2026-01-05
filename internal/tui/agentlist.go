@@ -14,12 +14,12 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 
 // AgentList displays a navigable list of agents with status indicators.
 type AgentList struct {
-	width            int
-	height           int
-	agents           []daemon.AgentStatus
-	selected         int
-	spinnerFrame     int
-	needsAttention   map[string]bool // agents with pending permissions/actions
+	width          int
+	height         int
+	agents         []daemon.AgentStatus
+	selected       int
+	spinnerFrame   int
+	needsAttention map[string]bool // agents with pending permissions/actions
 }
 
 // NewAgentList creates a new agent list component.
