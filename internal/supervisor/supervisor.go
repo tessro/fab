@@ -965,6 +965,13 @@ func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Requ
 		}
 	}
 
+	slog.Info("permission request received",
+		"agent", permReq.AgentID,
+		"project", project,
+		"tool", permReq.ToolName,
+		"input", string(permReq.ToolInput),
+	)
+
 	// Create the permission request
 	permissionReq := &daemon.PermissionRequest{
 		AgentID:     permReq.AgentID,
@@ -985,9 +992,23 @@ func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Requ
 	// Block waiting for a response from the TUI
 	resp := <-respCh
 	if resp == nil {
+		slog.Warn("permission request timed out",
+			"id", id,
+			"agent", permReq.AgentID,
+			"tool", permReq.ToolName,
+		)
 		// Channel was closed without a response (timeout or cancellation)
 		return errorResponse(req, "permission request cancelled or timed out")
 	}
+
+	slog.Info("permission response sent",
+		"id", id,
+		"agent", permReq.AgentID,
+		"tool", permReq.ToolName,
+		"input", string(permReq.ToolInput),
+		"behavior", resp.Behavior,
+		"message", resp.Message,
+	)
 
 	return successResponse(req, resp)
 }
@@ -1001,6 +1022,25 @@ func (s *Supervisor) handlePermissionRespond(_ context.Context, req *daemon.Requ
 
 	if respPayload.ID == "" {
 		return errorResponse(req, "permission request ID required")
+	}
+
+	// Get the original request for logging
+	origReq := s.permissions.Get(respPayload.ID)
+	if origReq != nil {
+		slog.Info("permission response from TUI",
+			"id", respPayload.ID,
+			"agent", origReq.AgentID,
+			"tool", origReq.ToolName,
+			"input", string(origReq.ToolInput),
+			"behavior", respPayload.Behavior,
+			"message", respPayload.Message,
+		)
+	} else {
+		slog.Info("permission response from TUI",
+			"id", respPayload.ID,
+			"behavior", respPayload.Behavior,
+			"message", respPayload.Message,
+		)
 	}
 
 	resp := &daemon.PermissionResponse{
