@@ -170,7 +170,127 @@ func (p *Project) resetWorktree(wtPath string) error {
 		return fmt.Errorf("clean untracked files: %w\n%s", err, output)
 	}
 
+	// Initialize beads if the project has a .beads/ directory.
+	// After git reset, the JSONL is present but the SQLite database (which is
+	// gitignored) needs to be created so agents can use bd commands.
+	if err := p.initBeads(wtPath); err != nil {
+		return fmt.Errorf("init beads: %w", err)
+	}
+
 	return nil
+}
+
+// initBeads initializes beads in a worktree if the project uses beads.
+// This handles both direct-on-main and sync-branch workflows:
+// - If a sync-branch exists, checkout issues.jsonl from there for latest issues
+// - Then create a local SQLite database from the JSONL
+// We skip hooks and merge driver since those are shared via the git directory.
+func (p *Project) initBeads(wtPath string) error {
+	beadsDir := filepath.Join(wtPath, ".beads")
+
+	// Only init if project has a .beads directory
+	if _, err := os.Stat(beadsDir); os.IsNotExist(err) {
+		return nil // No beads in this project
+	}
+
+	// Check if the project uses a sync-branch by looking at config.yaml
+	syncBranch := p.beadsSyncBranch(wtPath)
+	if syncBranch != "" {
+		// Checkout the latest issues.jsonl from the sync branch
+		// This ensures agents get current issues, not stale ones from main
+		cmd := exec.Command("git", "checkout", "origin/"+syncBranch, "--", ".beads/issues.jsonl")
+		cmd.Dir = wtPath
+		// Ignore errors - sync branch may not have issues.jsonl yet
+		_ = cmd.Run()
+	}
+
+	// Run bd init to create the local database from the JSONL
+	cmd := exec.Command("bd", "init", "--from-jsonl", "--quiet", "--skip-hooks", "--skip-merge-driver")
+	cmd.Dir = wtPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("bd init: %w\n%s", err, output)
+	}
+
+	return nil
+}
+
+// beadsSyncBranch reads the sync-branch setting from beads config.
+func (p *Project) beadsSyncBranch(wtPath string) string {
+	configPath := filepath.Join(wtPath, ".beads", "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+
+	// Simple grep for sync-branch setting (avoids YAML dependency)
+	for _, line := range splitLines(string(data)) {
+		if len(line) > 0 && line[0] != '#' {
+			if key, val, found := parseYAMLLine(line); found && key == "sync-branch" {
+				return val
+			}
+		}
+	}
+	return ""
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func parseYAMLLine(line string) (key, val string, found bool) {
+	// Simple parser for "key: value" or "key: \"value\""
+	idx := 0
+	for idx < len(line) && (line[idx] == ' ' || line[idx] == '\t') {
+		idx++
+	}
+	if idx >= len(line) || line[idx] == '#' {
+		return "", "", false
+	}
+
+	keyStart := idx
+	for idx < len(line) && line[idx] != ':' {
+		idx++
+	}
+	if idx >= len(line) {
+		return "", "", false
+	}
+	key = line[keyStart:idx]
+	idx++ // skip ':'
+
+	for idx < len(line) && (line[idx] == ' ' || line[idx] == '\t') {
+		idx++
+	}
+	if idx >= len(line) {
+		return key, "", true
+	}
+
+	// Handle quoted values
+	if line[idx] == '"' {
+		idx++
+		valStart := idx
+		for idx < len(line) && line[idx] != '"' {
+			idx++
+		}
+		return key, line[valStart:idx], true
+	}
+
+	// Unquoted value
+	valStart := idx
+	for idx < len(line) && line[idx] != ' ' && line[idx] != '\t' && line[idx] != '#' {
+		idx++
+	}
+	return key, line[valStart:idx], true
 }
 
 // createAgentBranch creates and checks out a branch for an agent's work.

@@ -1,7 +1,5 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
-
 // HelpBar displays context-sensitive keyboard shortcuts at the bottom of the TUI.
 type HelpBar struct {
 	width int
