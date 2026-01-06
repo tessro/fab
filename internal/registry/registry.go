@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -132,7 +133,8 @@ func (r *Registry) save() error {
 // Add registers a new project.
 // If name is empty, it defaults to the repository name from the URL.
 func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project, error) {
-	if remoteURL == "" {
+	// Validate remote URL
+	if err := config.ValidateRemoteURL(remoteURL); err != nil {
 		return nil, ErrInvalidRemoteURL
 	}
 
@@ -141,9 +143,19 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project,
 		name = repoNameFromURL(remoteURL)
 	}
 
+	// Validate project name
+	if err := config.ValidateProjectName(name); err != nil {
+		return nil, err
+	}
+
 	// Default max agents
 	if maxAgents <= 0 {
 		maxAgents = project.DefaultMaxAgents
+	}
+
+	// Validate max agents
+	if err := config.ValidateMaxAgents(maxAgents); err != nil {
+		return nil, err
 	}
 
 	r.mu.Lock()
@@ -219,6 +231,13 @@ func (r *Registry) List() []*project.Project {
 
 // Update modifies a project's settings.
 func (r *Registry) Update(name string, maxAgents *int) error {
+	// Validate max agents if provided
+	if maxAgents != nil {
+		if err := config.ValidateMaxAgents(*maxAgents); err != nil {
+			return err
+		}
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
