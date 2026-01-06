@@ -45,22 +45,25 @@ var gitSSHRegex = regexp.MustCompile(`^git@[^:]+:.+/.+`)
 var gitFileRegex = regexp.MustCompile(`^file://.+`)
 
 // knownTools is the list of valid tool names.
+// See: https://docs.anthropic.com/en/docs/claude-code/settings#tool-permissions
 var knownTools = map[string]bool{
+	"AskUserQuestion": true,
 	"Bash":            true,
-	"Read":            true,
-	"Write":           true,
 	"Edit":            true,
-	"Glob":            true,
-	"Grep":            true,
-	"WebFetch":        true,
-	"Task":            true,
-	"Skill":           true,
-	"WebSearch":       true,
-	"NotebookEdit":    true,
-	"TodoWrite":       true,
 	"EnterPlanMode":   true,
 	"ExitPlanMode":    true,
-	"AskUserQuestion": true,
+	"Glob":            true,
+	"Grep":            true,
+	"KillShell":       true,
+	"NotebookEdit":    true,
+	"Read":            true,
+	"Skill":           true,
+	"Task":            true,
+	"TaskOutput":      true,
+	"TodoWrite":       true,
+	"WebFetch":        true,
+	"WebSearch":       true,
+	"Write":           true,
 }
 
 // validActions is the list of valid action values.
