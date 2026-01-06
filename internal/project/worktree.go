@@ -226,6 +226,16 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("repo not found: %s", repoDir)
 	}
 
+	// Detach the worktree from its branch so we can checkout the branch in the repo.
+	// Git doesn't allow the same branch to be checked out in multiple places.
+	if wtPath := p.getWorktreePathForAgent(agentID); wtPath != "" {
+		detachCmd := exec.Command("git", "checkout", "--detach", "HEAD")
+		detachCmd.Dir = wtPath
+		if output, err := detachCmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("detach worktree: %w\n%s", err, output)
+		}
+	}
+
 	// Fetch latest from origin
 	fetchCmd := exec.Command("git", "fetch", "origin")
 	fetchCmd.Dir = repoDir
@@ -504,4 +514,17 @@ func (p *Project) cleanupWorktrees() error {
 	_ = cmd.Run() // Ignore errors from prune
 
 	return lastErr
+}
+
+// getWorktreePathForAgent returns the worktree path for the given agent, or empty string if not found.
+func (p *Project) getWorktreePathForAgent(agentID string) string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	for _, wt := range p.Worktrees {
+		if wt.AgentID == agentID {
+			return wt.Path
+		}
+	}
+	return ""
 }
