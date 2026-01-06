@@ -201,17 +201,17 @@ func (p *Project) createAgentBranch(wtPath, agentID string) error {
 	return nil
 }
 
-// MergeResult represents the outcome of a merge attempt.
+// MergeResult represents the outcome of a rebase-and-merge attempt.
 type MergeResult struct {
-	Merged     bool   // True if merge succeeded and was pushed
-	BranchName string // The branch that was merged
-	SHA        string // Commit SHA of merge commit (only set if Merged is true)
-	Error      error  // Conflict or other error if merge failed
+	Merged     bool   // True if rebase succeeded and was pushed
+	BranchName string // The branch that was rebased and merged
+	SHA        string // Commit SHA of branch tip after rebase (only set if Merged is true)
+	Error      error  // Conflict or other error if rebase failed
 }
 
-// MergeAgentBranch attempts to merge an agent's branch into main in the repo directory.
-// If merge succeeds, pushes to origin/main.
-// If merge fails due to conflicts, aborts and returns error (caller should rebase worktree).
+// MergeAgentBranch rebases an agent's branch onto main and fast-forwards main to include it.
+// If rebase succeeds, pushes to origin/main.
+// If rebase fails due to conflicts, aborts and returns error (caller should rebase worktree).
 // This method serializes merge operations using mergeMu to prevent concurrent conflicts.
 func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 	p.mergeMu.Lock()
@@ -233,40 +233,32 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("fetch: %w\n%s", err, output)
 	}
 
-	// Checkout main in repo dir
-	checkoutCmd := exec.Command("git", "checkout", "main")
-	checkoutCmd.Dir = repoDir
-	if output, err := checkoutCmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("checkout main: %w\n%s", err, output)
+	// Checkout the agent's branch to rebase it
+	checkoutBranchCmd := exec.Command("git", "checkout", branchName)
+	checkoutBranchCmd.Dir = repoDir
+	if output, err := checkoutBranchCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("checkout %s: %w\n%s", branchName, err, output)
 	}
 
-	// Pull latest main (fast-forward only)
-	pullCmd := exec.Command("git", "pull", "--ff-only", "origin", "main")
-	pullCmd.Dir = repoDir
-	if output, err := pullCmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("pull main: %w\n%s", err, output)
-	}
+	// Rebase the agent's branch onto origin/main
+	rebaseCmd := exec.Command("git", "rebase", "origin/main")
+	rebaseCmd.Dir = repoDir
+	rebaseOutput, rebaseErr := rebaseCmd.CombinedOutput()
 
-	// Try to merge the agent's branch
-	mergeMsg := fmt.Sprintf("Merge %s into main", branchName)
-	mergeCmd := exec.Command("git", "merge", branchName, "--no-ff", "-m", mergeMsg)
-	mergeCmd.Dir = repoDir
-	mergeOutput, mergeErr := mergeCmd.CombinedOutput()
-
-	if mergeErr != nil {
-		// Merge failed - abort and return error
-		abortCmd := exec.Command("git", "merge", "--abort")
+	if rebaseErr != nil {
+		// Rebase failed - abort and return error
+		abortCmd := exec.Command("git", "rebase", "--abort")
 		abortCmd.Dir = repoDir
 		_ = abortCmd.Run()
 
 		return &MergeResult{
 			Merged:     false,
 			BranchName: branchName,
-			Error:      fmt.Errorf("merge conflict: %s", string(mergeOutput)),
+			Error:      fmt.Errorf("rebase conflict: %s", string(rebaseOutput)),
 		}, nil
 	}
 
-	// Get the SHA of the merge commit before pushing
+	// Get the SHA of the rebased branch tip before fast-forwarding main
 	shaCmd := exec.Command("git", "rev-parse", "HEAD")
 	shaCmd.Dir = repoDir
 	shaOutput, shaErr := shaCmd.Output()
@@ -279,12 +271,26 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		}
 	}
 
-	// Merge succeeded - push to origin
+	// Checkout main and fast-forward to the rebased branch
+	checkoutMainCmd := exec.Command("git", "checkout", "main")
+	checkoutMainCmd.Dir = repoDir
+	if output, err := checkoutMainCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("checkout main: %w\n%s", err, output)
+	}
+
+	// Fast-forward main to the rebased branch
+	ffCmd := exec.Command("git", "merge", "--ff-only", branchName)
+	ffCmd.Dir = repoDir
+	if output, err := ffCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("fast-forward main: %w\n%s", err, output)
+	}
+
+	// Push to origin
 	pushCmd := exec.Command("git", "push", "origin", "main")
 	pushCmd.Dir = repoDir
 	if output, err := pushCmd.CombinedOutput(); err != nil {
-		// Rollback merge
-		resetCmd := exec.Command("git", "reset", "--hard", "HEAD~1")
+		// Rollback: reset main to origin/main
+		resetCmd := exec.Command("git", "reset", "--hard", "origin/main")
 		resetCmd.Dir = repoDir
 		_ = resetCmd.Run()
 		return nil, fmt.Errorf("push main: %w\n%s", err, output)
