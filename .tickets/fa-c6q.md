@@ -1,6 +1,6 @@
 ---
 id: fa-c6q
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-03T12:32:38.595356093-08:00

@@ -67,6 +67,16 @@ var projectRemoveCmd = &cobra.Command{
 	RunE:  runProjectRemove,
 }
 
+var projectSetMaxAgents int
+
+var projectSetCmd = &cobra.Command{
+	Use:   "set <name>",
+	Short: "Update project settings",
+	Long:  "Update settings for a registered project, such as the maximum number of concurrent agents.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runProjectSet,
+}
+
 func runProjectAdd(cmd *cobra.Command, args []string) error {
 	input := args[0]
 
@@ -275,6 +285,33 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runProjectSet(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+
+	// Check if any flags were provided
+	if !cmd.Flags().Changed("max-agents") {
+		return fmt.Errorf("no settings to update; use --max-agents to set maximum concurrent agents")
+	}
+
+	client := MustConnect()
+	defer client.Close()
+
+	var maxAgents *int
+	if cmd.Flags().Changed("max-agents") {
+		maxAgents = &projectSetMaxAgents
+	}
+
+	if err := client.ProjectSet(projectName, maxAgents); err != nil {
+		return fmt.Errorf("set project: %w", err)
+	}
+
+	fmt.Printf("🚌 Updated project: %s\n", projectName)
+	if maxAgents != nil {
+		fmt.Printf("   Max agents: %d\n", *maxAgents)
+	}
+	return nil
+}
+
 func init() {
 	projectAddCmd.Flags().StringVarP(&projectAddName, "name", "n", "", "Project name (default: directory name)")
 	projectAddCmd.Flags().IntVarP(&projectAddMaxAgents, "max-agents", "m", 3, "Maximum concurrent agents")
@@ -285,10 +322,13 @@ func init() {
 	projectRemoveCmd.Flags().BoolVarP(&projectRemoveForce, "force", "f", false, "Skip confirmation prompt")
 	projectRemoveCmd.Flags().BoolVar(&projectRemoveDeleteWorktrees, "delete-worktrees", false, "Delete associated worktrees")
 
+	projectSetCmd.Flags().IntVarP(&projectSetMaxAgents, "max-agents", "m", 0, "Maximum concurrent agents")
+
 	projectCmd.AddCommand(projectAddCmd)
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectStartCmd)
 	projectCmd.AddCommand(projectStopCmd)
 	projectCmd.AddCommand(projectRemoveCmd)
+	projectCmd.AddCommand(projectSetCmd)
 	rootCmd.AddCommand(projectCmd)
 }
