@@ -16,10 +16,11 @@ import (
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
+	"github.com/tessro/fab/internal/version"
 )
 
 // Version is the supervisor/daemon version.
-const Version = "0.1.0"
+var Version = version.Version
 
 // Supervisor handles IPC requests and orchestrates agents across projects.
 // It implements the daemon.Handler interface.
