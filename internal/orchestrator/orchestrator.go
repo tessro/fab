@@ -23,6 +23,11 @@ type Config struct {
 	// KickstartPrompt is sent to agents when they start.
 	KickstartPrompt string
 
+	// InterventionSilence is the duration of user silence before resuming kickstart.
+	// When a user sends a message to an agent, kickstart is paused until this duration
+	// of silence passes. Zero disables intervention detection.
+	InterventionSilence time.Duration
+
 	// OnAgentStarted is called after an agent's process is started.
 	// Use this to set up output reading/broadcasting.
 	OnAgentStarted func(*agent.Agent)
@@ -31,7 +36,8 @@ type Config struct {
 // DefaultConfig returns the default orchestrator configuration.
 func DefaultConfig() Config {
 	return Config{
-		DefaultAgentMode: agent.DefaultMode,
+		DefaultAgentMode:    agent.DefaultMode,
+		InterventionSilence: agent.DefaultInterventionSilence,
 		KickstartPrompt: `Run 'tk ready' to find available tasks.
 Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
@@ -119,6 +125,16 @@ func (o *Orchestrator) IsRunning() bool {
 // Actions returns the action queue for manual mode operations.
 func (o *Orchestrator) Actions() *ActionQueue {
 	return o.actions
+}
+
+// IsAgentIntervening returns true if the user is currently intervening with the given agent.
+// This checks the agent's last user input against the orchestrator's intervention silence threshold.
+func (o *Orchestrator) IsAgentIntervening(agentID string) bool {
+	a, err := o.agents.Get(agentID)
+	if err != nil {
+		return false
+	}
+	return o.config.InterventionSilence > 0 && a.IsUserIntervening(o.config.InterventionSilence)
 }
 
 // Start begins the orchestration loop.
@@ -216,10 +232,21 @@ func (o *Orchestrator) spawnAgentsToCapacity() {
 }
 
 // queueKickstart queues or executes the kickstart action based on mode.
-func (o *Orchestrator) queueKickstart(a *agent.Agent) {
+// Returns true if kickstart was queued/executed, false if skipped due to user intervention.
+func (o *Orchestrator) queueKickstart(a *agent.Agent) bool {
 	prompt := o.config.KickstartPrompt
 	if prompt == "" {
-		return
+		return false
+	}
+
+	// Skip kickstart if user is currently intervening with this agent
+	if o.config.InterventionSilence > 0 && a.IsUserIntervening(o.config.InterventionSilence) {
+		slog.Debug("skipping kickstart due to user intervention",
+			"agent", a.ID,
+			"project", o.project.Name,
+			"last_input", a.GetLastUserInput(),
+		)
+		return false
 	}
 
 	if a.IsAutoMode() {
@@ -235,6 +262,7 @@ func (o *Orchestrator) queueKickstart(a *agent.Agent) {
 			CreatedAt: time.Now(),
 		})
 	}
+	return true
 }
 
 // executeKickstart sends the kickstart prompt to an agent.

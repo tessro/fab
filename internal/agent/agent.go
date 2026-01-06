@@ -22,6 +22,10 @@ import (
 // StopTimeout is the duration to wait for graceful shutdown before force killing.
 const StopTimeout = 5 * time.Second
 
+// DefaultInterventionSilence is the duration of silence before considering user intervention ended.
+// After a user sends a message, the orchestrator will pause kickstart for this duration.
+const DefaultInterventionSilence = 60 * time.Second
+
 // State represents the current state of an agent.
 type State string
 
@@ -90,6 +94,8 @@ type Agent struct {
 	Task string // Current task ID (e.g., "FAB-25")
 	// +checklocks:mu
 	UpdatedAt time.Time // Last state change
+	// +checklocks:mu
+	LastUserInput time.Time // Timestamp of last user message (for intervention detection)
 
 	// Process management with pipes
 	// +checklocks:mu
@@ -275,6 +281,35 @@ func (a *Agent) CanAcceptInput() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.State == StateRunning || a.State == StateIdle
+}
+
+// IsUserIntervening returns true if the user has recently sent a message to this agent.
+// The silence threshold determines how long after the last user input
+// the agent is still considered to be under user intervention.
+func (a *Agent) IsUserIntervening(silenceThreshold time.Duration) bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if a.LastUserInput.IsZero() {
+		return false
+	}
+
+	return time.Since(a.LastUserInput) < silenceThreshold
+}
+
+// MarkUserInput records that the user has sent a message to this agent.
+// This is used to detect user intervention and pause automatic kickstart.
+func (a *Agent) MarkUserInput() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.LastUserInput = time.Now()
+}
+
+// GetLastUserInput returns the timestamp of the last user message.
+func (a *Agent) GetLastUserInput() time.Time {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.LastUserInput
 }
 
 // Reset prepares the agent for reuse (after Done or Error).

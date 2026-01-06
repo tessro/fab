@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestAgent_StateTransitions(t *testing.T) {
@@ -274,5 +275,68 @@ func TestAgent_Mode(t *testing.T) {
 	info := a.Info()
 	if info.Mode != ModeAuto {
 		t.Errorf("expected Info.Mode to be Auto, got %s", info.Mode)
+	}
+}
+
+func TestAgent_UserIntervention(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// Initially not intervening (no user input ever)
+	if a.IsUserIntervening(60 * time.Second) {
+		t.Error("expected not intervening when no user input")
+	}
+
+	// Last user input should be zero
+	if !a.GetLastUserInput().IsZero() {
+		t.Error("expected zero LastUserInput initially")
+	}
+
+	// Mark user input
+	a.MarkUserInput()
+
+	// Should now be intervening
+	if !a.IsUserIntervening(60 * time.Second) {
+		t.Error("expected intervening after MarkUserInput")
+	}
+
+	// Last user input should be recent
+	if time.Since(a.GetLastUserInput()) > time.Second {
+		t.Error("expected LastUserInput to be recent after MarkUserInput")
+	}
+
+	// With a very short threshold, should not be intervening (time has passed)
+	time.Sleep(10 * time.Millisecond)
+	if a.IsUserIntervening(1 * time.Millisecond) {
+		t.Error("expected not intervening with very short threshold")
+	}
+
+	// With a longer threshold, should still be intervening
+	if !a.IsUserIntervening(1 * time.Hour) {
+		t.Error("expected intervening with long threshold")
+	}
+}
+
+func TestAgent_UserIntervention_MultipleInputs(t *testing.T) {
+	a := New("test-1", nil, nil)
+
+	// Mark input
+	a.MarkUserInput()
+	first := a.GetLastUserInput()
+
+	// Wait a bit and mark again
+	time.Sleep(10 * time.Millisecond)
+	a.MarkUserInput()
+	second := a.GetLastUserInput()
+
+	// Second input should be after first
+	if !second.After(first) {
+		t.Error("expected second input timestamp to be after first")
+	}
+}
+
+func TestDefaultInterventionSilence(t *testing.T) {
+	// Verify the default constant
+	if DefaultInterventionSilence != 60*time.Second {
+		t.Errorf("expected DefaultInterventionSilence to be 60s, got %v", DefaultInterventionSilence)
 	}
 }

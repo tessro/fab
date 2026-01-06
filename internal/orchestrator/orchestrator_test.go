@@ -323,3 +323,123 @@ func TestOrchestrator_KickstartPromptContent(t *testing.T) {
 		}
 	}
 }
+
+func TestOrchestrator_QueueKickstart_SkipsWhenUserIntervening(t *testing.T) {
+	proj := &project.Project{Name: "test-project"}
+	agents := agent.NewManager()
+	cfg := DefaultConfig()
+	cfg.KickstartPrompt = "test kickstart prompt"
+	cfg.InterventionSilence = 60 * time.Second
+
+	orch := New(proj, agents, cfg)
+
+	// Create a mock agent in manual mode
+	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+
+	// Mark user input to simulate intervention
+	a.MarkUserInput()
+
+	// Queue kickstart - should be skipped
+	if orch.queueKickstart(a) {
+		t.Error("expected queueKickstart to return false when user is intervening")
+	}
+
+	// No action should be queued
+	if orch.actions.Len() != 0 {
+		t.Errorf("expected no staged actions when intervening, got %d", orch.actions.Len())
+	}
+}
+
+func TestOrchestrator_QueueKickstart_ProceedsAfterSilence(t *testing.T) {
+	proj := &project.Project{Name: "test-project"}
+	agents := agent.NewManager()
+	cfg := DefaultConfig()
+	cfg.KickstartPrompt = "test kickstart prompt"
+	cfg.InterventionSilence = 10 * time.Millisecond // Very short for testing
+
+	orch := New(proj, agents, cfg)
+
+	// Create a mock agent in manual mode
+	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+
+	// Mark user input
+	a.MarkUserInput()
+
+	// Wait for silence threshold to pass
+	time.Sleep(20 * time.Millisecond)
+
+	// Queue kickstart - should proceed now
+	if !orch.queueKickstart(a) {
+		t.Error("expected queueKickstart to return true after silence threshold")
+	}
+
+	// Action should be queued
+	if orch.actions.Len() != 1 {
+		t.Errorf("expected 1 staged action after silence, got %d", orch.actions.Len())
+	}
+}
+
+func TestOrchestrator_InterventionSilence_DisabledWhenZero(t *testing.T) {
+	proj := &project.Project{Name: "test-project"}
+	agents := agent.NewManager()
+	cfg := DefaultConfig()
+	cfg.KickstartPrompt = "test kickstart prompt"
+	cfg.InterventionSilence = 0 // Disabled
+
+	orch := New(proj, agents, cfg)
+
+	// Create a mock agent in manual mode
+	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+
+	// Mark user input
+	a.MarkUserInput()
+
+	// Queue kickstart - should proceed even with recent user input
+	if !orch.queueKickstart(a) {
+		t.Error("expected queueKickstart to proceed when intervention detection is disabled")
+	}
+
+	// Action should be queued
+	if orch.actions.Len() != 1 {
+		t.Errorf("expected 1 staged action when intervention disabled, got %d", orch.actions.Len())
+	}
+}
+
+func TestOrchestrator_IsAgentIntervening(t *testing.T) {
+	proj := &project.Project{Name: "test-project"}
+	agents := agent.NewManager()
+	agents.RegisterProject(proj)
+
+	cfg := DefaultConfig()
+	cfg.InterventionSilence = 60 * time.Second
+
+	orch := New(proj, agents, cfg)
+
+	// Create a real agent through manager
+	a, err := agents.Create(proj)
+	if err != nil {
+		t.Skipf("skipping test: could not create agent: %v", err)
+	}
+
+	// Initially not intervening
+	if orch.IsAgentIntervening(a.ID) {
+		t.Error("expected agent not intervening initially")
+	}
+
+	// Mark user input
+	a.MarkUserInput()
+
+	// Should be intervening now
+	if !orch.IsAgentIntervening(a.ID) {
+		t.Error("expected agent intervening after MarkUserInput")
+	}
+}
+
+func TestDefaultConfig_IncludesInterventionSilence(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.InterventionSilence != agent.DefaultInterventionSilence {
+		t.Errorf("expected InterventionSilence=%v, got %v",
+			agent.DefaultInterventionSilence, cfg.InterventionSilence)
+	}
+}

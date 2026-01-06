@@ -626,9 +626,15 @@ func (s *Supervisor) handleAgentSendMessage(ctx context.Context, req *daemon.Req
 		return errorResponse(req, fmt.Sprintf("agent not found: %s", sendReq.ID))
 	}
 
+	// Mark that user is intervening (for kickstart pause logic)
+	a.MarkUserInput()
+
 	if err := a.SendMessage(sendReq.Content); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
 	}
+
+	// Broadcast intervention state change
+	s.broadcastInterventionState(a.Info().ID, a.Info().Project, true)
 
 	return successResponse(req, nil)
 }
@@ -821,6 +827,24 @@ func (s *Supervisor) broadcastChatEntry(agentID, project string, entry agent.Cha
 		AgentID:   agentID,
 		Project:   project,
 		ChatEntry: dto,
+	})
+}
+
+// broadcastInterventionState sends an intervention state change to attached TUI clients.
+func (s *Supervisor) broadcastInterventionState(agentID, project string, intervening bool) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:        "intervention",
+		AgentID:     agentID,
+		Project:     project,
+		Intervening: &intervening,
 	})
 }
 
