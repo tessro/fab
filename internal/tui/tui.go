@@ -20,6 +20,7 @@ const (
 	FocusAgentList Focus = iota
 	FocusChatView
 	FocusInputLine
+	FocusActionQueue
 )
 
 // StreamEventMsg wraps a daemon stream event for Bubble Tea.
@@ -119,11 +120,12 @@ type Model struct {
 	modeState ModeState
 
 	// Components
-	header    Header
-	agentList AgentList
-	chatView  ChatView
-	inputLine InputLine
-	helpBar   HelpBar
+	header      Header
+	agentList   AgentList
+	chatView    ChatView
+	inputLine   InputLine
+	helpBar     HelpBar
+	actionQueue ActionQueue
 
 	// Daemon client for IPC
 	client   *daemon.Client
@@ -166,6 +168,7 @@ func New() Model {
 		chatView:       NewChatView(),
 		inputLine:      NewInputLine(),
 		helpBar:        NewHelpBar(),
+		actionQueue:    NewActionQueue(),
 		modeState:      NewModeState(),
 		keys:           DefaultKeyBindings(),
 		connState:      ConnectionConnected,
@@ -509,6 +512,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
+		case key.Matches(msg, m.keys.FocusActions):
+			// Focus action queue
+			if m.modeState.IsNormal() {
+				_ = m.modeState.SetFocus(FocusActionQueue)
+				m.syncFocusToComponents(FocusActionQueue)
+			}
+
 		case key.Matches(msg, m.keys.Approve):
 			// Handle abort confirmation
 			if m.modeState.IsAbortConfirming() {
@@ -516,6 +526,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				slog.Debug("confirming abort", "agent_id", agentID)
 				cmds = append(cmds, m.abortAgent(agentID, false))
 				m.chatView.SetAbortConfirming(false, "")
+			} else if m.modeState.Focus == FocusActionQueue {
+				// Approve action selected in action queue
+				if action := m.actionQueue.Selected(); action != nil {
+					slog.Debug("approving action from queue",
+						"action_id", action.ID,
+						"action_agent", action.AgentID,
+					)
+					cmds = append(cmds, m.approveAction(action.ID))
+				}
 			} else {
 				// Approve pending permission or action for selected agent
 				agentID := m.chatView.AgentID()
@@ -540,6 +559,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.modeState.IsAbortConfirming() {
 				_ = m.modeState.CancelAbort()
 				m.chatView.SetAbortConfirming(false, "")
+			} else if m.modeState.Focus == FocusActionQueue {
+				// Reject action selected in action queue
+				if action := m.actionQueue.Selected(); action != nil {
+					slog.Debug("rejecting action from queue",
+						"action_id", action.ID,
+						"action_agent", action.AgentID,
+					)
+					cmds = append(cmds, m.rejectAction(action.ID))
+				}
 			} else {
 				// Reject pending permission or action for selected agent
 				agentID := m.chatView.AgentID()
@@ -597,6 +625,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case FocusChatView:
 				m.chatView.ScrollDown(1)
+			case FocusActionQueue:
+				m.actionQueue.MoveDown()
 			}
 
 		case key.Matches(msg, m.keys.Up):
@@ -608,6 +638,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case FocusChatView:
 				m.chatView.ScrollUp(1)
+			case FocusActionQueue:
+				m.actionQueue.MoveUp()
 			}
 
 		case key.Matches(msg, m.keys.Top):
@@ -619,6 +651,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case FocusChatView:
 				m.chatView.ScrollToTop()
+			case FocusActionQueue:
+				m.actionQueue.MoveToTop()
 			}
 
 		case key.Matches(msg, m.keys.Bottom):
@@ -630,6 +664,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case FocusChatView:
 				m.chatView.ScrollToBottom()
+			case FocusActionQueue:
+				m.actionQueue.MoveToBottom()
 			}
 
 		case key.Matches(msg, m.keys.PageUp):
@@ -742,6 +778,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Store all staged actions - filtering happens in pendingActionForAgent
 			m.stagedActions = msg.Actions
+			// Update action queue component
+			m.actionQueue.SetActions(msg.Actions)
 			// Update chat view with pending action for current agent
 			m.chatView.SetPendingAction(m.pendingActionForAgent(m.chatView.AgentID()))
 			// Update attention indicators
@@ -921,6 +959,8 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 			)
 			// Add to our list of staged actions
 			m.stagedActions = append(m.stagedActions, *event.StagedAction)
+			// Update action queue component
+			m.actionQueue.SetActions(m.stagedActions)
 			// Update chat view if this is for the current agent
 			if event.AgentID == m.chatView.AgentID() {
 				m.chatView.SetPendingAction(m.pendingActionForAgent(event.AgentID))
@@ -981,6 +1021,9 @@ func (m *Model) syncFocusToComponents(focus Focus) {
 		m.chatView.SetFocused(false)
 		m.inputLine.SetFocused(true)
 		m.chatView.SetInputView(m.inputLine.View(), 1)
+	case FocusActionQueue:
+		m.chatView.SetFocused(false)
+		m.inputLine.SetFocused(false)
 	}
 }
 
@@ -1001,16 +1044,17 @@ func (m Model) View() string {
 	m.helpBar.SetModeState(m.modeState)
 	status := m.helpBar.View()
 
-	// Side-by-side layout: agent list (left) | chat view (right)
+	// Three-pane layout: agent list (left) | chat view (center) | action queue (right)
 	agentList := m.agentList.View()
 	chatView := m.chatView.View()
+	actionQueue := m.actionQueue.View()
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView, actionQueue)
 
 	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
 }
 
-// updateLayout recalculates component dimensions for side-by-side layout.
+// updateLayout recalculates component dimensions for three-pane layout.
 func (m *Model) updateLayout() {
 	headerHeight := lipgloss.Height(m.header.View())
 	statusHeight := 1 // Single line status bar
@@ -1019,12 +1063,14 @@ func (m *Model) updateLayout() {
 		contentHeight = 1
 	}
 
-	// Split width: 40% agent list, 60% chat view
-	listWidth := m.width * 40 / 100
-	chatWidth := m.width - listWidth
+	// Split width: 25% agent list, 50% chat view, 25% action queue
+	listWidth := m.width * 25 / 100
+	queueWidth := m.width * 25 / 100
+	chatWidth := m.width - listWidth - queueWidth
 
 	m.agentList.SetSize(listWidth, contentHeight)
 	m.chatView.SetSize(chatWidth, contentHeight)
+	m.actionQueue.SetSize(queueWidth, contentHeight)
 	m.helpBar.SetWidth(m.width)
 
 	// Input line sized to fit inside chat pane (accounting for border)
