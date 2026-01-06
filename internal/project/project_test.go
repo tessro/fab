@@ -378,3 +378,99 @@ func TestProjectDirs(t *testing.T) {
 		t.Errorf("WorktreesDir() = %q, want %q/worktrees", wtDir, projectDir)
 	}
 }
+
+func TestResizeWorktreePool_NoChange(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-001", InUse: false},
+		{Path: "/tmp/wt-002", InUse: false},
+	}
+
+	err := p.ResizeWorktreePool(2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.Worktrees) != 2 {
+		t.Errorf("len(Worktrees) = %d, want 2", len(p.Worktrees))
+	}
+}
+
+func TestResizeWorktreePool_ShrinkUnused(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-001", InUse: false},
+		{Path: "/tmp/wt-002", InUse: false},
+		{Path: "/tmp/wt-003", InUse: false},
+	}
+
+	err := p.ResizeWorktreePool(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.Worktrees) != 1 {
+		t.Errorf("len(Worktrees) = %d, want 1", len(p.Worktrees))
+	}
+}
+
+func TestResizeWorktreePool_ShrinkPreservesInUse(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-001", InUse: true, AgentID: "agent1"},
+		{Path: "/tmp/wt-002", InUse: false},
+		{Path: "/tmp/wt-003", InUse: true, AgentID: "agent3"},
+	}
+
+	// Shrink to 2 - should remove the unused one
+	err := p.ResizeWorktreePool(2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.Worktrees) != 2 {
+		t.Errorf("len(Worktrees) = %d, want 2", len(p.Worktrees))
+	}
+
+	// Both in-use worktrees should be preserved
+	inUseCount := 0
+	for _, wt := range p.Worktrees {
+		if wt.InUse {
+			inUseCount++
+		}
+	}
+	if inUseCount != 2 {
+		t.Errorf("inUseCount = %d, want 2", inUseCount)
+	}
+}
+
+func TestResizeWorktreePool_ShrinkBelowInUse(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-001", InUse: true, AgentID: "agent1"},
+		{Path: "/tmp/wt-002", InUse: true, AgentID: "agent2"},
+		{Path: "/tmp/wt-003", InUse: false},
+	}
+
+	// Try to shrink to 1, but 2 are in use - should fail
+	err := p.ResizeWorktreePool(1)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// Pool should be unchanged
+	if len(p.Worktrees) != 3 {
+		t.Errorf("len(Worktrees) = %d, want 3 (unchanged)", len(p.Worktrees))
+	}
+}
+
+func TestResizeWorktreePool_GrowNoGitRepo(t *testing.T) {
+	// When there's no git repo, grow should succeed but not create worktrees
+	// This tests the graceful degradation path for non-git scenarios
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-001", InUse: false},
+	}
+
+	// This will attempt to grow, check for .git, not find it, and return nil
+	err := p.ResizeWorktreePool(3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
