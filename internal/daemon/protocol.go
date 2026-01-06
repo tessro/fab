@@ -29,6 +29,7 @@ const (
 	MsgAgentList   MessageType = "agent.list"
 	MsgAgentCreate MessageType = "agent.create"
 	MsgAgentDelete MessageType = "agent.delete"
+	MsgAgentAbort  MessageType = "agent.abort"  // Abort/kill a running agent
 	MsgAgentInput  MessageType = "agent.input"  // Send input to agent PTY
 	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
@@ -190,6 +191,12 @@ type AgentCreateResponse struct {
 type AgentDeleteRequest struct {
 	ID    string `json:"id"`
 	Force bool   `json:"force,omitempty"` // Force kill if running
+}
+
+// AgentAbortRequest is the payload for agent.abort requests.
+type AgentAbortRequest struct {
+	ID    string `json:"id"`
+	Force bool   `json:"force,omitempty"` // Force kill immediately (SIGKILL vs graceful /quit)
 }
 
 // AgentListRequest is the payload for agent.list requests.

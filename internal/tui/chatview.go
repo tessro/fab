@@ -24,6 +24,8 @@ type ChatView struct {
 	pendingPermission *daemon.PermissionRequest // pending permission request
 	inputView         string                    // rendered input line view
 	inputHeight       int                       // height of input line (for layout)
+	abortConfirming   bool                      // awaiting abort confirmation
+	abortAgentID      string                    // agent being aborted
 }
 
 // NewChatView creates a new chat view component.
@@ -53,6 +55,11 @@ func (v *ChatView) updateViewportSize() {
 
 	// Reserve space for pending permission request if present
 	if v.pendingPermission != nil {
+		contentHeight -= 2 // 1 line for content + 1 line padding
+	}
+
+	// Reserve space for abort confirmation bar if present
+	if v.abortConfirming {
 		contentHeight -= 2 // 1 line for content + 1 line padding
 	}
 
@@ -156,6 +163,17 @@ func (v *ChatView) PendingPermissionID() string {
 func (v *ChatView) SetInputView(view string, height int) {
 	v.inputView = view
 	v.inputHeight = height
+}
+
+// SetAbortConfirming sets the abort confirmation state.
+func (v *ChatView) SetAbortConfirming(confirming bool, agentID string) {
+	wasConfirming := v.abortConfirming
+	v.abortConfirming = confirming
+	v.abortAgentID = agentID
+	// Recalculate viewport size if state changed
+	if wasConfirming != confirming {
+		v.updateViewportSize()
+	}
 }
 
 // AppendEntry adds a chat entry to the view.
@@ -396,6 +414,9 @@ func (v ChatView) View() string {
 	if v.pendingPermission != nil {
 		emptyHeight -= 2
 	}
+	if v.abortConfirming {
+		emptyHeight -= 2
+	}
 	if v.inputHeight > 0 {
 		emptyHeight -= v.inputHeight
 	}
@@ -408,8 +429,11 @@ func (v ChatView) View() string {
 	// Build the inner content
 	parts := []string{header, content}
 
-	// Add pending permission bar if present (takes priority over action)
-	if v.pendingPermission != nil {
+	// Abort confirmation takes highest priority
+	if v.abortConfirming {
+		parts = append(parts, v.renderAbortConfirmation())
+	} else if v.pendingPermission != nil {
+		// Add pending permission bar if present (takes priority over action)
 		parts = append(parts, v.renderPendingPermission())
 	} else if v.pendingAction != nil {
 		// Add pending action bar if present
@@ -483,4 +507,15 @@ func (v ChatView) renderPendingPermission() string {
 	label := pendingPermissionLabelStyle.Render("🔐 Permission:")
 	toolName := pendingPermissionToolStyle.Render("[" + v.pendingPermission.ToolName + "]")
 	return pendingPermissionStyle.Width(v.width - 4).Render(label + " " + toolName + " " + toolInput)
+}
+
+// renderAbortConfirmation renders the abort confirmation bar.
+func (v ChatView) renderAbortConfirmation() string {
+	if !v.abortConfirming {
+		return ""
+	}
+
+	label := abortConfirmLabelStyle.Render("⚠ Abort agent " + v.abortAgentID + "?")
+	hint := abortConfirmHintStyle.Render("(y: confirm, n: cancel)")
+	return abortConfirmStyle.Width(v.width - 4).Render(label + " " + hint)
 }

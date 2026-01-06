@@ -121,4 +121,16 @@ var (
 	pendingPermissionToolStyle = lipgloss.NewStyle().
 					Foreground(lipgloss.Color("#FFFFFF")).
 					Bold(true)
+
+	// Abort confirmation styles
+	abortConfirmStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#4B2B2B")). // Dark red background
+				Padding(0, 1)
+
+	abortConfirmLabelStyle = lipgloss.NewStyle().
+				Foreground(errorColor).
+				Bold(true)
+
+	abortConfirmHintStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#A0A0A0"))
 )
