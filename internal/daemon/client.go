@@ -383,7 +383,7 @@ func (c *Client) AgentAbort(id string, force bool) error {
 	return nil
 }
 
-// AgentInput sends input to an agent's PTY.
+// AgentInput sends input to an agent.
 func (c *Client) AgentInput(id, input string) error {
 	resp, err := c.Send(&Request{
 		Type:    MsgAgentInput,
@@ -398,7 +398,7 @@ func (c *Client) AgentInput(id, input string) error {
 	return nil
 }
 
-// AgentOutput retrieves buffered PTY output from an agent.
+// AgentOutput retrieves buffered output from an agent.
 func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 	resp, err := c.Send(&Request{
 		Type:    MsgAgentOutput,

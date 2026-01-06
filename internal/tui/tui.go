@@ -675,7 +675,7 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		}
 
 	case "output":
-		// Deprecated: kept for backwards compatibility with raw PTY output
+		// Deprecated: kept for backwards compatibility with raw output
 		// This is no longer used by the chat view
 
 	case "state":

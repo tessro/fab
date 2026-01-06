@@ -572,7 +572,7 @@ func (s *Supervisor) handleAgentInput(ctx context.Context, req *daemon.Request) 
 	return successResponse(req, map[string]int{"bytes_written": n})
 }
 
-// handleAgentOutput returns buffered PTY output for an agent.
+// handleAgentOutput returns buffered output for an agent.
 func (s *Supervisor) handleAgentOutput(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var outputReq daemon.AgentOutputRequest
 	if err := unmarshalPayload(req.Payload, &outputReq); err != nil {

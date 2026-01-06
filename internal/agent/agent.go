@@ -571,13 +571,6 @@ func (a *Agent) Read(p []byte) (int, error) {
 	return stdout.Read(p)
 }
 
-// Resize is a no-op for pipe-based I/O.
-// Pipes don't have terminal dimensions.
-func (a *Agent) Resize(rows, cols uint16) error {
-	// No-op: pipes don't support terminal resizing
-	return nil
-}
-
 // ProcessState returns the current state of the underlying process.
 // Returns nil if the process hasn't started or has already been waited on.
 func (a *Agent) ProcessState() *os.ProcessState {

@@ -20,7 +20,7 @@ var (
 type ActionType string
 
 const (
-	// ActionSendMessage sends a message to an agent's PTY.
+	// ActionSendMessage sends a message to an agent.
 	ActionSendMessage ActionType = "send_message"
 
 	// ActionQuit sends /quit to gracefully end the agent session.

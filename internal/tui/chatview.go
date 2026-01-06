@@ -387,22 +387,22 @@ func truncateResult(result string, maxWidth int) string {
 // View renders the chat view.
 func (v ChatView) View() string {
 	if v.agentID == "" {
-		empty := ptyEmptyStyle.Width(v.width).Height(v.height).Render("Select an agent to view chat")
+		empty := chatEmptyStyle.Width(v.width).Height(v.height).Render("Select an agent to view chat")
 		return empty
 	}
 
 	// Header showing agent info
 	headerText := lipgloss.JoinHorizontal(lipgloss.Center,
-		ptyHeaderAgentStyle.Render(v.agentID),
+		chatHeaderAgentStyle.Render(v.agentID),
 		" ",
-		ptyHeaderProjectStyle.Render(v.project),
+		chatHeaderProjectStyle.Render(v.project),
 	)
 
 	var header string
 	if v.focused {
-		header = ptyHeaderFocusedStyle.Width(v.width - 2).Render(headerText)
+		header = chatHeaderFocusedStyle.Width(v.width - 2).Render(headerText)
 	} else {
-		header = ptyHeaderStyle.Width(v.width - 2).Render(headerText)
+		header = chatHeaderStyle.Width(v.width - 2).Render(headerText)
 	}
 
 	// Viewport content
@@ -421,7 +421,7 @@ func (v ChatView) View() string {
 		emptyHeight -= v.inputHeight
 	}
 	if len(v.entries) == 0 {
-		content = ptyEmptyStyle.Width(v.width - 2).Height(emptyHeight).Render("Waiting for messages...")
+		content = chatEmptyStyle.Width(v.width - 2).Height(emptyHeight).Render("Waiting for messages...")
 	} else {
 		content = v.viewport.View()
 	}
