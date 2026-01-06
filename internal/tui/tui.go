@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/usage"
 )
 
 // Focus indicates which panel is currently focused.
@@ -91,6 +92,13 @@ type reconnectMsg struct {
 	EventChan <-chan daemon.EventResult
 }
 
+// UsageUpdateMsg contains updated usage statistics.
+type UsageUpdateMsg struct {
+	Percent   int
+	Remaining time.Duration
+	Err       error
+}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -137,6 +145,10 @@ type Model struct {
 
 	// Key bindings
 	keys KeyBindings
+
+	// Usage tracking
+	lastUsageFetch time.Time
+	usageLimits    usage.Limits
 }
 
 // New creates a new TUI model.
@@ -152,6 +164,7 @@ func New() Model {
 		connState:      ConnectionConnected,
 		reconnectDelay: 500 * time.Millisecond,
 		maxReconnects:  10,
+		usageLimits:    usage.DefaultProLimits(),
 	}
 }
 
@@ -167,6 +180,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.inputLine.input.Cursor.BlinkCmd(),
 		m.tickCmd(), // Start spinner animation
+		m.fetchUsage(),
 	}
 	if m.client != nil {
 		// Fetch agent list first, then attach to stream
@@ -361,6 +375,21 @@ func (m Model) abortAgent(agentID string, force bool) tea.Cmd {
 		}
 		err := m.client.AgentAbort(agentID, force)
 		return AbortResultMsg{Err: err}
+	}
+}
+
+// fetchUsage retrieves current usage statistics.
+func (m Model) fetchUsage() tea.Cmd {
+	limits := m.usageLimits
+	return func() tea.Msg {
+		window, err := usage.GetCurrentBillingWindowWithUsage()
+		if err != nil {
+			return UsageUpdateMsg{Err: err}
+		}
+		return UsageUpdateMsg{
+			Percent:   window.Usage.PercentInt(limits),
+			Remaining: window.TimeRemaining(),
+		}
 	}
 }
 
@@ -752,6 +781,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerFrame++
 		m.agentList.SetSpinnerFrame(m.spinnerFrame)
 		cmds = append(cmds, m.tickCmd())
+
+		// Periodically refresh usage stats (every 30 seconds)
+		if time.Since(m.lastUsageFetch) > 30*time.Second {
+			m.lastUsageFetch = time.Now()
+			cmds = append(cmds, m.fetchUsage())
+		}
+
+	case UsageUpdateMsg:
+		if msg.Err != nil {
+			// Silently ignore usage fetch errors - not critical
+			slog.Debug("usage fetch error", "err", msg.Err)
+		} else {
+			m.header.SetUsage(msg.Percent, msg.Remaining)
+			m.lastUsageFetch = time.Now()
+		}
 
 	case clearErrorMsg:
 		// Clear error display
