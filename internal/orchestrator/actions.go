@@ -37,11 +37,16 @@ type StagedAction struct {
 	CreatedAt time.Time
 }
 
+// ActionCallback is called when a new action is added to the queue.
+type ActionCallback func(action StagedAction)
+
 // ActionQueue manages staged actions for manual mode.
 type ActionQueue struct {
 	// +checklocks:mu
 	actions []StagedAction
-	mu      sync.RWMutex
+	// +checklocks:mu
+	onAdd ActionCallback
+	mu    sync.RWMutex
 }
 
 // NewActionQueue creates a new action queue.
@@ -51,17 +56,28 @@ func NewActionQueue() *ActionQueue {
 	}
 }
 
+// OnAdd sets a callback that is invoked when a new action is added.
+func (q *ActionQueue) OnAdd(cb ActionCallback) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.onAdd = cb
+}
+
 // Add adds a new action to the queue.
 // The action ID will be generated if not set.
 func (q *ActionQueue) Add(action StagedAction) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	if action.ID == "" {
 		action.ID = generateActionID()
 	}
-
 	q.actions = append(q.actions, action)
+	cb := q.onAdd
+	q.mu.Unlock()
+
+	// Call callback outside the lock to avoid deadlock
+	if cb != nil {
+		cb(action)
+	}
 }
 
 // List returns all pending actions.

@@ -877,6 +877,9 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 	orch := orchestrator.New(proj, s.agents, s.orchConfig)
 	s.orchestrators[proj.Name] = orch
 
+	// Register callback to broadcast staged actions to TUI
+	orch.Actions().OnAdd(s.broadcastStagedAction)
+
 	// Mark project as running
 	proj.SetRunning(true)
 
@@ -1267,6 +1270,31 @@ func (s *Supervisor) broadcastPermissionRequest(req *daemon.PermissionRequest) {
 		AgentID:           req.AgentID,
 		Project:           req.Project,
 		PermissionRequest: req,
+	})
+}
+
+// broadcastStagedAction sends a staged action to attached TUI clients.
+func (s *Supervisor) broadcastStagedAction(action orchestrator.StagedAction) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:    "staged_action",
+		AgentID: action.AgentID,
+		Project: action.Project,
+		StagedAction: &daemon.StagedAction{
+			ID:        action.ID,
+			AgentID:   action.AgentID,
+			Project:   action.Project,
+			Type:      daemon.ActionType(action.Type),
+			Payload:   action.Payload,
+			CreatedAt: action.CreatedAt,
+		},
 	})
 }
 
