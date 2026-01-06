@@ -1,6 +1,6 @@
 ---
 id: fa-0e7
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-06T00:37:33.20301-08:00
