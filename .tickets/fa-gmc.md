@@ -1,6 +1,6 @@
 ---
 id: fa-gmc
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-03T12:32:31.669611404-08:00

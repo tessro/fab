@@ -335,6 +335,135 @@ func (p *Project) RebaseWorktreeOnMain(agentID string) error {
 	return nil
 }
 
+// ResizeWorktreePool adjusts the worktree pool to match the target size.
+// If target > current, creates new worktrees.
+// If target < current, removes unused worktrees (those with InUse=false).
+// Returns ErrWorktreeInUse if trying to shrink below the number of in-use worktrees.
+func (p *Project) ResizeWorktreePool(targetSize int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	currentSize := len(p.Worktrees)
+
+	if targetSize == currentSize {
+		return nil
+	}
+
+	if targetSize > currentSize {
+		// Grow: create additional worktrees
+		return p.growPool(targetSize)
+	}
+
+	// Shrink: remove unused worktrees
+	return p.shrinkPool(targetSize)
+}
+
+// growPool adds worktrees to reach the target size.
+// Must be called with lock held.
+func (p *Project) growPool(targetSize int) error {
+	wtDir := p.WorktreesDir()
+
+	// Ensure worktrees directory exists
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		return fmt.Errorf("create worktrees directory: %w", err)
+	}
+
+	repoDir := p.RepoDir()
+	gitDir := filepath.Join(repoDir, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		// Not a git repo - skip (likely a test scenario)
+		return nil
+	}
+
+	// Find the highest existing worktree number
+	maxNum := 0
+	for _, wt := range p.Worktrees {
+		var num int
+		base := filepath.Base(wt.Path)
+		if _, err := fmt.Sscanf(base, "wt-%03d", &num); err == nil && num > maxNum {
+			maxNum = num
+		}
+	}
+
+	// Create new worktrees starting from maxNum+1
+	for i := len(p.Worktrees); i < targetSize; i++ {
+		maxNum++
+		wtPath := filepath.Join(wtDir, fmt.Sprintf("wt-%03d", maxNum))
+
+		// Check if worktree already exists on disk
+		if _, err := os.Stat(wtPath); err == nil {
+			p.Worktrees = append(p.Worktrees, Worktree{Path: wtPath})
+			continue
+		}
+
+		// Create git worktree with detached HEAD
+		cmd := exec.Command("git", "worktree", "add", "--detach", wtPath)
+		cmd.Dir = repoDir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("create worktree %s: %w\n%s", wtPath, err, output)
+		}
+
+		p.Worktrees = append(p.Worktrees, Worktree{Path: wtPath})
+	}
+
+	return nil
+}
+
+// shrinkPool removes unused worktrees to reach the target size.
+// Must be called with lock held.
+// Returns error if target would require removing in-use worktrees.
+func (p *Project) shrinkPool(targetSize int) error {
+	// Count in-use worktrees
+	inUseCount := 0
+	for _, wt := range p.Worktrees {
+		if wt.InUse {
+			inUseCount++
+		}
+	}
+
+	// Cannot shrink below number of in-use worktrees
+	if targetSize < inUseCount {
+		return fmt.Errorf("cannot resize: %d worktrees in use, target size is %d", inUseCount, targetSize)
+	}
+
+	repoDir := p.RepoDir()
+	toRemove := len(p.Worktrees) - targetSize
+
+	// Remove unused worktrees from the end
+	newWorktrees := make([]Worktree, 0, targetSize)
+	removed := 0
+
+	// First pass: keep all in-use worktrees and some unused ones
+	for i := range p.Worktrees {
+		if p.Worktrees[i].InUse {
+			newWorktrees = append(newWorktrees, p.Worktrees[i])
+		} else if removed < toRemove {
+			// Remove this worktree
+			wtPath := p.Worktrees[i].Path
+
+			// Try git worktree remove first
+			cmd := exec.Command("git", "worktree", "remove", "--force", wtPath)
+			cmd.Dir = repoDir
+			if err := cmd.Run(); err != nil {
+				// Fall back to manual removal
+				_ = os.RemoveAll(wtPath)
+			}
+			removed++
+		} else {
+			newWorktrees = append(newWorktrees, p.Worktrees[i])
+		}
+	}
+
+	p.Worktrees = newWorktrees
+
+	// Prune stale worktree references
+	cmd := exec.Command("git", "worktree", "prune")
+	cmd.Dir = repoDir
+	_ = cmd.Run()
+
+	return nil
+}
+
 // cleanupWorktrees removes all worktrees.
 //
 // +checklocks:p.mu

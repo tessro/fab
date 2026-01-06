@@ -420,8 +420,21 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, "project name required")
 	}
 
+	// Get the project before updating to check if resize is needed
+	proj, err := s.registry.Get(setReq.Name)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("project not found: %s", setReq.Name))
+	}
+
 	if err := s.registry.Update(setReq.Name, setReq.MaxAgents); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to update project: %v", err))
+	}
+
+	// Resize worktree pool if MaxAgents changed
+	if setReq.MaxAgents != nil {
+		if err := proj.ResizeWorktreePool(*setReq.MaxAgents); err != nil {
+			return errorResponse(req, fmt.Sprintf("failed to resize worktree pool: %v", err))
+		}
 	}
 
 	return successResponse(req, nil)
