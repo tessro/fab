@@ -169,8 +169,8 @@ func (p *Project) resetWorktreeUnlocked(wtPath string) error {
 		return fmt.Errorf("reset to origin/main: %w\n%s", err, output)
 	}
 
-	// Clean untracked files and directories
-	cleanCmd := exec.Command("git", "clean", "-fd")
+	// Clean untracked files and directories (including ignored files like build artifacts)
+	cleanCmd := exec.Command("git", "clean", "-fdx")
 	cleanCmd.Dir = wtPath
 	if output, err := cleanCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("clean untracked files: %w\n%s", err, output)
