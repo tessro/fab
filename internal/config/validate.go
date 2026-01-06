@@ -46,17 +46,21 @@ var gitFileRegex = regexp.MustCompile(`^file://.+`)
 
 // knownTools is the list of valid tool names.
 var knownTools = map[string]bool{
-	"Bash":         true,
-	"Read":         true,
-	"Write":        true,
-	"Edit":         true,
-	"Glob":         true,
-	"Grep":         true,
-	"WebFetch":     true,
-	"Task":         true,
-	"Skill":        true,
-	"WebSearch":    true,
-	"NotebookEdit": true,
+	"Bash":            true,
+	"Read":            true,
+	"Write":           true,
+	"Edit":            true,
+	"Glob":            true,
+	"Grep":            true,
+	"WebFetch":        true,
+	"Task":            true,
+	"Skill":           true,
+	"WebSearch":       true,
+	"NotebookEdit":    true,
+	"TodoWrite":       true,
+	"EnterPlanMode":   true,
+	"ExitPlanMode":    true,
+	"AskUserQuestion": true,
 }
 
 // validActions is the list of valid action values.
