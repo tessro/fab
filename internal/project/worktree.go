@@ -205,6 +205,7 @@ func (p *Project) createAgentBranch(wtPath, agentID string) error {
 type MergeResult struct {
 	Merged     bool   // True if merge succeeded and was pushed
 	BranchName string // The branch that was merged
+	SHA        string // Commit SHA of merge commit (only set if Merged is true)
 	Error      error  // Conflict or other error if merge failed
 }
 
@@ -265,6 +266,19 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		}, nil
 	}
 
+	// Get the SHA of the merge commit before pushing
+	shaCmd := exec.Command("git", "rev-parse", "HEAD")
+	shaCmd.Dir = repoDir
+	shaOutput, shaErr := shaCmd.Output()
+	sha := ""
+	if shaErr == nil {
+		sha = string(shaOutput)
+		// Trim newline
+		if len(sha) > 0 && sha[len(sha)-1] == '\n' {
+			sha = sha[:len(sha)-1]
+		}
+	}
+
 	// Merge succeeded - push to origin
 	pushCmd := exec.Command("git", "push", "origin", "main")
 	pushCmd.Dir = repoDir
@@ -279,6 +293,7 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 	return &MergeResult{
 		Merged:     true,
 		BranchName: branchName,
+		SHA:        sha,
 	}, nil
 }
 

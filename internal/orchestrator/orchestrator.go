@@ -56,6 +56,9 @@ type Orchestrator struct {
 	// Ticket claim registry to prevent duplicate work
 	claims *ClaimRegistry
 
+	// Commit log tracks successfully merged commits
+	commits *CommitLog
+
 	// Lifecycle management (channels are goroutine-safe: created in Start, closed to signal)
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -73,12 +76,18 @@ func New(proj *project.Project, agents *agent.Manager, cfg Config) *Orchestrator
 		agents:  agents,
 		actions: NewActionQueue(),
 		claims:  NewClaimRegistry(),
+		commits: NewCommitLog(DefaultCommitLogSize),
 	}
 }
 
 // Claims returns the ticket claim registry.
 func (o *Orchestrator) Claims() *ClaimRegistry {
 	return o.claims
+}
+
+// Commits returns the commit log.
+func (o *Orchestrator) Commits() *CommitLog {
+	return o.commits
 }
 
 // Project returns the orchestrator's project.
@@ -241,6 +250,7 @@ func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
 type AgentDoneResult struct {
 	Merged     bool   // True if merge to main succeeded
 	BranchName string // The branch that was processed
+	SHA        string // Commit SHA of merge commit (only set if Merged is true)
 	MergeError string // Conflict message if merge failed
 }
 
@@ -261,7 +271,17 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 	if mergeResult.Merged {
 		// Success! Clean up the agent
 		result.Merged = true
-		slog.Info("merged agent branch to main", "agent", agentID, "branch", mergeResult.BranchName)
+		result.SHA = mergeResult.SHA
+		slog.Info("merged agent branch to main", "agent", agentID, "branch", mergeResult.BranchName, "sha", mergeResult.SHA)
+
+		// Record the commit
+		o.commits.Add(CommitRecord{
+			SHA:      mergeResult.SHA,
+			Branch:   mergeResult.BranchName,
+			AgentID:  agentID,
+			TaskID:   taskID,
+			MergedAt: time.Now(),
+		})
 
 		_ = o.agents.Stop(agentID)
 		if err := o.agents.Delete(agentID); err != nil {
