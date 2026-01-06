@@ -15,6 +15,7 @@ type HelpBar struct {
 	focus             Focus
 	pendingPermission bool
 	pendingAction     bool
+	abortConfirming   bool
 }
 
 // NewHelpBar creates a new help bar component.
@@ -30,28 +31,36 @@ func (h *HelpBar) SetWidth(width int) {
 }
 
 // SetContext updates the help bar's context for rendering appropriate shortcuts.
-func (h *HelpBar) SetContext(focus Focus, pendingPermission, pendingAction bool) {
+func (h *HelpBar) SetContext(focus Focus, pendingPermission, pendingAction, abortConfirming bool) {
 	h.focus = focus
 	h.pendingPermission = pendingPermission
 	h.pendingAction = pendingAction
+	h.abortConfirming = abortConfirming
 }
 
 // View renders the help bar with context-sensitive keyboard shortcuts.
 func (h HelpBar) View() string {
 	var bindings []key.Binding
 
+	// Abort confirmation takes priority
+	if h.abortConfirming {
+		bindings = []key.Binding{h.keys.Approve, h.keys.Reject}
+		helpText := formatHelp(bindings)
+		return statusStyle.Width(h.width).Render("Abort agent? " + helpText)
+	}
+
 	switch h.focus {
 	case FocusAgentList:
 		if h.pendingPermission || h.pendingAction {
 			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Select, h.keys.Quit}
 		} else {
-			bindings = []key.Binding{h.keys.Down, h.keys.Select, h.keys.FocusChat, h.keys.Tab, h.keys.Quit}
+			bindings = []key.Binding{h.keys.Down, h.keys.Select, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
 		}
 	case FocusChatView:
 		if h.pendingPermission || h.pendingAction {
 			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Tab, h.keys.Quit}
 		} else {
-			bindings = []key.Binding{h.keys.Down, h.keys.PageUp, h.keys.FocusChat, h.keys.Tab, h.keys.Quit}
+			bindings = []key.Binding{h.keys.Down, h.keys.PageUp, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
 		}
 	case FocusInputLine:
 		bindings = []key.Binding{h.keys.Submit, h.keys.Cancel, h.keys.Tab}

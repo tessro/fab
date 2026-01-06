@@ -61,6 +61,11 @@ type PermissionResultMsg struct {
 	Err error
 }
 
+// AbortResultMsg is the result of aborting an agent.
+type AbortResultMsg struct {
+	Err error
+}
+
 // tickMsg is sent on regular intervals to drive spinner animation.
 type tickMsg time.Time
 
@@ -97,6 +102,10 @@ type Model struct {
 
 	// Spinner animation frame counter
 	spinnerFrame int
+
+	// Abort confirmation state
+	abortConfirming bool
+	abortAgentID    string
 
 	// Key bindings
 	keys KeyBindings
@@ -275,6 +284,17 @@ func (m Model) denyPermission(requestID string) tea.Cmd {
 	}
 }
 
+// abortAgent aborts a running agent.
+func (m Model) abortAgent(agentID string, force bool) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.AgentAbort(agentID, force)
+		return AbortResultMsg{Err: err}
+	}
+}
+
 // pendingPermissionForAgent returns the first pending permission request for the given agent.
 func (m *Model) pendingPermissionForAgent(agentID string) *daemon.PermissionRequest {
 	if agentID == "" {
@@ -383,35 +403,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.Approve):
-			// Approve pending permission or action for selected agent
-			agentID := m.chatView.AgentID()
-			// Permissions take priority over actions
-			if perm := m.pendingPermissionForAgent(agentID); perm != nil {
-				slog.Debug("approving permission",
-					"permission_id", perm.ID,
-					"tool", perm.ToolName,
-				)
-				cmds = append(cmds, m.allowPermission(perm.ID))
-			} else if action := m.pendingActionForAgent(agentID); action != nil {
-				slog.Debug("approving action",
-					"action_id", action.ID,
-					"action_agent", action.AgentID,
-				)
-				cmds = append(cmds, m.approveAction(action.ID))
+			// Handle abort confirmation
+			if m.abortConfirming {
+				slog.Debug("confirming abort", "agent_id", m.abortAgentID)
+				cmds = append(cmds, m.abortAgent(m.abortAgentID, false))
+				m.abortConfirming = false
+				m.abortAgentID = ""
+				m.chatView.SetAbortConfirming(false, "")
+			} else {
+				// Approve pending permission or action for selected agent
+				agentID := m.chatView.AgentID()
+				// Permissions take priority over actions
+				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+					slog.Debug("approving permission",
+						"permission_id", perm.ID,
+						"tool", perm.ToolName,
+					)
+					cmds = append(cmds, m.allowPermission(perm.ID))
+				} else if action := m.pendingActionForAgent(agentID); action != nil {
+					slog.Debug("approving action",
+						"action_id", action.ID,
+						"action_agent", action.AgentID,
+					)
+					cmds = append(cmds, m.approveAction(action.ID))
+				}
 			}
 
 		case key.Matches(msg, m.keys.Reject):
-			// Reject pending permission or action for selected agent
+			// Handle abort cancellation
+			if m.abortConfirming {
+				m.abortConfirming = false
+				m.abortAgentID = ""
+				m.chatView.SetAbortConfirming(false, "")
+			} else {
+				// Reject pending permission or action for selected agent
+				agentID := m.chatView.AgentID()
+				// Permissions take priority over actions
+				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+					slog.Debug("denying permission",
+						"permission_id", perm.ID,
+						"tool", perm.ToolName,
+					)
+					cmds = append(cmds, m.denyPermission(perm.ID))
+				} else if action := m.pendingActionForAgent(agentID); action != nil {
+					cmds = append(cmds, m.rejectAction(action.ID))
+				}
+			}
+
+		case key.Matches(msg, m.keys.Abort):
+			// Start abort confirmation for selected agent
 			agentID := m.chatView.AgentID()
-			// Permissions take priority over actions
-			if perm := m.pendingPermissionForAgent(agentID); perm != nil {
-				slog.Debug("denying permission",
-					"permission_id", perm.ID,
-					"tool", perm.ToolName,
-				)
-				cmds = append(cmds, m.denyPermission(perm.ID))
-			} else if action := m.pendingActionForAgent(agentID); action != nil {
-				cmds = append(cmds, m.rejectAction(action.ID))
+			if agentID != "" && !m.abortConfirming {
+				m.abortConfirming = true
+				m.abortAgentID = agentID
+				m.chatView.SetAbortConfirming(true, agentID)
 			}
 
 		case key.Matches(msg, m.keys.Select):
@@ -573,6 +618,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update attention indicators
 		m.updateNeedsAttention()
 
+	case AbortResultMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		// Clear abort confirmation state
+		m.abortConfirming = false
+		m.abortAgentID = ""
+		m.chatView.SetAbortConfirming(false, "")
+
 	case tickMsg:
 		// Advance spinner frame and schedule next tick
 		m.spinnerFrame++
@@ -716,7 +770,7 @@ func (m Model) View() string {
 	// Update help bar context
 	pendingPermission := m.pendingPermissionForAgent(m.chatView.AgentID())
 	pendingAction := m.pendingActionForAgent(m.chatView.AgentID())
-	m.helpBar.SetContext(m.focus, pendingPermission != nil, pendingAction != nil)
+	m.helpBar.SetContext(m.focus, pendingPermission != nil, pendingAction != nil, m.abortConfirming)
 	status := m.helpBar.View()
 
 	// Side-by-side layout: agent list (left) | chat view (right)

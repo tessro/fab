@@ -367,6 +367,22 @@ func (c *Client) AgentDelete(id string, force bool) error {
 	return nil
 }
 
+// AgentAbort aborts a running agent by sending /quit or killing the process.
+// If force is true, the agent is killed immediately (SIGKILL) without graceful shutdown.
+func (c *Client) AgentAbort(id string, force bool) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentAbort,
+		Payload: AgentAbortRequest{ID: id, Force: force},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("agent abort failed: %s", resp.Error)
+	}
+	return nil
+}
+
 // AgentInput sends input to an agent's PTY.
 func (c *Client) AgentInput(id, input string) error {
 	resp, err := c.Send(&Request{

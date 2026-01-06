@@ -73,9 +73,51 @@ func formatDuration(d time.Duration) string {
 }
 
 var (
-	doneErrorMsg string
-	doneTaskID   string
+	doneErrorMsg   string
+	doneTaskID     string
+	abortForce     bool
+	abortNoConfirm bool
 )
+
+var agentAbortCmd = &cobra.Command{
+	Use:   "abort <agent-id>",
+	Short: "Abort a running agent",
+	Long:  "Abort a running agent. By default sends /quit for graceful shutdown. Use --force to kill immediately.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runAgentAbort,
+}
+
+func runAgentAbort(cmd *cobra.Command, args []string) error {
+	agentID := args[0]
+
+	// Confirm unless --yes is specified
+	if !abortNoConfirm {
+		action := "gracefully abort"
+		if abortForce {
+			action = "force kill"
+		}
+		fmt.Printf("Are you sure you want to %s agent %s? [y/N] ", action, agentID)
+		var confirm string
+		_, _ = fmt.Scanln(&confirm)
+		if confirm != "y" && confirm != "Y" {
+			return fmt.Errorf("aborted")
+		}
+	}
+
+	client := MustConnect()
+	defer client.Close()
+
+	if err := client.AgentAbort(agentID, abortForce); err != nil {
+		return fmt.Errorf("abort agent: %w", err)
+	}
+
+	if abortForce {
+		fmt.Printf("🚌 Force killed agent %s\n", agentID)
+	} else {
+		fmt.Printf("🚌 Sent quit to agent %s\n", agentID)
+	}
+	return nil
+}
 
 var agentClaimCmd = &cobra.Command{
 	Use:   "claim <ticket-id>",
@@ -154,6 +196,10 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 func init() {
 	agentListCmd.Flags().StringVarP(&agentListProject, "project", "p", "", "Filter by project name")
 	agentCmd.AddCommand(agentListCmd)
+
+	agentAbortCmd.Flags().BoolVarP(&abortForce, "force", "f", false, "Force kill immediately (SIGKILL)")
+	agentAbortCmd.Flags().BoolVarP(&abortNoConfirm, "yes", "y", false, "Skip confirmation prompt")
+	agentCmd.AddCommand(agentAbortCmd)
 
 	agentCmd.AddCommand(agentClaimCmd)
 

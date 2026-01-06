@@ -105,6 +105,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentCreate(ctx, req)
 	case daemon.MsgAgentDelete:
 		return s.handleAgentDelete(ctx, req)
+	case daemon.MsgAgentAbort:
+		return s.handleAgentAbort(ctx, req)
 	case daemon.MsgAgentInput:
 		return s.handleAgentInput(ctx, req)
 	case daemon.MsgAgentOutput:
@@ -497,6 +499,44 @@ func (s *Supervisor) handleAgentDelete(ctx context.Context, req *daemon.Request)
 
 	if err := s.agents.Delete(deleteReq.ID); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to delete agent: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// handleAgentAbort aborts a running agent.
+// If force is false, sends /quit for graceful shutdown.
+// If force is true, kills the process immediately with SIGKILL.
+func (s *Supervisor) handleAgentAbort(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var abortReq daemon.AgentAbortRequest
+	if err := unmarshalPayload(req.Payload, &abortReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if abortReq.ID == "" {
+		return errorResponse(req, "agent ID required")
+	}
+
+	a, err := s.agents.Get(abortReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("agent not found: %s", abortReq.ID))
+	}
+
+	// Check if agent is already in terminal state
+	if a.IsTerminal() {
+		return errorResponse(req, fmt.Sprintf("agent %s is already in %s state", abortReq.ID, a.GetState()))
+	}
+
+	if abortReq.Force {
+		// Force stop: sends SIGTERM then SIGKILL after timeout
+		if err := a.Stop(); err != nil {
+			return errorResponse(req, fmt.Sprintf("failed to stop agent: %v", err))
+		}
+	} else {
+		// Graceful abort: send /quit command
+		if err := a.SendMessage("/quit"); err != nil {
+			return errorResponse(req, fmt.Sprintf("failed to send quit command: %v", err))
+		}
 	}
 
 	return successResponse(req, nil)
