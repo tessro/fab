@@ -35,8 +35,12 @@ func DefaultConfig() Config {
 		KickstartPrompt: `Run 'tk ready' to find available tasks.
 Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
-When done, run all quality gates and commit your work.
-Close the task with 'tk close <id>', then run 'fab agent done'.`,
+When done:
+1. Run all quality gates
+2. Run 'tk close <id>' to close the task
+3. Commit your work (include the ticket change in .tickets/)
+4. Run 'fab agent done'
+IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.`,
 	}
 }
 
