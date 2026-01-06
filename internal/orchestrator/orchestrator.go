@@ -41,6 +41,7 @@ func DefaultConfig() Config {
 		KickstartPrompt: `Run 'fab issue ready' to find available tasks.
 Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
+If all tasks are claimed, run 'fab agent done' to return to the pool.
 When done:
 1. Run all quality gates
 2. Run 'fab issue close <id>' to close the task
