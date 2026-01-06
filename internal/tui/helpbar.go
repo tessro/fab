@@ -16,6 +16,9 @@ type HelpBar struct {
 	pendingPermission bool
 	pendingAction     bool
 	abortConfirming   bool
+
+	// Error display
+	errorMsg string
 }
 
 // NewHelpBar creates a new help bar component.
@@ -38,8 +41,23 @@ func (h *HelpBar) SetContext(focus Focus, pendingPermission, pendingAction, abor
 	h.abortConfirming = abortConfirming
 }
 
+// SetError sets the error message to display.
+func (h *HelpBar) SetError(msg string) {
+	h.errorMsg = msg
+}
+
+// ClearError clears the error message.
+func (h *HelpBar) ClearError() {
+	h.errorMsg = ""
+}
+
 // View renders the help bar with context-sensitive keyboard shortcuts.
 func (h HelpBar) View() string {
+	// Error display takes top priority
+	if h.errorMsg != "" {
+		return errorBarStyle.Width(h.width).Render("Error: " + h.errorMsg)
+	}
+
 	var bindings []key.Binding
 
 	// Abort confirmation takes priority
