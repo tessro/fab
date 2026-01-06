@@ -75,7 +75,7 @@ func (s *ModeState) SetFocus(focus Focus) error {
 }
 
 // CycleFocus advances focus to the next panel in the cycle.
-// AgentList -> ChatView -> InputLine -> AgentList
+// AgentList -> ChatView -> ActionQueue -> InputLine -> AgentList
 // Returns the new focus value, or an error if not in normal mode.
 func (s *ModeState) CycleFocus() (Focus, error) {
 	if s.Mode != ModeNormal {
@@ -86,6 +86,8 @@ func (s *ModeState) CycleFocus() (Focus, error) {
 	case FocusAgentList:
 		s.Focus = FocusChatView
 	case FocusChatView:
+		s.Focus = FocusActionQueue
+	case FocusActionQueue:
 		s.Focus = FocusInputLine
 	case FocusInputLine:
 		s.Focus = FocusAgentList

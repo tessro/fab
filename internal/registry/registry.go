@@ -42,7 +42,8 @@ type Config struct {
 
 // Registry manages the persistent collection of projects.
 type Registry struct {
-	configPath string // Immutable after creation
+	configPath     string // Immutable after creation
+	projectBaseDir string // Base directory for project storage (testing only)
 	// +checklocks:mu
 	projects map[string]*project.Project
 	mu       sync.RWMutex
@@ -70,6 +71,14 @@ func NewWithPath(configPath string) (*Registry, error) {
 	}
 
 	return r, nil
+}
+
+// SetProjectBaseDir sets the base directory for project storage.
+// This is intended for testing to redirect project directories to temp locations.
+func (r *Registry) SetProjectBaseDir(baseDir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.projectBaseDir = baseDir
 }
 
 // load reads the config file and populates the registry.
@@ -168,6 +177,7 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project,
 
 	p := project.NewProject(name, remoteURL)
 	p.MaxAgents = maxAgents
+	p.BaseDir = r.projectBaseDir // Empty unless set for testing
 	r.projects[name] = p
 
 	if err := r.save(); err != nil {
