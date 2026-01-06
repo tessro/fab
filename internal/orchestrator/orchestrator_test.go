@@ -311,10 +311,10 @@ func TestOrchestrator_KickstartPromptContent(t *testing.T) {
 	prompt := cfg.KickstartPrompt
 
 	expectedPhrases := []string{
-		"tk ready",
+		"fab issue ready",
 		"fab agent claim",
 		"fab agent done",
-		"tk close",
+		"fab issue close",
 	}
 
 	for _, phrase := range expectedPhrases {

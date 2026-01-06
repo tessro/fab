@@ -19,10 +19,11 @@ var ErrWorktreeNotFound = errors.New("worktree not found")
 
 // Project represents a supervised coding project.
 type Project struct {
-	Name      string // Unique identifier (e.g., "myapp")
-	RemoteURL string // Git remote URL (e.g., "git@github.com:user/repo.git")
-	MaxAgents int    // Max concurrent agents (default: 3)
-	BaseDir   string // Base directory for project storage (default: ~/.fab/projects)
+	Name         string // Unique identifier (e.g., "myapp")
+	RemoteURL    string // Git remote URL (e.g., "git@github.com:user/repo.git")
+	MaxAgents    int    // Max concurrent agents (default: 3)
+	IssueBackend string // Issue backend type: "tk" (default), "linear"
+	BaseDir      string // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
@@ -80,6 +81,12 @@ func (p *Project) RepoDir() string {
 // Returns ~/.fab/projects/<projectName>/worktrees/
 func (p *Project) WorktreesDir() string {
 	return filepath.Join(p.ProjectDir(), "worktrees")
+}
+
+// IssuesDir returns the path to the issues directory within the repo.
+// Returns ~/.fab/projects/<projectName>/repo/.tickets/
+func (p *Project) IssuesDir() string {
+	return filepath.Join(p.RepoDir(), ".tickets")
 }
 
 // GetAvailableWorktree returns an available worktree and marks it as in use.

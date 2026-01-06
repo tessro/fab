@@ -28,9 +28,10 @@ var (
 
 // ProjectEntry represents a project in the config file.
 type ProjectEntry struct {
-	Name      string `toml:"name"`
-	RemoteURL string `toml:"remote_url"`
-	MaxAgents int    `toml:"max_agents,omitempty"`
+	Name         string `toml:"name"`
+	RemoteURL    string `toml:"remote_url"`
+	MaxAgents    int    `toml:"max_agents,omitempty"`
+	IssueBackend string `toml:"issue_backend,omitempty"` // "tk" (default), "linear"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 }
@@ -101,6 +102,9 @@ func (r *Registry) load() error {
 		if entry.MaxAgents > 0 {
 			p.MaxAgents = entry.MaxAgents
 		}
+		if entry.IssueBackend != "" {
+			p.IssueBackend = entry.IssueBackend
+		}
 		r.projects[entry.Name] = p
 	}
 
@@ -123,9 +127,10 @@ func (r *Registry) save() error {
 
 	for _, p := range r.projects {
 		config.Projects = append(config.Projects, ProjectEntry{
-			Name:      p.Name,
-			RemoteURL: p.RemoteURL,
-			MaxAgents: p.MaxAgents,
+			Name:         p.Name,
+			RemoteURL:    p.RemoteURL,
+			MaxAgents:    p.MaxAgents,
+			IssueBackend: p.IssueBackend,
 		})
 	}
 

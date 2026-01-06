@@ -410,13 +410,13 @@ You have access to the following tools via the command line:
 - %s agent list - List all running agents
 - %s claims list - List all claimed tickets
 
-### tk CLI (Ticket Management)
-- tk list - List all tickets
-- tk ready - List tickets ready to be worked on
-- tk show <id> - Show ticket details
-- tk create - Create a new ticket interactively
-- tk close <id> - Close a ticket
-- tk deps <id> - Show ticket dependencies
+### fab issue (Issue Management)
+- fab issue list - List all issues
+- fab issue ready - List issues ready to be worked on
+- fab issue show <id> - Show issue details
+- fab issue create -t "title" - Create a new issue
+- fab issue close <id> - Close an issue
+- fab issue update <id> - Update an issue
 
 ## Your Role
 
@@ -427,7 +427,7 @@ You have access to the following tools via the command line:
 
 ## Guidelines
 
-- Use the Bash tool to run fab and tk commands to gather information
+- Use the Bash tool to run fab commands to gather information
 - Be concise and helpful
 - When showing status, format it clearly for readability
 - Proactively suggest actions when appropriate
@@ -438,8 +438,8 @@ You have access to the following tools via the command line:
 User: "What's the status of all agents?"
 → Run: %s status
 
-User: "Show me blocked tickets"
-→ Run: tk list --status blocked
+User: "Show me blocked issues"
+→ Run: fab issue list --status blocked
 
 User: "Start working on the fab project"
 → Run: %s project start fab
