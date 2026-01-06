@@ -13,46 +13,64 @@ func TestGetCurrentBillingWindow(t *testing.T) {
 		t.Errorf("expected 5-hour window, got %v", window.End.Sub(window.Start))
 	}
 
-	// Window should contain current time
-	now := time.Now().UTC()
-	if now.Before(window.Start) || !now.Before(window.End) {
-		t.Errorf("current time %v not in window [%v, %v)", now, window.Start, window.End)
-	}
-
-	// Start hour should be divisible by 5
-	if window.Start.Hour()%5 != 0 {
-		t.Errorf("window start hour %d not divisible by 5", window.Start.Hour())
+	// Start should be floored to the hour (minutes/seconds/nanos are zero)
+	if window.Start.Minute() != 0 || window.Start.Second() != 0 || window.Start.Nanosecond() != 0 {
+		t.Errorf("window start should be floored to hour, got %v", window.Start)
 	}
 }
 
-func TestGetDayBillingWindows(t *testing.T) {
-	date := time.Date(2026, 1, 3, 14, 30, 0, 0, time.UTC)
-	windows := GetDayBillingWindows(date)
-
-	if len(windows) != 5 {
-		t.Fatalf("expected 5 windows, got %d", len(windows))
-	}
-
-	// Check window times
-	expected := []struct {
-		startHour int
-		endHour   int
+func TestFloorToHour(t *testing.T) {
+	tests := []struct {
+		input    time.Time
+		expected time.Time
 	}{
-		{0, 5},
-		{5, 10},
-		{10, 15},
-		{15, 20},
-		{20, 25}, // 25 wraps to next day
+		{
+			time.Date(2026, 1, 3, 14, 30, 45, 123, time.UTC),
+			time.Date(2026, 1, 3, 14, 0, 0, 0, time.UTC),
+		},
+		{
+			time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			time.Date(2026, 1, 3, 23, 59, 59, 999999999, time.UTC),
+			time.Date(2026, 1, 3, 23, 0, 0, 0, time.UTC),
+		},
 	}
 
-	for i, w := range windows {
-		if w.Start.Hour() != expected[i].startHour {
-			t.Errorf("window %d: expected start hour %d, got %d", i, expected[i].startHour, w.Start.Hour())
+	for _, tt := range tests {
+		t.Run(tt.input.String(), func(t *testing.T) {
+			got := floorToHour(tt.input)
+			if !got.Equal(tt.expected) {
+				t.Errorf("floorToHour(%v) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSortTimestamps(t *testing.T) {
+	timestamps := []time.Time{
+		time.Date(2026, 1, 3, 14, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 3, 16, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC),
+	}
+
+	sortTimestamps(timestamps)
+
+	// Check they're in chronological order
+	for i := 1; i < len(timestamps); i++ {
+		if timestamps[i].Before(timestamps[i-1]) {
+			t.Errorf("timestamps not sorted: %v before %v", timestamps[i], timestamps[i-1])
 		}
-		expectedEnd := expected[i].endHour % 24
-		if w.End.Hour() != expectedEnd {
-			t.Errorf("window %d: expected end hour %d, got %d", i, expectedEnd, w.End.Hour())
-		}
+	}
+
+	// Check specific values
+	if timestamps[0].Hour() != 10 {
+		t.Errorf("first timestamp should be hour 10, got %d", timestamps[0].Hour())
+	}
+	if timestamps[3].Hour() != 16 {
+		t.Errorf("last timestamp should be hour 16, got %d", timestamps[3].Hour())
 	}
 }
 

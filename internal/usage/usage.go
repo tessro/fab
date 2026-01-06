@@ -264,22 +264,172 @@ func (u Usage) PercentInt(limits Limits) int {
 	return int(u.Percent(limits) * 100)
 }
 
+// sessionDuration is the length of a Claude billing window.
+const sessionDuration = 5 * time.Hour
+
 // GetCurrentBillingWindow returns the current 5-hour billing window.
-// Windows start at midnight UTC and repeat every 5 hours.
+// Windows are rolling and start from the first message in the current block,
+// floored to the nearest hour. A new block starts when there's a 5+ hour gap.
 func GetCurrentBillingWindow() BillingWindow {
+	blocks, _ := GetActiveBlocks()
+	if len(blocks) > 0 {
+		// Return the most recent active block
+		return blocks[len(blocks)-1]
+	}
+
+	// No active blocks - return a window ending now with no usage
 	now := time.Now().UTC()
-
-	// Calculate hours since midnight
-	hoursSinceMidnight := now.Hour()
-	windowIndex := hoursSinceMidnight / 5
-	windowStartHour := windowIndex * 5
-
-	start := time.Date(now.Year(), now.Month(), now.Day(), windowStartHour, 0, 0, 0, time.UTC)
-	end := start.Add(5 * time.Hour)
-
 	return BillingWindow{
-		Start: start,
-		End:   end,
+		Start: now.Add(-sessionDuration),
+		End:   now,
+	}
+}
+
+// GetActiveBlocks identifies all active billing blocks from JSONL files.
+// A block starts when activity begins after a 5+ hour gap, floored to the hour.
+// Returns blocks sorted by start time.
+func GetActiveBlocks() ([]BillingWindow, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	projectsDir := filepath.Join(home, ClaudeDir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Collect all timestamps with usage data
+	var timestamps []time.Time
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		projectDir := filepath.Join(projectsDir, entry.Name())
+		pattern := filepath.Join(projectDir, "*.jsonl")
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			ts, err := collectTimestamps(file)
+			if err != nil {
+				continue
+			}
+			timestamps = append(timestamps, ts...)
+		}
+	}
+
+	if len(timestamps) == 0 {
+		return nil, nil
+	}
+
+	// Sort timestamps chronologically
+	sortTimestamps(timestamps)
+
+	// Identify blocks: a new block starts after a 5+ hour gap
+	var blocks []BillingWindow
+	var currentBlock *BillingWindow
+	var lastTimestamp time.Time
+
+	for _, ts := range timestamps {
+		if currentBlock == nil {
+			// First entry - start a new block (floored to the hour)
+			start := floorToHour(ts)
+			currentBlock = &BillingWindow{
+				Start: start,
+				End:   start.Add(sessionDuration),
+			}
+			lastTimestamp = ts
+			continue
+		}
+
+		timeSinceBlockStart := ts.Sub(currentBlock.Start)
+		timeSinceLastEntry := ts.Sub(lastTimestamp)
+
+		// Start a new block if:
+		// - More than 5 hours since block start, OR
+		// - More than 5 hours since last entry (gap in activity)
+		if timeSinceBlockStart > sessionDuration || timeSinceLastEntry > sessionDuration {
+			blocks = append(blocks, *currentBlock)
+			start := floorToHour(ts)
+			currentBlock = &BillingWindow{
+				Start: start,
+				End:   start.Add(sessionDuration),
+			}
+		}
+
+		lastTimestamp = ts
+	}
+
+	// Add the final block
+	if currentBlock != nil {
+		blocks = append(blocks, *currentBlock)
+	}
+
+	// Filter to only active blocks (end time is in the future or within last hour)
+	now := time.Now().UTC()
+	var activeBlocks []BillingWindow
+	for _, block := range blocks {
+		// Keep blocks that haven't ended yet or ended very recently
+		if block.End.After(now.Add(-time.Hour)) {
+			activeBlocks = append(activeBlocks, block)
+		}
+	}
+
+	return activeBlocks, nil
+}
+
+// collectTimestamps extracts all assistant message timestamps from a JSONL file.
+func collectTimestamps(path string) ([]time.Time, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var timestamps []time.Time
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+
+	for scanner.Scan() {
+		var entry jsonlEntry
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+			continue
+		}
+
+		if entry.Type != "assistant" || entry.Message == nil || entry.Message.Usage == nil {
+			continue
+		}
+
+		ts, err := time.Parse(time.RFC3339, entry.Timestamp)
+		if err != nil {
+			continue
+		}
+
+		timestamps = append(timestamps, ts)
+	}
+
+	return timestamps, scanner.Err()
+}
+
+// floorToHour rounds a time down to the nearest hour.
+func floorToHour(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location())
+}
+
+// sortTimestamps sorts timestamps chronologically.
+func sortTimestamps(timestamps []time.Time) {
+	for i := 1; i < len(timestamps); i++ {
+		for j := i; j > 0 && timestamps[j].Before(timestamps[j-1]); j-- {
+			timestamps[j], timestamps[j-1] = timestamps[j-1], timestamps[j]
+		}
 	}
 }
 
@@ -411,21 +561,6 @@ func GetCurrentBillingWindowWithUsage() (BillingWindow, error) {
 	return window, nil
 }
 
-// GetDayBillingWindows returns all 5 billing windows for a given day.
-func GetDayBillingWindows(date time.Time) []BillingWindow {
-	date = date.UTC()
-	midnight := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-
-	windows := make([]BillingWindow, 5)
-	for i := 0; i < 5; i++ {
-		start := midnight.Add(time.Duration(i*5) * time.Hour)
-		windows[i] = BillingWindow{
-			Start: start,
-			End:   start.Add(5 * time.Hour),
-		}
-	}
-	return windows
-}
 
 // TimeRemaining returns the duration remaining in this billing window.
 func (bw BillingWindow) TimeRemaining() time.Duration {
