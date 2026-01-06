@@ -251,7 +251,7 @@ type AgentChatHistoryResponse struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type              string             `json:"type"` // "output", "state", "created", "deleted", "permission_request"
+	Type              string             `json:"type"` // "output", "state", "created", "deleted", "permission_request", "action_queued"
 	AgentID           string             `json:"agent_id"`
 	Project           string             `json:"project"`
 	Data              string             `json:"data,omitempty"`               // For output events
@@ -259,6 +259,7 @@ type StreamEvent struct {
 	StartedAt         string             `json:"started_at,omitempty"`         // For created events (RFC3339)
 	ChatEntry         *ChatEntryDTO      `json:"chat_entry,omitempty"`         // For "chat_entry" events
 	PermissionRequest *PermissionRequest `json:"permission_request,omitempty"` // For "permission_request" events
+	StagedAction      *StagedAction      `json:"staged_action,omitempty"`      // For "action_queued" events
 }
 
 // ChatEntryDTO is the wire format for chat entries sent to TUI clients

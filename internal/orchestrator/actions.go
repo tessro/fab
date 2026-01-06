@@ -37,11 +37,18 @@ type StagedAction struct {
 	CreatedAt time.Time
 }
 
+// ActionAddedHandler is called when a new action is added to the queue.
+type ActionAddedHandler func(action StagedAction)
+
 // ActionQueue manages staged actions for manual mode.
 type ActionQueue struct {
 	// +checklocks:mu
 	actions []StagedAction
 	mu      sync.RWMutex
+
+	// +checklocks:handlerMu
+	handler   ActionAddedHandler
+	handlerMu sync.RWMutex
 }
 
 // NewActionQueue creates a new action queue.
@@ -51,17 +58,30 @@ func NewActionQueue() *ActionQueue {
 	}
 }
 
+// OnAdded registers a handler to be called when actions are added.
+func (q *ActionQueue) OnAdded(handler ActionAddedHandler) {
+	q.handlerMu.Lock()
+	defer q.handlerMu.Unlock()
+	q.handler = handler
+}
+
 // Add adds a new action to the queue.
 // The action ID will be generated if not set.
 func (q *ActionQueue) Add(action StagedAction) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	if action.ID == "" {
 		action.ID = generateActionID()
 	}
-
 	q.actions = append(q.actions, action)
+	q.mu.Unlock()
+
+	// Notify handler outside of lock
+	q.handlerMu.RLock()
+	handler := q.handler
+	q.handlerMu.RUnlock()
+	if handler != nil {
+		handler(action)
+	}
 }
 
 // List returns all pending actions.
