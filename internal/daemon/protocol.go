@@ -56,6 +56,9 @@ const (
 
 	// Commit tracking
 	MsgCommitList MessageType = "commit.list" // List recent commits
+
+	// Stats
+	MsgStats MessageType = "stats" // Get aggregated session statistics
 )
 
 // Request is the envelope for all IPC requests.
@@ -422,4 +425,28 @@ type CommitInfo struct {
 	TaskID   string `json:"task_id,omitempty"`
 	Project  string `json:"project"`
 	MergedAt string `json:"merged_at"` // RFC3339 format
+}
+
+// StatsRequest is the payload for stats requests.
+type StatsRequest struct {
+	Project string `json:"project,omitempty"` // Filter by project, empty = all
+}
+
+// StatsResponse contains aggregated session statistics.
+type StatsResponse struct {
+	// Session stats (accumulated since daemon start)
+	CommitCount int `json:"commit_count"` // Total commits merged this session
+
+	// Usage stats (current billing window)
+	Usage UsageStats `json:"usage"`
+}
+
+// UsageStats contains token usage for the current billing window.
+type UsageStats struct {
+	OutputTokens int64  `json:"output_tokens"`
+	Percent      int    `json:"percent"`    // Usage as percentage (0-100+)
+	WindowEnd    string `json:"window_end"` // RFC3339 format
+	TimeLeft     string `json:"time_left"`  // Human-readable time remaining
+	PlanLimit    int64  `json:"plan_limit"` // Output token limit for current plan
+	Plan         string `json:"plan"`       // "pro" or "max"
 }

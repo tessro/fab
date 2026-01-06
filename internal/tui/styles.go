@@ -34,6 +34,24 @@ var (
 					Foreground(warningColor).
 					Background(primaryColor)
 
+	// Header separator style
+	headerSeparatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#A0A0A0")).
+				Background(primaryColor)
+
+	// Usage bar styles (colored by level)
+	headerUsageLowStyle = lipgloss.NewStyle().
+				Foreground(secondaryColor). // Green
+				Background(primaryColor)
+
+	headerUsageMediumStyle = lipgloss.NewStyle().
+				Foreground(warningColor). // Amber/Yellow
+				Background(primaryColor)
+
+	headerUsageHighStyle = lipgloss.NewStyle().
+				Foreground(errorColor). // Red
+				Background(primaryColor)
+
 	// Status bar style
 	statusStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).

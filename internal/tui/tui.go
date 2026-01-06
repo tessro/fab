@@ -52,6 +52,12 @@ type StagedActionsMsg struct {
 	Err     error
 }
 
+// StatsMsg contains aggregated session statistics.
+type StatsMsg struct {
+	Stats *daemon.StatsResponse
+	Err   error
+}
+
 // ActionResultMsg is the result of approving/rejecting an action.
 type ActionResultMsg struct {
 	Err error
@@ -138,6 +144,9 @@ type Model struct {
 
 	// Spinner animation frame counter
 	spinnerFrame int
+
+	// Stats refresh counter (every 300 ticks = 30s at 100ms/tick)
+	statsRefreshTick int
 
 	// Abort confirmation state
 	abortConfirming bool
@@ -320,6 +329,20 @@ func (m Model) fetchStagedActions() tea.Cmd {
 			return StagedActionsMsg{Err: err}
 		}
 		return StagedActionsMsg{Actions: resp.Actions}
+	}
+}
+
+// fetchStats retrieves aggregated session statistics.
+func (m Model) fetchStats() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		resp, err := m.client.Stats("")
+		if err != nil {
+			return StatsMsg{Err: err}
+		}
+		return StatsMsg{Stats: resp}
 	}
 }
 
@@ -712,6 +735,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Fetch staged actions for approval display
 			cmds = append(cmds, m.fetchStagedActions())
+			// Fetch stats for header display
+			cmds = append(cmds, m.fetchStats())
 		}
 
 	case AgentInputMsg:
@@ -737,6 +762,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatView.SetPendingAction(m.pendingActionForAgent(m.chatView.AgentID()))
 			// Update attention indicators
 			m.updateNeedsAttention()
+		}
+
+	case StatsMsg:
+		if msg.Err == nil && msg.Stats != nil {
+			// Only use stats for commit count - usage comes from UsageUpdateMsg
+			m.header.SetCommitCount(msg.Stats.CommitCount)
 		}
 
 	case ActionResultMsg:
@@ -786,6 +817,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if time.Since(m.lastUsageFetch) > 30*time.Second {
 			m.lastUsageFetch = time.Now()
 			cmds = append(cmds, m.fetchUsage())
+		}
+
+		// Refresh daemon stats every 30 seconds for commit count
+		m.statsRefreshTick++
+		if m.statsRefreshTick >= 300 && m.connState == ConnectionConnected {
+			m.statsRefreshTick = 0
+			cmds = append(cmds, m.fetchStats())
 		}
 
 	case UsageUpdateMsg:

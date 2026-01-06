@@ -610,6 +610,27 @@ func (c *Client) RespondPermission(id, behavior, message string, interrupt bool)
 	return nil
 }
 
+// Stats retrieves aggregated session statistics.
+func (c *Client) Stats(project string) (*StatsResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgStats,
+		Payload: StatsRequest{Project: project},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("stats failed: %s", resp.Error)
+	}
+
+	var result StatsResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
 // ListPendingPermissions returns pending permission requests awaiting user approval.
 func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse, error) {
 	resp, err := c.Send(&Request{

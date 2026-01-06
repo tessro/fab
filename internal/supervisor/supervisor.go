@@ -16,6 +16,7 @@ import (
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
+	"github.com/tessro/fab/internal/usage"
 	"github.com/tessro/fab/internal/version"
 )
 
@@ -150,6 +151,10 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	// Commit tracking
 	case daemon.MsgCommitList:
 		return s.handleCommitList(ctx, req)
+
+	// Stats
+	case daemon.MsgStats:
+		return s.handleStats(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
@@ -1416,6 +1421,69 @@ func (s *Supervisor) handleClaimList(_ context.Context, req *daemon.Request) *da
 	return successResponse(req, daemon.ClaimListResponse{
 		Claims: claims,
 	})
+}
+
+// handleStats returns aggregated session statistics.
+func (s *Supervisor) handleStats(_ context.Context, req *daemon.Request) *daemon.Response {
+	var statsReq daemon.StatsRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &statsReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	// Count commits across projects
+	commitCount := 0
+	s.mu.RLock()
+	for name, orch := range s.orchestrators {
+		if statsReq.Project != "" && statsReq.Project != name {
+			continue
+		}
+		commitCount += orch.Commits().Len()
+	}
+	s.mu.RUnlock()
+
+	// Get current billing window usage
+	window, err := usage.GetCurrentBillingWindowWithUsage()
+	if err != nil {
+		slog.Debug("failed to get usage stats", "error", err)
+		// Return response with zero usage on error
+		return successResponse(req, daemon.StatsResponse{
+			CommitCount: commitCount,
+			Usage: daemon.UsageStats{
+				Plan: "pro",
+			},
+		})
+	}
+
+	// Use Pro limits by default (can be made configurable later)
+	limits := usage.DefaultProLimits()
+	percent := window.Usage.PercentInt(limits)
+	timeLeft := window.TimeRemaining()
+
+	return successResponse(req, daemon.StatsResponse{
+		CommitCount: commitCount,
+		Usage: daemon.UsageStats{
+			OutputTokens: window.Usage.OutputTokens,
+			Percent:      percent,
+			WindowEnd:    window.End.Format(time.RFC3339),
+			TimeLeft:     formatDuration(timeLeft),
+			PlanLimit:    limits.OutputTokens,
+			Plan:         "pro",
+		},
+	})
+}
+
+// formatDuration formats a duration as a human-readable string (e.g., "2h 15m").
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Minute)
+	h := d / time.Hour
+	d -= h * time.Hour
+	m := d / time.Minute
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
 }
 
 // handleCommitList returns recent commits across projects.

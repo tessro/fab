@@ -1,6 +1,6 @@
 ---
 id: fa-bo1
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-03T12:32:31.530299007-08:00
