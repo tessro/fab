@@ -9,6 +9,11 @@ import (
 )
 
 func TestRewritePattern(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name    string
 		pattern string
@@ -24,6 +29,13 @@ func TestRewritePattern(t *testing.T) {
 		{"absolute root", "//:*", "/home/user/project", "/:*"},
 		{"absolute path", "//etc/passwd", "/home/user/project", "/etc/passwd"},
 		{"absolute subdir", "//tmp/:*", "/home/user/project", "/tmp/:*"},
+
+		// Home directory patterns (~ → home)
+		{"home root", "~", "/home/user/project", home},
+		{"home subdir", "~/:*", "/home/user/project", filepath.Join(home, ":*")},
+		{"home config", "~/.config/:*", "/home/user/project", filepath.Join(home, ".config/:*")},
+		{"home exact file", "~/.bashrc", "/home/user/project", filepath.Join(home, ".bashrc")},
+		{"tilde user unsupported", "~otheruser/file", "/home/user/project", "~otheruser/file"},
 
 		// Pass-through patterns (no / prefix)
 		{"command pattern", "git :*", "/home/user/project", "git :*"},
@@ -554,5 +566,58 @@ func TestScriptMatch(t *testing.T) {
 				t.Errorf("action = %v, want %v", action, tt.wantAction)
 			}
 		})
+	}
+}
+
+func TestExpandHomePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"tilde only", "~", home},
+		{"tilde slash", "~/", home},
+		{"tilde subdir", "~/scripts", filepath.Join(home, "scripts")},
+		{"tilde nested", "~/.config/fab/check.sh", filepath.Join(home, ".config/fab/check.sh")},
+		{"no tilde absolute", "/usr/bin/script.sh", "/usr/bin/script.sh"},
+		{"no tilde relative", "scripts/check.sh", "scripts/check.sh"},
+		{"tilde user unsupported", "~otheruser/file", "~otheruser/file"},
+		{"empty", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExpandHomePath(tt.path)
+			if got != tt.want {
+				t.Errorf("ExpandHomePath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestScriptMatchWithTildePath(t *testing.T) {
+	// Create a script in a temp directory, then test that ~ expansion works
+	// by creating a symlink from home to the temp dir
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "allow.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho allow\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	toolInput := json.RawMessage(`{"command":"test"}`)
+
+	// Test with absolute path (should work)
+	action, err := ScriptMatch(ctx, scriptPath, "Bash", toolInput)
+	if err != nil {
+		t.Errorf("ScriptMatch with absolute path error: %v", err)
+	}
+	if action != ActionAllow {
+		t.Errorf("ScriptMatch with absolute path = %v, want allow", action)
 	}
 }

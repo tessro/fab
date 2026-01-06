@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -15,14 +17,32 @@ const (
 )
 
 // RewritePattern rewrites path patterns based on prefix:
+//   - "~" or "~/path" → "<home>" or "<home>/path" (home directory expansion)
 //   - "/path" → "<cwd>/path" (worktree-scoped)
 //   - "//path" → "/path" (absolute path, strip one /)
 //   - other patterns pass through unchanged
 //
 // This allows rules like pattern = "/:*" to match files within the
 // current working directory while pattern = "//:*" matches absolute paths.
+// Pattern "~/:*" matches files within the user's home directory.
 func RewritePattern(pattern, cwd string) string {
 	if len(pattern) == 0 {
+		return pattern
+	}
+
+	// Check for home directory expansion (~ → home)
+	if strings.HasPrefix(pattern, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return pattern // Return unchanged if we can't get home dir
+		}
+		if pattern == "~" {
+			return home
+		}
+		if strings.HasPrefix(pattern, "~/") {
+			return filepath.Join(home, pattern[2:])
+		}
+		// ~user syntax not supported, return unchanged
 		return pattern
 	}
 
@@ -113,14 +133,37 @@ func ResolvePrimaryField(toolName string, toolInput json.RawMessage) string {
 	return ""
 }
 
+// ExpandHomePath expands ~ to the user's home directory in a path string.
+// Returns the path unchanged if it doesn't start with ~ or if there's an error.
+func ExpandHomePath(path string) string {
+	if !strings.HasPrefix(path, "~") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	// ~user syntax not supported
+	return path
+}
+
 // ScriptMatch executes a validation script and returns its decision.
 // The script receives the tool name as its first argument and tool input JSON on stdin.
 // Script output should be "allow", "deny", or "pass" (default on error or other output).
+// The scriptPath supports ~ expansion (e.g., ~/scripts/check.sh).
 func ScriptMatch(ctx context.Context, scriptPath, toolName string, toolInput json.RawMessage) (Action, error) {
 	ctx, cancel := context.WithTimeout(ctx, DefaultScriptTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, scriptPath, toolName)
+	// Expand ~ in script path
+	expandedPath := ExpandHomePath(scriptPath)
+	cmd := exec.CommandContext(ctx, expandedPath, toolName)
 	cmd.Stdin = bytes.NewReader(toolInput)
 
 	output, err := cmd.Output()
