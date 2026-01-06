@@ -163,23 +163,21 @@ func runIssueReady(cmd *cobra.Command, args []string) error {
 // issue create
 
 var (
-	issueCreateTitle       string
 	issueCreateDescription string
 	issueCreateType        string
 	issueCreatePriority    int
 )
 
 var issueCreateCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <title>",
 	Short: "Create a new issue",
 	Long:  "Create a new issue. Commits and pushes immediately.",
+	Args:  cobra.ExactArgs(1),
 	RunE:  runIssueCreate,
 }
 
 func runIssueCreate(cmd *cobra.Command, args []string) error {
-	if issueCreateTitle == "" {
-		return fmt.Errorf("--title is required")
-	}
+	title := args[0]
 
 	backend, err := getIssueBackend()
 	if err != nil {
@@ -187,7 +185,7 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	params := issue.CreateParams{
-		Title:       issueCreateTitle,
+		Title:       title,
 		Description: issueCreateDescription,
 		Type:        issueCreateType,
 		Priority:    issueCreatePriority,
@@ -305,7 +303,6 @@ func init() {
 	issueListCmd.Flags().StringVarP(&issueListStatus, "status", "s", "", "Filter by status (open, closed, blocked)")
 
 	// create flags
-	issueCreateCmd.Flags().StringVarP(&issueCreateTitle, "title", "t", "", "Issue title (required)")
 	issueCreateCmd.Flags().StringVarP(&issueCreateDescription, "description", "d", "", "Issue description")
 	issueCreateCmd.Flags().StringVar(&issueCreateType, "type", "task", "Issue type (task, bug, feature, chore)")
 	issueCreateCmd.Flags().IntVar(&issueCreatePriority, "priority", 1, "Issue priority (0=low, 1=medium, 2=high)")
