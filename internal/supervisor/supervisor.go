@@ -13,6 +13,7 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
@@ -34,6 +35,10 @@ type Supervisor struct {
 
 	// +checklocks:mu
 	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
+
+	// Manager agent for interactive user conversation
+	// +checklocks:mu
+	manager *manager.Manager
 
 	shutdownCh chan struct{} // Created at init, closed to signal shutdown
 	shutdownMu sync.Mutex    // Protects closing shutdownCh exactly once
@@ -57,6 +62,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		permissions:   daemon.NewPermissionManager(PermissionTimeout),
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
+		manager:       manager.New(manager.DefaultWorkDir()),
 	}
 
 	// Set up callback to start agent read loops when agent starts
@@ -67,6 +73,14 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 
 	// Register event handler to broadcast agent events
 	agents.OnEvent(s.handleAgentEvent)
+
+	// Set up manager callbacks for broadcasting events
+	s.manager.OnStateChange(func(old, new manager.State) {
+		s.broadcastManagerState(new)
+	})
+	s.manager.OnEntry(func(entry agent.ChatEntry) {
+		s.broadcastManagerChatEntry(entry)
+	})
 
 	return s
 }
@@ -155,6 +169,18 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	// Stats
 	case daemon.MsgStats:
 		return s.handleStats(ctx, req)
+
+	// Manager agent
+	case daemon.MsgManagerStart:
+		return s.handleManagerStart(ctx, req)
+	case daemon.MsgManagerStop:
+		return s.handleManagerStop(ctx, req)
+	case daemon.MsgManagerStatus:
+		return s.handleManagerStatus(ctx, req)
+	case daemon.MsgManagerSendMessage:
+		return s.handleManagerSendMessage(ctx, req)
+	case daemon.MsgManagerChatHistory:
+		return s.handleManagerChatHistory(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
@@ -1525,5 +1551,142 @@ func (s *Supervisor) handleCommitList(_ context.Context, req *daemon.Request) *d
 
 	return successResponse(req, daemon.CommitListResponse{
 		Commits: commits,
+	})
+}
+
+// handleManagerStart starts the manager agent.
+func (s *Supervisor) handleManagerStart(_ context.Context, req *daemon.Request) *daemon.Response {
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	if err := mgr.Start(); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to start manager: %v", err))
+	}
+
+	slog.Info("manager agent started")
+	return successResponse(req, nil)
+}
+
+// handleManagerStop stops the manager agent.
+func (s *Supervisor) handleManagerStop(_ context.Context, req *daemon.Request) *daemon.Response {
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	if err := mgr.Stop(); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to stop manager: %v", err))
+	}
+
+	slog.Info("manager agent stopped")
+	return successResponse(req, nil)
+}
+
+// handleManagerStatus returns the manager agent status.
+func (s *Supervisor) handleManagerStatus(_ context.Context, req *daemon.Request) *daemon.Response {
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	startedAt := ""
+	if mgr.IsRunning() {
+		startedAt = mgr.StartedAt().Format(time.RFC3339)
+	}
+
+	return successResponse(req, daemon.ManagerStatusResponse{
+		Running:   mgr.IsRunning(),
+		State:     string(mgr.State()),
+		StartedAt: startedAt,
+	})
+}
+
+// handleManagerSendMessage sends a message to the manager agent.
+func (s *Supervisor) handleManagerSendMessage(_ context.Context, req *daemon.Request) *daemon.Response {
+	var sendReq daemon.ManagerSendMessageRequest
+	if err := unmarshalPayload(req.Payload, &sendReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	if err := mgr.SendMessage(sendReq.Content); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// handleManagerChatHistory returns the manager chat history.
+func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Request) *daemon.Response {
+	var histReq daemon.ManagerChatHistoryRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &histReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	entries := mgr.History().Entries(histReq.Limit)
+
+	// Convert to DTO format
+	dtos := make([]daemon.ChatEntryDTO, len(entries))
+	for i, e := range entries {
+		dtos[i] = daemon.ChatEntryDTO{
+			Role:       e.Role,
+			Content:    e.Content,
+			ToolName:   e.ToolName,
+			ToolInput:  e.ToolInput,
+			ToolResult: e.ToolResult,
+			Timestamp:  e.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	return successResponse(req, daemon.ManagerChatHistoryResponse{
+		Entries: dtos,
+	})
+}
+
+// broadcastManagerState sends a manager state change to attached clients.
+func (s *Supervisor) broadcastManagerState(state manager.State) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:         "manager_state",
+		ManagerState: string(state),
+	})
+}
+
+// broadcastManagerChatEntry sends a manager chat entry to attached clients.
+func (s *Supervisor) broadcastManagerChatEntry(entry agent.ChatEntry) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	dto := &daemon.ChatEntryDTO{
+		Role:       entry.Role,
+		Content:    entry.Content,
+		ToolName:   entry.ToolName,
+		ToolInput:  entry.ToolInput,
+		ToolResult: entry.ToolResult,
+		Timestamp:  entry.Timestamp.Format(time.RFC3339),
+	}
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:      "manager_chat_entry",
+		ChatEntry: dto,
 	})
 }

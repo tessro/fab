@@ -841,3 +841,81 @@ func (c *Client) StopEventStream() {
 		c.eventConn = nil
 	}
 }
+
+// ManagerStart starts the manager agent.
+func (c *Client) ManagerStart() error {
+	resp, err := c.Send(&Request{Type: MsgManagerStart})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("manager start failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ManagerStop stops the manager agent.
+func (c *Client) ManagerStop() error {
+	resp, err := c.Send(&Request{Type: MsgManagerStop})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("manager stop failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ManagerStatus returns the manager agent status.
+func (c *Client) ManagerStatus() (*ManagerStatusResponse, error) {
+	resp, err := c.Send(&Request{Type: MsgManagerStatus})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("manager status failed: %s", resp.Error)
+	}
+
+	var result ManagerStatusResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// ManagerSendMessage sends a message to the manager agent.
+func (c *Client) ManagerSendMessage(content string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerSendMessage,
+		Payload: ManagerSendMessageRequest{Content: content},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("manager send message failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ManagerChatHistory retrieves the chat history for the manager agent.
+func (c *Client) ManagerChatHistory(limit int) (*ManagerChatHistoryResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerChatHistory,
+		Payload: ManagerChatHistoryRequest{Limit: limit},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("manager chat history failed: %s", resp.Error)
+	}
+
+	var result ManagerChatHistoryResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
