@@ -1,6 +1,6 @@
 ---
 id: fa-43n
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-03T12:32:26.968402968-08:00
