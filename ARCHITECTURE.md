@@ -17,7 +17,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 │         │                           │                                        │
 │         ▼                           ▼                                        │
 │  ┌─────────────┐    ┌──────────────────────────────────────────────────┐   │
-│  │ CLI / TUI   │    │  Agents (PTY)                                     │   │
+│  │ CLI / TUI   │    │  Agents (stream-json)                             │   │
 │  │ commands    │    │  ┌─────────┐ ┌─────────┐ ┌─────────┐              │   │
 │  └─────────────┘    │  │ Claude  │ │ Claude  │ │ Claude  │ ...         │   │
 │                     │  │ Code    │ │ Code    │ │ Code    │              │   │
@@ -68,7 +68,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 **Key features:**
 - Top bar: status summary (agent counts), session stats (tickets closed, commits made), usage meter
 - Left rail: all agents grouped by project, state indicators [S]tarting/[R]unning/[I]dle/[D]one
-- Main pane: selected agent's PTY (scrollable, interactive)
+- Main pane: selected agent's chat view (scrollable, interactive)
 - In-game chat style input: `Enter` opens input line, type message, `Enter` again to send
 
 **Key bindings:**
@@ -76,7 +76,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 - `n`: spawn new agent (prompts for project)
 - `t`: create task via `tk create`
 - `d`: delete selected agent
-- `Enter`: open input line for PTY (in-game chat style)
+- `Enter`: open input line for chat (in-game chat style)
 - `Esc`: cancel input / return to navigation
 - `q`: quit TUI (detach, agents keep running)
 
@@ -124,7 +124,7 @@ type Worktree struct {
    - Return worktree to pool
    - Spawn replacement agent if orchestration is active
 
-4. **User intervention**: User can type in any agent's PTY at any time; supervisor pauses kickstart for that agent until user is done (detected via PTY input silence).
+4. **User intervention**: User can type in any agent's chat at any time; supervisor pauses kickstart for that agent until user is done (detected via input silence).
 
 ## Usage Tracking
 
@@ -162,7 +162,7 @@ fab/
 │   │   └── worktree.go          # Worktree pool management
 │   ├── agent/
 │   │   ├── agent.go             # Agent type + lifecycle
-│   │   ├── pty.go               # PTY spawning/IO
+│   │   ├── streamjson.go        # Stream-JSON protocol parsing
 │   │   └── ringbuffer.go        # Output buffer
 │   ├── supervisor/
 │   │   ├── supervisor.go        # Main orchestration loop
@@ -175,7 +175,7 @@ fab/
 │       └── components/
 │           ├── header.go        # Top status summary + usage + stats
 │           ├── agentlist.go     # Left rail agent list
-│           ├── ptyview.go       # PTY viewport
+│           ├── chatview.go      # Chat message viewport
 │           ├── inputline.go     # In-game chat style input
 │           └── helpbar.go       # Bottom help bar
 ├── go.mod
@@ -189,7 +189,6 @@ require (
     github.com/charmbracelet/bubbletea v1.3+
     github.com/charmbracelet/lipgloss v1.1+
     github.com/charmbracelet/bubbles v0.21+
-    github.com/creack/pty v1.1+
     github.com/spf13/cobra v1.10+
     github.com/pelletier/go-toml/v2 v2.2+
     github.com/google/uuid v1.6+
@@ -212,7 +211,7 @@ require (
 4. CLI: `fab project add/remove/list`
 
 ### Phase 3: Agent Management
-1. Agent type with PTY spawning
+1. Agent type with stream-json I/O
 2. Ring buffer for output capture
 3. Agent lifecycle (create, destroy, state machine)
 4. Basic supervisor (no orchestration yet)
@@ -221,7 +220,7 @@ require (
 1. Bubbletea app structure
 2. Header component (status summary, usage placeholder)
 3. Agent list component (grouped by project)
-4. PTY view component (scrolling, focus, input)
+4. Chat view component (scrolling, focus, input)
 5. CLI: `fab attach`
 
 ### Phase 5: Orchestration
@@ -242,8 +241,8 @@ require (
 |------|---------|
 | `internal/daemon/server.go` | Unix socket RPC, bridges CLI to supervisor |
 | `internal/supervisor/supervisor.go` | Core orchestration: per-project agent management, kickstart loop |
-| `internal/agent/pty.go` | PTY spawning, I/O, resize handling |
+| `internal/agent/streamjson.go` | Stream-JSON protocol parsing for Claude Code I/O |
 | `internal/project/worktree.go` | Worktree pool: create, assign, recycle |
-| `internal/tui/app.go` | Bubbletea model, component coordination |
-| `internal/tui/components/ptyview.go` | PTY rendering with ANSI passthrough |
-| `internal/tui/components/header.go` | Status summary across all projects + usage |
+| `internal/tui/tui.go` | Bubbletea model, component coordination |
+| `internal/tui/chatview.go` | Chat message rendering |
+| `internal/tui/header.go` | Status summary across all projects + usage |

@@ -30,7 +30,7 @@ const (
 	MsgAgentCreate MessageType = "agent.create"
 	MsgAgentDelete MessageType = "agent.delete"
 	MsgAgentAbort  MessageType = "agent.abort"  // Abort/kill a running agent
-	MsgAgentInput  MessageType = "agent.input"  // Send input to agent PTY
+	MsgAgentInput  MessageType = "agent.input"  // Send input to agent
 	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
 
 	// TUI streaming
@@ -215,7 +215,7 @@ type AgentListResponse struct {
 // AgentInputRequest is the payload for agent.input requests.
 type AgentInputRequest struct {
 	ID    string `json:"id"`
-	Input string `json:"input"` // Raw input to send to PTY
+	Input string `json:"input"` // Raw input to send to agent
 }
 
 // AgentSendMessageRequest is the payload for agent.send_message requests.
@@ -232,7 +232,7 @@ type AgentOutputRequest struct {
 // AgentOutputResponse is the payload for agent.output responses.
 type AgentOutputResponse struct {
 	ID     string `json:"id"`
-	Output string `json:"output"` // Buffered PTY output
+	Output string `json:"output"` // Buffered agent output
 }
 
 // AttachRequest is the payload for attach requests.
@@ -279,7 +279,7 @@ type ChatEntryDTO struct {
 type ActionType string
 
 const (
-	// ActionSendMessage sends a message to an agent's PTY.
+	// ActionSendMessage sends a message to an agent.
 	ActionSendMessage ActionType = "send_message"
 
 	// ActionQuit sends /quit to gracefully end the agent session.

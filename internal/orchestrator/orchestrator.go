@@ -23,7 +23,7 @@ type Config struct {
 	// KickstartPrompt is sent to agents when they start.
 	KickstartPrompt string
 
-	// OnAgentStarted is called after an agent's PTY is started.
+	// OnAgentStarted is called after an agent's process is started.
 	// Use this to set up output reading/broadcasting.
 	OnAgentStarted func(*agent.Agent)
 }
@@ -199,9 +199,9 @@ func (o *Orchestrator) spawnAgentsToCapacity() {
 		// Set the agent mode from config
 		a.SetMode(o.config.DefaultAgentMode)
 
-		// Start the PTY immediately (without prompt)
+		// Start the agent process immediately (without prompt)
 		if err := a.Start(""); err != nil {
-			// Failed to start PTY, skip this agent
+			// Failed to start process, skip this agent
 			continue
 		}
 
