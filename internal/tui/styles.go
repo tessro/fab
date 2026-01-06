@@ -25,6 +25,15 @@ var (
 				Background(primaryColor).
 				Padding(0, 1)
 
+	// Connection status styles
+	headerConnDisconnectedStyle = lipgloss.NewStyle().
+					Foreground(errorColor).
+					Background(primaryColor)
+
+	headerConnReconnectingStyle = lipgloss.NewStyle().
+					Foreground(warningColor).
+					Background(primaryColor)
+
 	// Status bar style
 	statusStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).

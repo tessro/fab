@@ -72,6 +72,25 @@ type tickMsg time.Time
 // clearErrorMsg is sent to clear the error display after a timeout.
 type clearErrorMsg struct{}
 
+// ConnectionState represents the current IPC connection status.
+type ConnectionState int
+
+const (
+	// ConnectionConnected means the TUI is connected to the daemon.
+	ConnectionConnected ConnectionState = iota
+	// ConnectionDisconnected means the connection was lost.
+	ConnectionDisconnected
+	// ConnectionReconnecting means a reconnection attempt is in progress.
+	ConnectionReconnecting
+)
+
+// reconnectMsg signals the result of a reconnection attempt.
+type reconnectMsg struct {
+	Success   bool
+	Err       error
+	EventChan <-chan daemon.EventResult
+}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -97,6 +116,12 @@ type Model struct {
 	// Event channel from dedicated streaming connection
 	eventChan <-chan daemon.EventResult
 
+	// Connection state tracking
+	connState      ConnectionState
+	reconnectDelay time.Duration
+	reconnectCount int
+	maxReconnects  int
+
 	// Staged actions pending approval (for selected agent)
 	stagedActions []daemon.StagedAction
 
@@ -117,13 +142,16 @@ type Model struct {
 // New creates a new TUI model.
 func New() Model {
 	return Model{
-		header:    NewHeader(),
-		agentList: NewAgentList(),
-		chatView:  NewChatView(),
-		inputLine: NewInputLine(),
-		helpBar:   NewHelpBar(),
-		focus:     FocusAgentList,
-		keys:      DefaultKeyBindings(),
+		header:         NewHeader(),
+		agentList:      NewAgentList(),
+		chatView:       NewChatView(),
+		inputLine:      NewInputLine(),
+		helpBar:        NewHelpBar(),
+		focus:          FocusAgentList,
+		keys:           DefaultKeyBindings(),
+		connState:      ConnectionConnected,
+		reconnectDelay: 500 * time.Millisecond,
+		maxReconnects:  10,
 	}
 }
 
@@ -185,6 +213,30 @@ func (m Model) attachToStream() tea.Cmd {
 			return StreamEventMsg{Err: err}
 		}
 		return StreamStartMsg{EventChan: eventChan}
+	}
+}
+
+// attemptReconnect tries to reconnect to the daemon after a delay.
+func (m Model) attemptReconnect() tea.Cmd {
+	delay := m.reconnectDelay
+	return func() tea.Msg {
+		// Wait before attempting reconnection
+		time.Sleep(delay)
+
+		// Try to reconnect the main connection first
+		if !m.client.IsConnected() {
+			if err := m.client.Connect(); err != nil {
+				return reconnectMsg{Success: false, Err: err}
+			}
+		}
+
+		// Try to establish the event stream
+		eventChan, err := m.client.StreamEvents(nil)
+		if err != nil {
+			return reconnectMsg{Success: false, Err: err}
+		}
+
+		return reconnectMsg{Success: true, EventChan: eventChan}
 	}
 }
 
@@ -476,6 +528,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatView.SetAbortConfirming(true, agentID)
 			}
 
+		case key.Matches(msg, m.keys.Reconnect):
+			// Manual reconnection when disconnected
+			if m.connState == ConnectionDisconnected && m.client != nil {
+				slog.Debug("manual reconnection triggered")
+				m.connState = ConnectionReconnecting
+				m.reconnectCount = 0
+				m.reconnectDelay = 500 * time.Millisecond
+				m.header.SetConnectionState(m.connState)
+				cmds = append(cmds, m.attemptReconnect())
+			}
+
 		case key.Matches(msg, m.keys.Select):
 			// Select current agent for chat view
 			if m.focus == FocusAgentList {
@@ -555,17 +618,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Event stream connected successfully
 		m.eventChan = msg.EventChan
 		m.attached = true
+		m.connState = ConnectionConnected
+		m.reconnectCount = 0
+		m.reconnectDelay = 500 * time.Millisecond
+		m.header.SetConnectionState(m.connState)
 		cmds = append(cmds, m.waitForEvent())
 
 	case StreamEventMsg:
 		if msg.Err != nil {
-			slog.Debug("stream error, stopping event loop", "err", msg.Err)
-			cmds = append(cmds, m.setError(msg.Err))
+			slog.Debug("stream error, attempting reconnection", "err", msg.Err)
+			m.connState = ConnectionDisconnected
+			m.header.SetConnectionState(m.connState)
+			m.eventChan = nil
+			// Attempt automatic reconnection if under limit
+			if m.reconnectCount < m.maxReconnects {
+				m.connState = ConnectionReconnecting
+				m.header.SetConnectionState(m.connState)
+				cmds = append(cmds, m.attemptReconnect())
+			} else {
+				cmds = append(cmds, m.setError(fmt.Errorf("connection lost (press 'r' to reconnect)")))
+			}
 		} else if msg.Event != nil {
 			slog.Debug("stream event received", "type", msg.Event.Type)
 			m.handleStreamEvent(msg.Event)
 			// Continue listening for events
 			cmds = append(cmds, m.waitForEvent())
+		}
+
+	case reconnectMsg:
+		if msg.Success {
+			slog.Debug("reconnection successful")
+			m.eventChan = msg.EventChan
+			m.attached = true
+			m.connState = ConnectionConnected
+			m.reconnectCount = 0
+			m.reconnectDelay = 500 * time.Millisecond
+			m.header.SetConnectionState(m.connState)
+			// Fetch fresh agent list after reconnection
+			cmds = append(cmds, m.fetchAgentList())
+			cmds = append(cmds, m.waitForEvent())
+		} else {
+			slog.Debug("reconnection failed", "err", msg.Err, "attempt", m.reconnectCount+1)
+			m.reconnectCount++
+			// Exponential backoff: 500ms, 1s, 2s, 4s, 8s (capped)
+			m.reconnectDelay = min(m.reconnectDelay*2, 8*time.Second)
+			if m.reconnectCount < m.maxReconnects {
+				cmds = append(cmds, m.attemptReconnect())
+			} else {
+				m.connState = ConnectionDisconnected
+				m.header.SetConnectionState(m.connState)
+				cmds = append(cmds, m.setError(fmt.Errorf("connection lost after %d attempts (press 'r' to reconnect)", m.reconnectCount)))
+			}
 		}
 
 	case AgentListMsg:
