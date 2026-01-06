@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -16,6 +17,11 @@ type Header struct {
 
 	// Connection state
 	connState ConnectionState
+
+	// Usage tracking
+	usagePercent  int           // 0-100+ percentage of limit
+	timeRemaining time.Duration // time remaining in billing window
+	hasUsage      bool          // whether usage data is available
 }
 
 // NewHeader creates a new header component.
@@ -41,6 +47,13 @@ func (h *Header) SetConnectionState(state ConnectionState) {
 	h.connState = state
 }
 
+// SetUsage updates the usage display.
+func (h *Header) SetUsage(percent int, remaining time.Duration) {
+	h.usagePercent = percent
+	h.timeRemaining = remaining
+	h.hasUsage = true
+}
+
 // View renders the header.
 func (h Header) View() string {
 	// Left side: branding
@@ -55,12 +68,23 @@ func (h Header) View() string {
 		connStatus = headerConnReconnectingStyle.Render(" ◌ reconnecting...")
 	}
 
-	// Right side: agent stats (only show if we have agents and connected)
-	var stats string
+	// Right side: stats (agent counts + usage)
+	var statsParts []string
+
+	// Agent running count (only show if connected)
 	if h.agentCount > 0 && h.connState == ConnectionConnected {
-		stats = headerStatsStyle.Render(
-			fmt.Sprintf("%d/%d running", h.runningCount, h.agentCount),
-		)
+		statsParts = append(statsParts, fmt.Sprintf("%d/%d running", h.runningCount, h.agentCount))
+	}
+
+	// Usage percentage and time remaining
+	if h.hasUsage {
+		remaining := formatDuration(h.timeRemaining)
+		statsParts = append(statsParts, fmt.Sprintf("%d%% (%s)", h.usagePercent, remaining))
+	}
+
+	var stats string
+	if len(statsParts) > 0 {
+		stats = headerStatsStyle.Render(fmt.Sprintf("  %s", join(statsParts, "  •  ")))
 	}
 
 	// Calculate spacing between brand+status and stats
@@ -77,4 +101,16 @@ func (h Header) View() string {
 	content := lipgloss.JoinHorizontal(lipgloss.Top, brand, connStatus, spacer, stats)
 
 	return headerContainerStyle.Width(h.width).Render(content)
+}
+
+// join concatenates strings with a separator.
+func join(parts []string, sep string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	result := parts[0]
+	for i := 1; i < len(parts); i++ {
+		result += sep + parts[i]
+	}
+	return result
 }
