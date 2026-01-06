@@ -2,10 +2,12 @@
 package rules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	"github.com/tessro/fab/internal/config"
 )
 
 // Action is the result of a rule evaluation.
@@ -37,14 +39,22 @@ type Config struct {
 // LoadConfig loads a permissions configuration from the given path.
 // Returns nil config and nil error if the file doesn't exist.
 func LoadConfig(path string) (*Config, error) {
-	var config Config
-	if _, err := toml.DecodeFile(path, &config); err != nil {
+	var cfg Config
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &config, nil
+
+	// Validate each rule
+	for i, rule := range cfg.Rules {
+		if err := config.ValidateRule(rule.Tool, string(rule.Action), rule.Pattern, rule.Patterns, rule.Script); err != nil {
+			return nil, fmt.Errorf("rule %d: %w", i+1, err)
+		}
+	}
+
+	return &cfg, nil
 }
 
 // GlobalConfigPath returns the path to the global permissions config.
