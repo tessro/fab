@@ -1,6 +1,6 @@
 ---
 id: fa-aff
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-04T12:03:33.442246-08:00

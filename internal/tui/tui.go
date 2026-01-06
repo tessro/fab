@@ -328,6 +328,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Send to agent
 						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
 						m.inputLine.Clear()
+						// Blur input and return to agent list
+						m.inputLine.SetFocused(false)
+						m.focus = FocusAgentList
 						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				}
