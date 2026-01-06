@@ -481,3 +481,87 @@ func TestManager_UnregisterProject(t *testing.T) {
 		t.Errorf("expected 0 agents, got %d", len(agents))
 	}
 }
+
+func TestManager_OnProjectEvent_Registered(t *testing.T) {
+	m := NewManager()
+	proj := newTestProject("test-proj", 3)
+
+	var receivedEvents []ProjectEvent
+	m.OnProjectEvent(func(event ProjectEvent) {
+		receivedEvents = append(receivedEvents, event)
+	})
+
+	m.RegisterProject(proj)
+
+	if len(receivedEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(receivedEvents))
+	}
+	if receivedEvents[0].Type != ProjectEventRegistered {
+		t.Errorf("expected event type %s, got %s", ProjectEventRegistered, receivedEvents[0].Type)
+	}
+	if receivedEvents[0].Project != proj {
+		t.Errorf("expected project %v, got %v", proj, receivedEvents[0].Project)
+	}
+}
+
+func TestManager_OnProjectEvent_Unregistered(t *testing.T) {
+	m := NewManager()
+	proj := newTestProject("test-proj", 3)
+
+	m.RegisterProject(proj)
+
+	var receivedEvents []ProjectEvent
+	m.OnProjectEvent(func(event ProjectEvent) {
+		receivedEvents = append(receivedEvents, event)
+	})
+
+	m.UnregisterProject("test-proj")
+
+	if len(receivedEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(receivedEvents))
+	}
+	if receivedEvents[0].Type != ProjectEventUnregistered {
+		t.Errorf("expected event type %s, got %s", ProjectEventUnregistered, receivedEvents[0].Type)
+	}
+	if receivedEvents[0].Project != proj {
+		t.Errorf("expected project %v, got %v", proj, receivedEvents[0].Project)
+	}
+}
+
+func TestManager_OnProjectEvent_UnregisteredNonexistent(t *testing.T) {
+	m := NewManager()
+
+	var receivedEvents []ProjectEvent
+	m.OnProjectEvent(func(event ProjectEvent) {
+		receivedEvents = append(receivedEvents, event)
+	})
+
+	// Unregistering a nonexistent project should not emit an event
+	m.UnregisterProject("nonexistent")
+
+	if len(receivedEvents) != 0 {
+		t.Errorf("expected 0 events for nonexistent project, got %d", len(receivedEvents))
+	}
+}
+
+func TestManager_OnProjectEvent_MultipleHandlers(t *testing.T) {
+	m := NewManager()
+	proj := newTestProject("test-proj", 3)
+
+	var count1, count2 int
+	m.OnProjectEvent(func(_ ProjectEvent) {
+		count1++
+	})
+	m.OnProjectEvent(func(_ ProjectEvent) {
+		count2++
+	})
+
+	m.RegisterProject(proj)
+
+	if count1 != 1 {
+		t.Errorf("handler 1 expected 1 call, got %d", count1)
+	}
+	if count2 != 1 {
+		t.Errorf("handler 2 expected 1 call, got %d", count2)
+	}
+}
