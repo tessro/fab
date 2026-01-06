@@ -27,6 +27,14 @@ const (
 	EventDeleted      EventType = "deleted"
 )
 
+// ProjectEventType identifies the type of project event.
+type ProjectEventType string
+
+const (
+	ProjectEventRegistered   ProjectEventType = "registered"
+	ProjectEventUnregistered ProjectEventType = "unregistered"
+)
+
 // Event represents an agent lifecycle event.
 type Event struct {
 	Type     EventType
@@ -38,6 +46,15 @@ type Event struct {
 // EventHandler is called when agent events occur.
 type EventHandler func(event Event)
 
+// ProjectEvent represents a project lifecycle event.
+type ProjectEvent struct {
+	Type    ProjectEventType
+	Project *project.Project
+}
+
+// ProjectEventHandler is called when project events occur.
+type ProjectEventHandler func(event ProjectEvent)
+
 // Manager manages a pool of agents across projects.
 // It handles creation, tracking, and lifecycle events for all agents.
 type Manager struct {
@@ -47,6 +64,8 @@ type Manager struct {
 	projects map[string][]*Agent // Project name -> Agents
 	// +checklocks:mu
 	handlers []EventHandler // Event subscribers
+	// +checklocks:mu
+	projectHandlers []ProjectEventHandler // Project event subscribers
 	// +checklocks:mu
 	registry map[string]*project.Project // Project name -> Project
 
@@ -67,20 +86,33 @@ func NewManager() *Manager {
 // This allows the manager to track agents by project.
 func (m *Manager) RegisterProject(p *project.Project) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.registry[p.Name] = p
 	if _, ok := m.projects[p.Name]; !ok {
 		m.projects[p.Name] = make([]*Agent, 0)
 	}
+	m.mu.Unlock()
+
+	m.emitProjectEvent(ProjectEvent{
+		Type:    ProjectEventRegistered,
+		Project: p,
+	})
 }
 
 // UnregisterProject removes a project from the manager.
 // Any agents for this project should be stopped first.
 func (m *Manager) UnregisterProject(name string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	proj := m.registry[name]
 	delete(m.registry, name)
 	delete(m.projects, name)
+	m.mu.Unlock()
+
+	if proj != nil {
+		m.emitProjectEvent(ProjectEvent{
+			Type:    ProjectEventUnregistered,
+			Project: proj,
+		})
+	}
 }
 
 // OnEvent registers an event handler.
@@ -91,12 +123,33 @@ func (m *Manager) OnEvent(handler EventHandler) {
 	m.handlers = append(m.handlers, handler)
 }
 
+// OnProjectEvent registers a project event handler.
+// Handlers are called synchronously when project events occur.
+func (m *Manager) OnProjectEvent(handler ProjectEventHandler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.projectHandlers = append(m.projectHandlers, handler)
+}
+
 // emit sends an event to all registered handlers.
 // Must not be called with lock held.
 func (m *Manager) emit(event Event) {
 	m.mu.RLock()
 	handlers := make([]EventHandler, len(m.handlers))
 	copy(handlers, m.handlers)
+	m.mu.RUnlock()
+
+	for _, h := range handlers {
+		h(event)
+	}
+}
+
+// emitProjectEvent sends a project event to all registered handlers.
+// Must not be called with lock held.
+func (m *Manager) emitProjectEvent(event ProjectEvent) {
+	m.mu.RLock()
+	handlers := make([]ProjectEventHandler, len(m.projectHandlers))
+	copy(handlers, m.projectHandlers)
 	m.mu.RUnlock()
 
 	for _, h := range handlers {
