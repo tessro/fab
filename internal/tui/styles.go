@@ -133,4 +133,9 @@ var (
 
 	abortConfirmHintStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#A0A0A0"))
+
+	// Error display styles
+	errorBarStyle = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Padding(0, 1)
 )

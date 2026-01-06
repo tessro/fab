@@ -69,6 +69,9 @@ type AbortResultMsg struct {
 // tickMsg is sent on regular intervals to drive spinner animation.
 type tickMsg time.Time
 
+// clearErrorMsg is sent to clear the error display after a timeout.
+type clearErrorMsg struct{}
+
 // Model is the main Bubbletea model for the fab TUI.
 type Model struct {
 	// Window dimensions
@@ -150,6 +153,20 @@ func (m Model) tickCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+// clearErrorCmd returns a command that clears the error after a delay.
+func clearErrorCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return clearErrorMsg{}
+	})
+}
+
+// setError sets an error to display and returns a command to clear it after a timeout.
+func (m *Model) setError(err error) tea.Cmd {
+	m.err = err
+	m.helpBar.SetError(err.Error())
+	return clearErrorCmd()
 }
 
 // StreamStartMsg is sent when the event stream is started successfully.
@@ -543,7 +560,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StreamEventMsg:
 		if msg.Err != nil {
 			slog.Debug("stream error, stopping event loop", "err", msg.Err)
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else if msg.Event != nil {
 			slog.Debug("stream event received", "type", msg.Event.Type)
 			m.handleStreamEvent(msg.Event)
@@ -553,7 +570,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentListMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else {
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
@@ -567,12 +584,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentInputMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		}
 
 	case AgentChatHistoryMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else if msg.AgentID == m.chatView.AgentID() {
 			// Only apply if still viewing this agent
 			m.chatView.SetEntries(msg.Entries)
@@ -580,7 +597,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StagedActionsMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else {
 			// Store all staged actions - filtering happens in pendingActionForAgent
 			m.stagedActions = msg.Actions
@@ -592,7 +609,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ActionResultMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else {
 			// Refresh staged actions after approve/reject
 			cmds = append(cmds, m.fetchStagedActions())
@@ -600,7 +617,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case PermissionResultMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		} else {
 			// Remove the permission from our pending list
 			permID := m.chatView.PendingPermissionID()
@@ -620,7 +637,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AbortResultMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			cmds = append(cmds, m.setError(msg.Err))
 		}
 		// Clear abort confirmation state
 		m.abortConfirming = false
@@ -632,6 +649,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerFrame++
 		m.agentList.SetSpinnerFrame(m.spinnerFrame)
 		cmds = append(cmds, m.tickCmd())
+
+	case clearErrorMsg:
+		// Clear error display
+		m.err = nil
+		m.helpBar.ClearError()
 	}
 
 	return m, tea.Batch(cmds...)
