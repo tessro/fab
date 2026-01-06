@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -11,17 +12,20 @@ import (
 type Header struct {
 	width int
 
-	// Stats to display
+	// Agent stats
 	agentCount   int
 	runningCount int
 
+	// Session stats
+	commitCount int
+
+	// Usage stats
+	usagePercent  int
+	timeRemaining time.Duration
+	hasUsage      bool
+
 	// Connection state
 	connState ConnectionState
-
-	// Usage tracking
-	usagePercent  int           // 0-100+ percentage of limit
-	timeRemaining time.Duration // time remaining in billing window
-	hasUsage      bool          // whether usage data is available
 }
 
 // NewHeader creates a new header component.
@@ -47,6 +51,11 @@ func (h *Header) SetConnectionState(state ConnectionState) {
 	h.connState = state
 }
 
+// SetCommitCount updates the session commit count.
+func (h *Header) SetCommitCount(count int) {
+	h.commitCount = count
+}
+
 // SetUsage updates the usage display.
 func (h *Header) SetUsage(percent int, remaining time.Duration) {
 	h.usagePercent = percent
@@ -68,49 +77,97 @@ func (h Header) View() string {
 		connStatus = headerConnReconnectingStyle.Render(" ◌ reconnecting...")
 	}
 
-	// Right side: stats (agent counts + usage)
-	var statsParts []string
-
-	// Agent running count (only show if connected)
+	// Agent stats section (only show if we have agents and connected)
+	var agentStats string
 	if h.agentCount > 0 && h.connState == ConnectionConnected {
-		statsParts = append(statsParts, fmt.Sprintf("%d/%d running", h.runningCount, h.agentCount))
+		agentStats = headerStatsStyle.Render(
+			fmt.Sprintf("%d/%d running", h.runningCount, h.agentCount),
+		)
 	}
 
-	// Usage percentage and time remaining
-	if h.hasUsage {
-		remaining := formatDuration(h.timeRemaining)
-		statsParts = append(statsParts, fmt.Sprintf("%d%% (%s)", h.usagePercent, remaining))
+	// Session stats section (commits)
+	var sessionStats string
+	if h.commitCount > 0 && h.connState == ConnectionConnected {
+		sessionStats = headerStatsStyle.Render(
+			fmt.Sprintf("%d commits", h.commitCount),
+		)
 	}
 
-	var stats string
-	if len(statsParts) > 0 {
-		stats = headerStatsStyle.Render(fmt.Sprintf("  %s", join(statsParts, "  •  ")))
+	// Usage meter section (only show if we have usage data)
+	var usageMeter string
+	if h.hasUsage && h.connState == ConnectionConnected {
+		usageMeter = h.renderUsageMeter()
 	}
 
-	// Calculate spacing between brand+status and stats
-	brandWidth := lipgloss.Width(brand)
-	connStatusWidth := lipgloss.Width(connStatus)
-	statsWidth := lipgloss.Width(stats)
-	spacerWidth := h.width - brandWidth - connStatusWidth - statsWidth
+	// Build the sections with separators
+	var sections []string
+	sections = append(sections, brand)
+	if connStatus != "" {
+		sections = append(sections, connStatus)
+	}
+
+	// Collect right-side stats
+	var rightStats []string
+	if agentStats != "" {
+		rightStats = append(rightStats, agentStats)
+	}
+	if sessionStats != "" {
+		rightStats = append(rightStats, sessionStats)
+	}
+	if usageMeter != "" {
+		rightStats = append(rightStats, usageMeter)
+	}
+
+	// Calculate widths
+	leftWidth := lipgloss.Width(strings.Join(sections, ""))
+	rightContent := strings.Join(rightStats, headerSeparatorStyle.Render(" │ "))
+	rightWidth := lipgloss.Width(rightContent)
+
+	spacerWidth := h.width - leftWidth - rightWidth
 	if spacerWidth < 0 {
 		spacerWidth = 0
 	}
 	spacer := lipgloss.NewStyle().Width(spacerWidth).Render("")
 
 	// Combine into full-width header
-	content := lipgloss.JoinHorizontal(lipgloss.Top, brand, connStatus, spacer, stats)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(sections, ""), spacer, rightContent)
 
 	return headerContainerStyle.Width(h.width).Render(content)
 }
 
-// join concatenates strings with a separator.
-func join(parts []string, sep string) string {
-	if len(parts) == 0 {
-		return ""
+// renderUsageMeter renders the usage progress bar.
+func (h Header) renderUsageMeter() string {
+	// Progress bar: 10 segments
+	const barLen = 10
+	filled := h.usagePercent * barLen / 100
+	if filled > barLen {
+		filled = barLen
 	}
-	result := parts[0]
-	for i := 1; i < len(parts); i++ {
-		result += sep + parts[i]
+	if filled < 0 {
+		filled = 0
 	}
-	return result
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", barLen-filled)
+
+	// Color based on usage level
+	var barStyle lipgloss.Style
+	switch {
+	case h.usagePercent >= 90:
+		barStyle = headerUsageHighStyle
+	case h.usagePercent >= 70:
+		barStyle = headerUsageMediumStyle
+	default:
+		barStyle = headerUsageLowStyle
+	}
+
+	// Format: "Usage: ████░░░░░░ 45% (2h 15m)"
+	percentStr := fmt.Sprintf("%d%%", h.usagePercent)
+	timeStr := ""
+	if h.timeRemaining > 0 {
+		timeStr = fmt.Sprintf(" (%s)", formatDuration(h.timeRemaining))
+	}
+
+	return headerStatsStyle.Render("Usage: ") +
+		barStyle.Render(bar) +
+		headerStatsStyle.Render(" "+percentStr+timeStr)
 }
