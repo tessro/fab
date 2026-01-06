@@ -746,6 +746,31 @@ func (s *Supervisor) handleAgentEvent(event agent.Event) {
 	}
 }
 
+// handleActionQueued broadcasts action_queued events to attached clients.
+func (s *Supervisor) handleActionQueued(project string, action orchestrator.StagedAction) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:    "action_queued",
+		AgentID: action.AgentID,
+		Project: project,
+		StagedAction: &daemon.StagedAction{
+			ID:        action.ID,
+			AgentID:   action.AgentID,
+			Project:   project,
+			Type:      daemon.ActionType(action.Type),
+			Payload:   action.Payload,
+			CreatedAt: action.CreatedAt,
+		},
+	})
+}
+
 // broadcastChatEntry sends a chat entry to attached clients.
 func (s *Supervisor) broadcastChatEntry(agentID, project string, entry agent.ChatEntry) {
 	s.mu.RLock()
@@ -876,6 +901,11 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 	// Create orchestrator
 	orch := orchestrator.New(proj, s.agents, s.orchConfig)
 	s.orchestrators[proj.Name] = orch
+
+	// Register callback for action queue events
+	orch.Actions().OnAdded(func(action orchestrator.StagedAction) {
+		s.handleActionQueued(proj.Name, action)
+	})
 
 	// Mark project as running
 	proj.SetRunning(true)

@@ -718,6 +718,24 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 			// Update attention indicators
 			m.updateNeedsAttention()
 		}
+
+	case "action_queued":
+		// A new staged action was queued
+		if event.StagedAction != nil {
+			slog.Debug("action_queued event",
+				"agent", event.AgentID,
+				"action_id", event.StagedAction.ID,
+				"type", event.StagedAction.Type,
+			)
+			// Add to our list of staged actions
+			m.stagedActions = append(m.stagedActions, *event.StagedAction)
+			// Update chat view if this is for the current agent
+			if event.AgentID == m.chatView.AgentID() {
+				m.chatView.SetPendingAction(m.pendingActionForAgent(event.AgentID))
+			}
+			// Update attention indicators
+			m.updateNeedsAttention()
+		}
 	}
 }
 
