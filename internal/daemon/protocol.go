@@ -59,6 +59,13 @@ const (
 
 	// Stats
 	MsgStats MessageType = "stats" // Get aggregated session statistics
+
+	// Manager agent (interactive user conversation)
+	MsgManagerStart       MessageType = "manager.start"        // Start the manager agent
+	MsgManagerStop        MessageType = "manager.stop"         // Stop the manager agent
+	MsgManagerStatus      MessageType = "manager.status"       // Get manager status
+	MsgManagerSendMessage MessageType = "manager.send_message" // Send message to manager
+	MsgManagerChatHistory MessageType = "manager.chat_history" // Get manager chat history
 )
 
 // Request is the envelope for all IPC requests.
@@ -257,7 +264,7 @@ type AgentChatHistoryResponse struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type              string             `json:"type"` // "output", "state", "created", "deleted", "permission_request", "action_queued", "intervention"
+	Type              string             `json:"type"` // "output", "state", "created", "deleted", "permission_request", "action_queued", "intervention", "manager_chat_entry", "manager_state"
 	AgentID           string             `json:"agent_id"`
 	Project           string             `json:"project"`
 	Data              string             `json:"data,omitempty"`               // For output events
@@ -267,6 +274,7 @@ type StreamEvent struct {
 	PermissionRequest *PermissionRequest `json:"permission_request,omitempty"` // For "permission_request" events
 	StagedAction      *StagedAction      `json:"staged_action,omitempty"`      // For "action_queued" events
 	Intervening       *bool              `json:"intervening,omitempty"`        // For "intervention" events (user is intervening)
+	ManagerState      string             `json:"manager_state,omitempty"`      // For "manager_state" events
 }
 
 // ChatEntryDTO is the wire format for chat entries sent to TUI clients
@@ -449,4 +457,26 @@ type UsageStats struct {
 	TimeLeft     string `json:"time_left"`  // Human-readable time remaining
 	PlanLimit    int64  `json:"plan_limit"` // Output token limit for current plan
 	Plan         string `json:"plan"`       // "pro" or "max"
+}
+
+// ManagerStatusResponse is the payload for manager.status responses.
+type ManagerStatusResponse struct {
+	Running   bool   `json:"running"`
+	State     string `json:"state"`      // "stopped", "starting", "running", "stopping"
+	StartedAt string `json:"started_at"` // RFC3339 format, empty if not running
+}
+
+// ManagerSendMessageRequest is the payload for manager.send_message requests.
+type ManagerSendMessageRequest struct {
+	Content string `json:"content"`
+}
+
+// ManagerChatHistoryRequest is the payload for manager.chat_history requests.
+type ManagerChatHistoryRequest struct {
+	Limit int `json:"limit,omitempty"` // Max entries to return (0 = all)
+}
+
+// ManagerChatHistoryResponse is the payload for manager.chat_history responses.
+type ManagerChatHistoryResponse struct {
+	Entries []ChatEntryDTO `json:"entries"`
 }
