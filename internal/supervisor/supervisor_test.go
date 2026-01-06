@@ -55,7 +55,7 @@ func newTestGitRepo(t *testing.T) (string, func()) {
 func newTestSupervisor(t *testing.T) (*Supervisor, func()) {
 	t.Helper()
 
-	// Create temp directory for config
+	// Create temp directory for config and project storage
 	tmpDir, err := os.MkdirTemp("", "fab-supervisor-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -67,6 +67,10 @@ func newTestSupervisor(t *testing.T) (*Supervisor, func()) {
 		_ = os.RemoveAll(tmpDir)
 		t.Fatalf("failed to create registry: %v", err)
 	}
+
+	// Use temp directory for project storage to avoid polluting ~/.fab/projects
+	projectsDir := filepath.Join(tmpDir, "projects")
+	reg.SetProjectBaseDir(projectsDir)
 
 	agents := agent.NewManager()
 	sup := New(reg, agents)

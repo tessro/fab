@@ -22,6 +22,7 @@ type Project struct {
 	Name      string // Unique identifier (e.g., "myapp")
 	RemoteURL string // Git remote URL (e.g., "git@github.com:user/repo.git")
 	MaxAgents int    // Max concurrent agents (default: 3)
+	BaseDir   string // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
@@ -57,8 +58,11 @@ func NewProject(name, remoteURL string) *Project {
 }
 
 // ProjectDir returns the path to the project directory.
-// Returns ~/.fab/projects/<projectName>/
+// Returns BaseDir/<projectName>/ if BaseDir is set, otherwise ~/.fab/projects/<projectName>/
 func (p *Project) ProjectDir() string {
+	if p.BaseDir != "" {
+		return filepath.Join(p.BaseDir, p.Name)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join("/tmp", ".fab", "projects", p.Name)

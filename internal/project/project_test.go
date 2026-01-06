@@ -379,6 +379,26 @@ func TestProjectDirs(t *testing.T) {
 	}
 }
 
+func TestProjectDirs_WithBaseDir(t *testing.T) {
+	p := NewProject("myapp", "")
+	p.BaseDir = "/custom/base"
+
+	projectDir := p.ProjectDir()
+	if projectDir != "/custom/base/myapp" {
+		t.Errorf("ProjectDir() = %q, want %q", projectDir, "/custom/base/myapp")
+	}
+
+	repoDir := p.RepoDir()
+	if repoDir != "/custom/base/myapp/repo" {
+		t.Errorf("RepoDir() = %q, want %q", repoDir, "/custom/base/myapp/repo")
+	}
+
+	wtDir := p.WorktreesDir()
+	if wtDir != "/custom/base/myapp/worktrees" {
+		t.Errorf("WorktreesDir() = %q, want %q", wtDir, "/custom/base/myapp/worktrees")
+	}
+}
+
 func TestResizeWorktreePool_NoChange(t *testing.T) {
 	p := NewProject("test", "")
 	p.Worktrees = []Worktree{
@@ -463,7 +483,9 @@ func TestResizeWorktreePool_ShrinkBelowInUse(t *testing.T) {
 func TestResizeWorktreePool_GrowNoGitRepo(t *testing.T) {
 	// When there's no git repo, grow should succeed but not create worktrees
 	// This tests the graceful degradation path for non-git scenarios
+	tmpDir := t.TempDir()
 	p := NewProject("test", "")
+	p.BaseDir = tmpDir
 	p.Worktrees = []Worktree{
 		{Path: "/tmp/wt-001", InUse: false},
 	}
