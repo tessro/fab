@@ -396,6 +396,9 @@ func (a *Agent) Start(initialPrompt string) error {
 	}
 
 	// Build settings with hooks that route to fab daemon
+	// Hook timeout matches our permission timeout (5 minutes) since hooks may
+	// block waiting for user input via the permission manager.
+	hookTimeoutSec := 5 * 60 // 5 minutes in seconds
 	settings := map[string]any{
 		"hooks": map[string]any{
 			"PreToolUse": []any{
@@ -405,6 +408,7 @@ func (a *Agent) Start(initialPrompt string) error {
 						map[string]any{
 							"type":    "command",
 							"command": fabPath + " hook PreToolUse",
+							"timeout": hookTimeoutSec,
 						},
 					},
 				},
@@ -416,6 +420,7 @@ func (a *Agent) Start(initialPrompt string) error {
 						map[string]any{
 							"type":    "command",
 							"command": fabPath + " hook PermissionRequest",
+							"timeout": hookTimeoutSec,
 						},
 					},
 				},
