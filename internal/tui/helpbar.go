@@ -11,11 +11,8 @@ type HelpBar struct {
 	width int
 	keys  KeyBindings
 
-	// Current context
-	focus             Focus
-	pendingPermission bool
-	pendingAction     bool
-	abortConfirming   bool
+	// Current mode state
+	modeState ModeState
 
 	// Error display
 	errorMsg string
@@ -33,12 +30,9 @@ func (h *HelpBar) SetWidth(width int) {
 	h.width = width
 }
 
-// SetContext updates the help bar's context for rendering appropriate shortcuts.
-func (h *HelpBar) SetContext(focus Focus, pendingPermission, pendingAction, abortConfirming bool) {
-	h.focus = focus
-	h.pendingPermission = pendingPermission
-	h.pendingAction = pendingAction
-	h.abortConfirming = abortConfirming
+// SetModeState updates the help bar's mode state for rendering appropriate shortcuts.
+func (h *HelpBar) SetModeState(state ModeState) {
+	h.modeState = state
 }
 
 // SetError sets the error message to display.
@@ -60,28 +54,37 @@ func (h HelpBar) View() string {
 
 	var bindings []key.Binding
 
-	// Abort confirmation takes priority
-	if h.abortConfirming {
+	// Abort confirmation mode takes priority
+	if h.modeState.IsAbortConfirming() {
 		bindings = []key.Binding{h.keys.Approve, h.keys.Reject}
 		helpText := formatHelp(bindings)
 		return statusStyle.Width(h.width).Render("Abort agent? " + helpText)
 	}
 
-	switch h.focus {
+	// Input mode has its own set of bindings
+	if h.modeState.IsInputting() {
+		bindings = []key.Binding{h.keys.Submit, h.keys.Cancel, h.keys.Tab}
+		helpText := formatHelp(bindings)
+		return statusStyle.Width(h.width).Render(helpText)
+	}
+
+	// Normal mode bindings depend on focus and pending approvals
+	switch h.modeState.Focus {
 	case FocusAgentList:
-		if h.pendingPermission || h.pendingAction {
+		if h.modeState.NeedsApproval() {
 			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Select, h.keys.Quit}
 		} else {
 			bindings = []key.Binding{h.keys.Down, h.keys.Select, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
 		}
 	case FocusChatView:
-		if h.pendingPermission || h.pendingAction {
+		if h.modeState.NeedsApproval() {
 			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Tab, h.keys.Quit}
 		} else {
 			bindings = []key.Binding{h.keys.Down, h.keys.PageUp, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
 		}
 	case FocusInputLine:
-		bindings = []key.Binding{h.keys.Submit, h.keys.Cancel, h.keys.Tab}
+		// This shouldn't happen in normal mode, but handle it gracefully
+		bindings = []key.Binding{h.keys.FocusChat, h.keys.Tab, h.keys.Quit}
 	}
 
 	helpText := formatHelp(bindings)

@@ -114,7 +114,9 @@ type Model struct {
 	// UI state
 	ready bool
 	err   error
-	focus Focus
+
+	// Mode state (centralized focus and mode management)
+	modeState ModeState
 
 	// Components
 	header    Header
@@ -148,10 +150,6 @@ type Model struct {
 	// Stats refresh counter (every 300 ticks = 30s at 100ms/tick)
 	statsRefreshTick int
 
-	// Abort confirmation state
-	abortConfirming bool
-	abortAgentID    string
-
 	// Key bindings
 	keys KeyBindings
 
@@ -168,7 +166,7 @@ func New() Model {
 		chatView:       NewChatView(),
 		inputLine:      NewInputLine(),
 		helpBar:        NewHelpBar(),
-		focus:          FocusAgentList,
+		modeState:      NewModeState(),
 		keys:           DefaultKeyBindings(),
 		connState:      ConnectionConnected,
 		reconnectDelay: 500 * time.Millisecond,
@@ -447,13 +445,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle input line when focused
-		if m.focus == FocusInputLine {
+		// Handle input mode
+		if m.modeState.IsInputting() {
 			switch {
 			case key.Matches(msg, m.keys.Cancel):
-				// Blur input and return to agent list
+				// Exit input mode, return to agent list
+				_ = m.modeState.ExitInputMode()
 				m.inputLine.SetFocused(false)
-				m.focus = FocusAgentList
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			case key.Matches(msg, m.keys.Submit):
 				// Submit input to agent
@@ -469,16 +467,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Send to agent
 						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
 						m.inputLine.Clear()
-						// Blur input and return to agent list
+						// Exit input mode, return to agent list
+						_ = m.modeState.ExitInputMode()
 						m.inputLine.SetFocused(false)
-						m.focus = FocusAgentList
 						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				}
 			case key.Matches(msg, m.keys.Tab):
-				// Cycle to agent list
+				// Exit input mode, return to agent list
+				_ = m.modeState.ExitInputMode()
 				m.inputLine.SetFocused(false)
-				m.focus = FocusAgentList
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			default:
 				// Pass all other keys to input
@@ -499,37 +497,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Tab):
 			// Cycle focus: agent list -> chat view -> input line -> agent list
-			switch m.focus {
-			case FocusAgentList:
-				m.focus = FocusChatView
-				m.chatView.SetFocused(true)
-			case FocusChatView:
-				m.chatView.SetFocused(false)
-				m.inputLine.SetFocused(true)
-				m.focus = FocusInputLine
-				m.chatView.SetInputView(m.inputLine.View(), 1)
-			case FocusInputLine:
-				m.inputLine.SetFocused(false)
-				m.focus = FocusAgentList
-				m.chatView.SetInputView(m.inputLine.View(), 1)
-			}
+			newFocus, _ := m.modeState.CycleFocus()
+			m.syncFocusToComponents(newFocus)
 
 		case key.Matches(msg, m.keys.FocusChat):
-			// Focus input line (vim-style)
-			if m.chatView.AgentID() != "" {
+			// Focus input line (vim-style) - enters input mode
+			if m.chatView.AgentID() != "" && m.modeState.IsNormal() {
+				_ = m.modeState.EnterInputMode()
 				m.chatView.SetFocused(false)
 				m.inputLine.SetFocused(true)
-				m.focus = FocusInputLine
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			}
 
 		case key.Matches(msg, m.keys.Approve):
 			// Handle abort confirmation
-			if m.abortConfirming {
-				slog.Debug("confirming abort", "agent_id", m.abortAgentID)
-				cmds = append(cmds, m.abortAgent(m.abortAgentID, false))
-				m.abortConfirming = false
-				m.abortAgentID = ""
+			if m.modeState.IsAbortConfirming() {
+				agentID, _ := m.modeState.ConfirmAbort()
+				slog.Debug("confirming abort", "agent_id", agentID)
+				cmds = append(cmds, m.abortAgent(agentID, false))
 				m.chatView.SetAbortConfirming(false, "")
 			} else {
 				// Approve pending permission or action for selected agent
@@ -552,9 +537,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Reject):
 			// Handle abort cancellation
-			if m.abortConfirming {
-				m.abortConfirming = false
-				m.abortAgentID = ""
+			if m.modeState.IsAbortConfirming() {
+				_ = m.modeState.CancelAbort()
 				m.chatView.SetAbortConfirming(false, "")
 			} else {
 				// Reject pending permission or action for selected agent
@@ -574,10 +558,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Abort):
 			// Start abort confirmation for selected agent
 			agentID := m.chatView.AgentID()
-			if agentID != "" && !m.abortConfirming {
-				m.abortConfirming = true
-				m.abortAgentID = agentID
-				m.chatView.SetAbortConfirming(true, agentID)
+			if agentID != "" && m.modeState.IsNormal() {
+				if err := m.modeState.EnterAbortConfirm(agentID); err == nil {
+					m.chatView.SetAbortConfirming(true, agentID)
+				}
 			}
 
 		case key.Matches(msg, m.keys.Reconnect):
@@ -593,7 +577,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Select):
 			// Select current agent for chat view
-			if m.focus == FocusAgentList {
+			if m.modeState.Focus == FocusAgentList && m.modeState.IsNormal() {
 				if agent := m.agentList.Selected(); agent != nil {
 					m.chatView.SetAgent(agent.ID, agent.Project)
 					// Update pending permission/action for newly selected agent
@@ -605,7 +589,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.Down):
-			switch m.focus {
+			switch m.modeState.Focus {
 			case FocusAgentList:
 				m.agentList.MoveDown()
 				if cmd := m.selectCurrentAgent(); cmd != nil {
@@ -616,7 +600,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.Up):
-			switch m.focus {
+			switch m.modeState.Focus {
 			case FocusAgentList:
 				m.agentList.MoveUp()
 				if cmd := m.selectCurrentAgent(); cmd != nil {
@@ -627,7 +611,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.Top):
-			switch m.focus {
+			switch m.modeState.Focus {
 			case FocusAgentList:
 				m.agentList.MoveToTop()
 				if cmd := m.selectCurrentAgent(); cmd != nil {
@@ -638,7 +622,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.Bottom):
-			switch m.focus {
+			switch m.modeState.Focus {
 			case FocusAgentList:
 				m.agentList.MoveToBottom()
 				if cmd := m.selectCurrentAgent(); cmd != nil {
@@ -649,12 +633,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keys.PageUp):
-			if m.focus == FocusChatView {
+			if m.modeState.Focus == FocusChatView {
 				m.chatView.PageUp()
 			}
 
 		case key.Matches(msg, m.keys.PageDown):
-			if m.focus == FocusChatView {
+			if m.modeState.Focus == FocusChatView {
 				m.chatView.PageDown()
 			}
 		}
@@ -802,10 +786,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		}
-		// Clear abort confirmation state
-		m.abortConfirming = false
-		m.abortAgentID = ""
-		m.chatView.SetAbortConfirming(false, "")
+		// Clear abort confirmation state (in case of error)
+		if m.modeState.IsAbortConfirming() {
+			_ = m.modeState.CancelAbort()
+			m.chatView.SetAbortConfirming(false, "")
+		}
 
 	case tickMsg:
 		// Advance spinner frame and schedule next tick
@@ -983,6 +968,22 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 	return m.fetchAgentChatHistory(agent.ID)
 }
 
+// syncFocusToComponents updates component focus states to match the ModeState focus.
+func (m *Model) syncFocusToComponents(focus Focus) {
+	switch focus {
+	case FocusAgentList:
+		m.chatView.SetFocused(false)
+		m.inputLine.SetFocused(false)
+	case FocusChatView:
+		m.chatView.SetFocused(true)
+		m.inputLine.SetFocused(false)
+	case FocusInputLine:
+		m.chatView.SetFocused(false)
+		m.inputLine.SetFocused(true)
+		m.chatView.SetInputView(m.inputLine.View(), 1)
+	}
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -992,10 +993,12 @@ func (m Model) View() string {
 	// Header
 	header := m.header.View()
 
-	// Update help bar context
-	pendingPermission := m.pendingPermissionForAgent(m.chatView.AgentID())
-	pendingAction := m.pendingActionForAgent(m.chatView.AgentID())
-	m.helpBar.SetContext(m.focus, pendingPermission != nil, pendingAction != nil, m.abortConfirming)
+	// Update help bar mode state
+	m.modeState.SetPendingApprovals(
+		m.pendingPermissionForAgent(m.chatView.AgentID()) != nil,
+		m.pendingActionForAgent(m.chatView.AgentID()) != nil,
+	)
+	m.helpBar.SetModeState(m.modeState)
 	status := m.helpBar.View()
 
 	// Side-by-side layout: agent list (left) | chat view (right)
