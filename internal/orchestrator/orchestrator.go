@@ -38,7 +38,9 @@ func DefaultConfig() Config {
 	return Config{
 		DefaultAgentMode:    agent.DefaultMode,
 		InterventionSilence: agent.DefaultInterventionSilence,
-		KickstartPrompt: `Run 'fab issue ready' to find available tasks.
+		KickstartPrompt: `The 'fab' command is available on PATH - use 'fab', not './fab'.
+
+Run 'fab issue ready' to find available tasks.
 Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
 If all tasks are claimed, run 'fab agent done' to return to the pool.
