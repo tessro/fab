@@ -147,6 +147,10 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	case daemon.MsgClaimList:
 		return s.handleClaimList(ctx, req)
 
+	// Commit tracking
+	case daemon.MsgCommitList:
+		return s.handleCommitList(ctx, req)
+
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
 	}
@@ -1031,6 +1035,7 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 	resp := daemon.AgentDoneResponse{
 		Merged:     result.Merged,
 		BranchName: result.BranchName,
+		SHA:        result.SHA,
 		MergeError: result.MergeError,
 	}
 
@@ -1373,5 +1378,47 @@ func (s *Supervisor) handleClaimList(_ context.Context, req *daemon.Request) *da
 
 	return successResponse(req, daemon.ClaimListResponse{
 		Claims: claims,
+	})
+}
+
+// handleCommitList returns recent commits across projects.
+func (s *Supervisor) handleCommitList(_ context.Context, req *daemon.Request) *daemon.Response {
+	var listReq daemon.CommitListRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &listReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	var commits []daemon.CommitInfo
+
+	s.mu.RLock()
+	for name, orch := range s.orchestrators {
+		if listReq.Project != "" && listReq.Project != name {
+			continue
+		}
+
+		var records []orchestrator.CommitRecord
+		if listReq.Limit > 0 {
+			records = orch.Commits().ListRecent(listReq.Limit)
+		} else {
+			records = orch.Commits().List()
+		}
+
+		for _, r := range records {
+			commits = append(commits, daemon.CommitInfo{
+				SHA:      r.SHA,
+				Branch:   r.Branch,
+				AgentID:  r.AgentID,
+				TaskID:   r.TaskID,
+				Project:  name,
+				MergedAt: r.MergedAt.Format(time.RFC3339),
+			})
+		}
+	}
+	s.mu.RUnlock()
+
+	return successResponse(req, daemon.CommitListResponse{
+		Commits: commits,
 	})
 }

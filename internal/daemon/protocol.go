@@ -53,6 +53,9 @@ const (
 	// Ticket claims (prevent duplicate work across agents)
 	MsgAgentClaim MessageType = "agent.claim" // Claim a ticket for an agent
 	MsgClaimList  MessageType = "claim.list"  // List all active claims
+
+	// Commit tracking
+	MsgCommitList MessageType = "commit.list" // List recent commits
 )
 
 // Request is the envelope for all IPC requests.
@@ -305,6 +308,7 @@ type AgentDoneRequest struct {
 type AgentDoneResponse struct {
 	Merged     bool   `json:"merged"`                // True if merge to main succeeded
 	BranchName string `json:"branch_name,omitempty"` // The branch that was processed
+	SHA        string `json:"sha,omitempty"`         // Commit SHA of merge commit (only if Merged is true)
 	MergeError string `json:"merge_error,omitempty"` // Conflict message if merge failed
 }
 
@@ -396,4 +400,25 @@ type ClaimInfo struct {
 	TicketID string `json:"ticket_id"`
 	AgentID  string `json:"agent_id"`
 	Project  string `json:"project"`
+}
+
+// CommitListRequest is the payload for commit.list requests.
+type CommitListRequest struct {
+	Project string `json:"project,omitempty"` // Filter by project, empty = all
+	Limit   int    `json:"limit,omitempty"`   // Max commits to return, 0 = all
+}
+
+// CommitListResponse is the payload for commit.list responses.
+type CommitListResponse struct {
+	Commits []CommitInfo `json:"commits"`
+}
+
+// CommitInfo describes a merged commit.
+type CommitInfo struct {
+	SHA      string `json:"sha"`
+	Branch   string `json:"branch"`
+	AgentID  string `json:"agent_id"`
+	TaskID   string `json:"task_id,omitempty"`
+	Project  string `json:"project"`
+	MergedAt string `json:"merged_at"` // RFC3339 format
 }
