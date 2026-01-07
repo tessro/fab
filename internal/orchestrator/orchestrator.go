@@ -46,8 +46,9 @@ If already claimed, pick another from the list.
 If all tasks are claimed, run 'fab agent done' to return to the pool.
 When done:
 1. Run all quality gates
-2. Run 'fab issue close <id>' to close the task
-3. Run 'fab agent done'
+2. Commit all your changes with a descriptive message
+3. Run 'fab issue close <id>' to close the task
+4. Run 'fab agent done'
 IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.`,
 	}
 }
