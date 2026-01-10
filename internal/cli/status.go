@@ -92,7 +92,7 @@ func printAgents(projects []daemon.ProjectStatus) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "AGENT\tPROJECT\tSTATE\tUPTIME\tTASK")
+	_, _ = fmt.Fprintln(w, "AGENT\tPROJECT\tSTATE\tUPTIME\tTASK\tDESCRIPTION")
 	for _, p := range projects {
 		for _, a := range p.Agents {
 			uptime := time.Since(a.StartedAt).Truncate(time.Second)
@@ -100,7 +100,15 @@ func printAgents(projects []daemon.ProjectStatus) {
 			if task == "" {
 				task = "-"
 			}
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, uptime, task)
+			desc := a.Description
+			if desc == "" {
+				desc = "-"
+			}
+			// Truncate long descriptions for display
+			if len(desc) > 40 {
+				desc = desc[:37] + "..."
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, uptime, task, desc)
 		}
 	}
 	_ = w.Flush()

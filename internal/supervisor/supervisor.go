@@ -131,6 +131,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentSendMessage(ctx, req)
 	case daemon.MsgAgentChatHistory:
 		return s.handleAgentChatHistory(ctx, req)
+	case daemon.MsgAgentDescribe:
+		return s.handleAgentDescribe(ctx, req)
 
 	// TUI streaming
 	case daemon.MsgAttach:
@@ -304,11 +306,13 @@ func (s *Supervisor) handleStatus(ctx context.Context, req *daemon.Request) *dae
 		for _, a := range agents {
 			info := a.Info()
 			agentStatuses = append(agentStatuses, daemon.AgentStatus{
-				ID:        info.ID,
-				Project:   info.Project,
-				State:     string(info.State),
-				Worktree:  info.Worktree,
-				StartedAt: info.StartedAt,
+				ID:          info.ID,
+				Project:     info.Project,
+				State:       string(info.State),
+				Worktree:    info.Worktree,
+				StartedAt:   info.StartedAt,
+				Task:        info.Task,
+				Description: info.Description,
 			})
 		}
 
@@ -487,11 +491,13 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 	for _, a := range agents {
 		info := a.Info()
 		statuses = append(statuses, daemon.AgentStatus{
-			ID:        info.ID,
-			Project:   info.Project,
-			State:     string(info.State),
-			Worktree:  info.Worktree,
-			StartedAt: info.StartedAt,
+			ID:          info.ID,
+			Project:     info.Project,
+			State:       string(info.State),
+			Worktree:    info.Worktree,
+			StartedAt:   info.StartedAt,
+			Task:        info.Task,
+			Description: info.Description,
 		})
 	}
 
@@ -706,6 +712,32 @@ func (s *Supervisor) handleAgentChatHistory(ctx context.Context, req *daemon.Req
 		AgentID: histReq.ID,
 		Entries: dtos,
 	})
+}
+
+// handleAgentDescribe sets the description for an agent.
+func (s *Supervisor) handleAgentDescribe(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var descReq daemon.AgentDescribeRequest
+	if err := unmarshalPayload(req.Payload, &descReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if descReq.AgentID == "" {
+		return errorResponse(req, "agent_id is required")
+	}
+
+	a, err := s.agents.Get(descReq.AgentID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("agent not found: %s", descReq.AgentID))
+	}
+
+	a.SetDescription(descReq.Description)
+
+	slog.Info("agent description set",
+		"agent", descReq.AgentID,
+		"description", descReq.Description,
+	)
+
+	return successResponse(req, nil)
 }
 
 // handleAttach subscribes a client to streaming events.

@@ -44,7 +44,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tTASK\tAGE")
+	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tTASK\tDESCRIPTION\tAGE")
 
 	for _, a := range resp.Agents {
 		age := formatDuration(time.Since(a.StartedAt))
@@ -52,7 +52,15 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		if task == "" {
 			task = "-"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, task, age)
+		desc := a.Description
+		if desc == "" {
+			desc = "-"
+		}
+		// Truncate long descriptions for display
+		if len(desc) > 40 {
+			desc = desc[:37] + "..."
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, task, desc, age)
 	}
 
 	_ = w.Flush()
@@ -153,6 +161,33 @@ var agentDoneCmd = &cobra.Command{
 	RunE:  runAgentDone,
 }
 
+var agentDescribeCmd = &cobra.Command{
+	Use:   "describe <description>",
+	Short: "Set a description for this agent",
+	Long:  "Set a human-readable description of what the agent is currently doing. Uses FAB_AGENT_ID env var.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runAgentDescribe,
+}
+
+func runAgentDescribe(cmd *cobra.Command, args []string) error {
+	agentID := os.Getenv("FAB_AGENT_ID")
+	if agentID == "" {
+		return fmt.Errorf("FAB_AGENT_ID environment variable not set")
+	}
+
+	description := args[0]
+
+	client := MustConnect()
+	defer client.Close()
+
+	if err := client.AgentDescribe(agentID, description); err != nil {
+		return fmt.Errorf("describe failed: %w", err)
+	}
+
+	fmt.Printf("🚌 Description set: %s\n", description)
+	return nil
+}
+
 func runAgentDone(cmd *cobra.Command, args []string) error {
 	agentID := os.Getenv("FAB_AGENT_ID")
 	if agentID == "" {
@@ -206,6 +241,8 @@ func init() {
 	agentDoneCmd.Flags().StringVar(&doneErrorMsg, "error", "", "Error message if task failed")
 	agentDoneCmd.Flags().StringVar(&doneTaskID, "task", "", "Task ID that was completed")
 	agentCmd.AddCommand(agentDoneCmd)
+
+	agentCmd.AddCommand(agentDescribeCmd)
 
 	rootCmd.AddCommand(agentCmd)
 }

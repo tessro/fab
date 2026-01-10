@@ -93,6 +93,8 @@ type Agent struct {
 	// +checklocks:mu
 	Task string // Current task ID (e.g., "FAB-25")
 	// +checklocks:mu
+	Description string // Human-readable description of current work
+	// +checklocks:mu
 	UpdatedAt time.Time // Last state change
 	// +checklocks:mu
 	LastUserInput time.Time // Timestamp of last user message (for intervention detection)
@@ -184,6 +186,21 @@ func (a *Agent) GetTask() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.Task
+}
+
+// SetDescription sets the agent's description.
+func (a *Agent) SetDescription(desc string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.Description = desc
+	a.UpdatedAt = time.Now()
+}
+
+// GetDescription returns the agent's description.
+func (a *Agent) GetDescription() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.Description
 }
 
 // Transition attempts to move the agent to a new state.
@@ -344,27 +361,29 @@ func (a *Agent) Info() AgentInfo {
 	}
 
 	return AgentInfo{
-		ID:        a.ID,
-		Project:   projectName,
-		Worktree:  worktreePath,
-		State:     a.State,
-		Mode:      a.Mode,
-		Task:      a.Task,
-		StartedAt: a.StartedAt,
-		UpdatedAt: a.UpdatedAt,
+		ID:          a.ID,
+		Project:     projectName,
+		Worktree:    worktreePath,
+		State:       a.State,
+		Mode:        a.Mode,
+		Task:        a.Task,
+		Description: a.Description,
+		StartedAt:   a.StartedAt,
+		UpdatedAt:   a.UpdatedAt,
 	}
 }
 
 // AgentInfo is a read-only snapshot of agent state for status reporting.
 type AgentInfo struct {
-	ID        string
-	Project   string
-	Worktree  string
-	State     State
-	Mode      Mode
-	Task      string
-	StartedAt time.Time
-	UpdatedAt time.Time
+	ID          string
+	Project     string
+	Worktree    string
+	State       State
+	Mode        Mode
+	Task        string
+	Description string
+	StartedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // Start spawns Claude Code with pipe-based I/O within the agent's worktree.

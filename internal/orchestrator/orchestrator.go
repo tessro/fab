@@ -44,6 +44,7 @@ Run 'fab issue ready' to find available tasks.
 Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
 If all tasks are claimed, run 'fab agent done' to return to the pool.
+After claiming a task, run 'fab agent describe "<brief description>"' to set your status (e.g., "Implementing user auth feature").
 When done:
 1. Run all quality gates
 2. Commit all your changes with a descriptive message

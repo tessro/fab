@@ -26,12 +26,13 @@ const (
 	MsgProjectSet    MessageType = "project.set"
 
 	// Agent management
-	MsgAgentList   MessageType = "agent.list"
-	MsgAgentCreate MessageType = "agent.create"
-	MsgAgentDelete MessageType = "agent.delete"
-	MsgAgentAbort  MessageType = "agent.abort"  // Abort/kill a running agent
-	MsgAgentInput  MessageType = "agent.input"  // Send input to agent
-	MsgAgentOutput MessageType = "agent.output" // Get buffered output from agent
+	MsgAgentList     MessageType = "agent.list"
+	MsgAgentCreate   MessageType = "agent.create"
+	MsgAgentDelete   MessageType = "agent.delete"
+	MsgAgentAbort    MessageType = "agent.abort"    // Abort/kill a running agent
+	MsgAgentInput    MessageType = "agent.input"    // Send input to agent
+	MsgAgentOutput   MessageType = "agent.output"   // Get buffered output from agent
+	MsgAgentDescribe MessageType = "agent.describe" // Set agent description
 
 	// TUI streaming
 	MsgAttach           MessageType = "attach" // Subscribe to agent output streams
@@ -138,12 +139,13 @@ type ProjectStatus struct {
 
 // AgentStatus contains per-agent status info.
 type AgentStatus struct {
-	ID        string    `json:"id"`
-	Project   string    `json:"project"`
-	State     string    `json:"state"` // starting, running, idle, done
-	Worktree  string    `json:"worktree"`
-	StartedAt time.Time `json:"started_at"`
-	Task      string    `json:"task,omitempty"` // Current task ID if known
+	ID          string    `json:"id"`
+	Project     string    `json:"project"`
+	State       string    `json:"state"` // starting, running, idle, done
+	Worktree    string    `json:"worktree"`
+	StartedAt   time.Time `json:"started_at"`
+	Task        string    `json:"task,omitempty"`        // Current task ID if known
+	Description string    `json:"description,omitempty"` // Human-readable description
 }
 
 // ProjectAddRequest is the payload for project.add requests.
@@ -245,6 +247,12 @@ type AgentOutputRequest struct {
 type AgentOutputResponse struct {
 	ID     string `json:"id"`
 	Output string `json:"output"` // Buffered agent output
+}
+
+// AgentDescribeRequest is the payload for agent.describe requests.
+type AgentDescribeRequest struct {
+	AgentID     string `json:"agent_id,omitempty"` // Agent ID (from FAB_AGENT_ID env, optional)
+	Description string `json:"description"`        // Human-readable description of current work
 }
 
 // AttachRequest is the payload for attach requests.

@@ -494,6 +494,21 @@ func (c *Client) AgentSendMessage(id, content string) error {
 	return nil
 }
 
+// AgentDescribe sets the description for an agent.
+func (c *Client) AgentDescribe(agentID, description string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentDescribe,
+		Payload: AgentDescribeRequest{AgentID: agentID, Description: description},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("agent describe failed: %s", resp.Error)
+	}
+	return nil
+}
+
 // AgentChatHistory retrieves the chat history for an agent.
 func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryResponse, error) {
 	resp, err := c.Send(&Request{
