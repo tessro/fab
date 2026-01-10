@@ -1,6 +1,6 @@
 ---
 id: fa-c94
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T22:43:53.198754-08:00
