@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/tessro/fab/internal/event"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -64,11 +65,10 @@ type Manager struct {
 	// +checklocks:mu
 	projects map[string][]*Agent // Project name -> Agents
 	// +checklocks:mu
-	handlers []EventHandler // Event subscribers
-	// +checklocks:mu
-	projectHandlers []ProjectEventHandler // Project event subscribers
-	// +checklocks:mu
 	registry map[string]*project.Project // Project name -> Project
+
+	events        event.Emitter[Event]
+	projectEvents event.Emitter[ProjectEvent]
 
 	mu sync.RWMutex
 }
@@ -78,7 +78,6 @@ func NewManager() *Manager {
 	return &Manager{
 		agents:   make(map[string]*Agent),
 		projects: make(map[string][]*Agent),
-		handlers: nil,
 		registry: make(map[string]*project.Project),
 	}
 }
@@ -119,43 +118,25 @@ func (m *Manager) UnregisterProject(name string) {
 // OnEvent registers an event handler.
 // Handlers are called synchronously when events occur.
 func (m *Manager) OnEvent(handler EventHandler) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.handlers = append(m.handlers, handler)
+	m.events.OnEvent(handler)
 }
 
 // OnProjectEvent registers a project event handler.
 // Handlers are called synchronously when project events occur.
 func (m *Manager) OnProjectEvent(handler ProjectEventHandler) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.projectHandlers = append(m.projectHandlers, handler)
+	m.projectEvents.OnEvent(handler)
 }
 
 // emit sends an event to all registered handlers.
 // Must not be called with lock held.
-func (m *Manager) emit(event Event) {
-	m.mu.RLock()
-	handlers := make([]EventHandler, len(m.handlers))
-	copy(handlers, m.handlers)
-	m.mu.RUnlock()
-
-	for _, h := range handlers {
-		h(event)
-	}
+func (m *Manager) emit(e Event) {
+	m.events.Emit(e)
 }
 
 // emitProjectEvent sends a project event to all registered handlers.
 // Must not be called with lock held.
-func (m *Manager) emitProjectEvent(event ProjectEvent) {
-	m.mu.RLock()
-	handlers := make([]ProjectEventHandler, len(m.projectHandlers))
-	copy(handlers, m.projectHandlers)
-	m.mu.RUnlock()
-
-	for _, h := range handlers {
-		h(event)
-	}
+func (m *Manager) emitProjectEvent(e ProjectEvent) {
+	m.projectEvents.Emit(e)
 }
 
 // Create creates a new agent for the given project.

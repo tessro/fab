@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+
+	"github.com/tessro/fab/internal/event"
 )
 
 // Manager errors.
@@ -41,8 +43,8 @@ type EventHandler func(event Event)
 type Manager struct {
 	// +checklocks:mu
 	planners map[string]*Planner // ID -> Planner
-	// +checklocks:mu
-	handlers []EventHandler // Event subscribers
+
+	events event.Emitter[Event]
 
 	mu sync.RWMutex
 }
@@ -56,21 +58,12 @@ func NewManager() *Manager {
 
 // OnEvent registers an event handler.
 func (m *Manager) OnEvent(handler EventHandler) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.handlers = append(m.handlers, handler)
+	m.events.OnEvent(handler)
 }
 
 // emit sends an event to all registered handlers.
-func (m *Manager) emit(event Event) {
-	m.mu.RLock()
-	handlers := make([]EventHandler, len(m.handlers))
-	copy(handlers, m.handlers)
-	m.mu.RUnlock()
-
-	for _, h := range handlers {
-		h(event)
-	}
+func (m *Manager) emit(e Event) {
+	m.events.Emit(e)
 }
 
 // GenerateID generates a new unique planner ID.
