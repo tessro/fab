@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -371,8 +372,13 @@ func (v *ChatView) updateContent() {
 	}
 
 	var lines []string
+	var lastToolName string
 	for _, entry := range v.entries {
-		rendered := v.renderEntry(entry)
+		// Track the last seen tool name for linking tool_result entries
+		if entry.Role == "tool" && entry.ToolName != "" {
+			lastToolName = entry.ToolName
+		}
+		rendered := v.renderEntry(entry, lastToolName)
 		lines = append(lines, rendered)
 	}
 
@@ -381,7 +387,8 @@ func (v *ChatView) updateContent() {
 }
 
 // renderEntry renders a single chat entry to a string.
-func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO) string {
+// lastToolName is the most recent tool name seen, used for tool_result entries.
+func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) string {
 	// Calculate available width for content (viewport width minus some padding)
 	contentWidth := v.viewport.Width - 2
 	if contentWidth < 20 {
@@ -406,13 +413,20 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO) string {
 	case "tool":
 		var parts []string
 
-		// Tool invocation line
-		toolLine := "  " + chatToolStyle.Render("["+entry.ToolName+"]") + " " + truncateToolInput(entry.ToolInput)
-		parts = append(parts, toolLine)
+		// Tool invocation line (only show if we have a tool name)
+		if entry.ToolName != "" {
+			toolLine := "  " + chatToolStyle.Render("["+entry.ToolName+"]") + " " + truncateToolInput(entry.ToolInput)
+			parts = append(parts, toolLine)
+		}
 
 		// Tool result (if present)
 		if entry.ToolResult != "" {
-			resultLine := "  " + chatResultStyle.Render("->") + " " + truncateResult(entry.ToolResult, v.width-6)
+			// Use the entry's tool name if available, otherwise use lastToolName
+			toolName := entry.ToolName
+			if toolName == "" {
+				toolName = lastToolName
+			}
+			resultLine := "  " + chatResultStyle.Render("->") + " " + summarizeToolResult(toolName, entry.ToolResult, v.width-6)
 			parts = append(parts, resultLine)
 		}
 
@@ -488,6 +502,60 @@ func truncateResult(result string, maxWidth int) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// summarizeToolResult returns a one-line summary for certain tool results.
+// For Read and Grep tools, it shows line counts instead of content.
+// For other tools, it uses the existing truncateResult behavior.
+func summarizeToolResult(toolName, result string, maxWidth int) string {
+	switch toolName {
+	case "Read":
+		// Count lines in the result
+		lineCount := strings.Count(result, "\n")
+		if !strings.HasSuffix(result, "\n") && len(result) > 0 {
+			lineCount++
+		}
+		return "Read " + formatLineCount(lineCount)
+
+	case "Grep":
+		// Count lines (matches) in the result
+		lines := strings.Split(result, "\n")
+		// Filter empty lines
+		matchCount := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				matchCount++
+			}
+		}
+		if matchCount == 0 {
+			return "No matches"
+		}
+		return formatMatchCount(matchCount)
+
+	default:
+		return truncateResult(result, maxWidth)
+	}
+}
+
+// formatLineCount formats a line count for display.
+func formatLineCount(count int) string {
+	if count == 1 {
+		return "1 line"
+	}
+	return formatNumber(count) + " lines"
+}
+
+// formatMatchCount formats a match count for display.
+func formatMatchCount(count int) string {
+	if count == 1 {
+		return "1 match"
+	}
+	return formatNumber(count) + " matches"
+}
+
+// formatNumber formats a number as a string.
+func formatNumber(n int) string {
+	return strconv.Itoa(n)
 }
 
 // View renders the chat view.
