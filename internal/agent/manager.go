@@ -159,19 +159,19 @@ func (m *Manager) emitProjectEvent(event ProjectEvent) {
 }
 
 // Create creates a new agent for the given project.
-// It assigns an available worktree and returns the new agent.
-// Returns ErrNoCapacity if no worktrees are available.
+// It creates a dedicated worktree for the agent and returns the new agent.
+// Returns ErrNoCapacity if max agents reached.
 func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 	id := generateID()
 
-	// Try to get an available worktree
-	wt, err := proj.GetAvailableWorktree(id)
+	// Create a dedicated worktree for this agent
+	wt, err := proj.CreateWorktreeForAgent(id)
 	if err != nil {
 		if errors.Is(err, project.ErrNoWorktreeAvailable) {
-			slog.Warn("no worktree available for new agent", "project", proj.Name)
+			slog.Warn("max agents reached for project", "project", proj.Name)
 			return nil, ErrNoCapacity
 		}
-		slog.Error("failed to get worktree", "project", proj.Name, "error", err)
+		slog.Error("failed to create worktree", "project", proj.Name, "error", err)
 		return nil, err
 	}
 
@@ -334,9 +334,9 @@ func (m *Manager) Delete(id string) error {
 
 	m.mu.Unlock()
 
-	// Return worktree to pool (resets it to clean state)
+	// Delete the agent's worktree
 	if proj != nil {
-		_ = proj.ReturnWorktreeToPool(id)
+		_ = proj.DeleteWorktreeForAgent(id)
 	}
 
 	slog.Info("agent deleted", "agent", id, "project", projectName)

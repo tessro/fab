@@ -84,98 +84,79 @@ func (p *Project) WorktreesDir() string {
 	return filepath.Join(p.ProjectDir(), "worktrees")
 }
 
+// worktreePathForAgent returns the path for an agent's worktree.
+// Returns ~/.fab/projects/<projectName>/worktrees/wt-{agentID}
+func (p *Project) worktreePathForAgent(agentID string) string {
+	return filepath.Join(p.WorktreesDir(), "wt-"+agentID)
+}
+
 // IssuesDir returns the path to the issues directory within the repo.
 // Returns ~/.fab/projects/<projectName>/repo/.tickets/
 func (p *Project) IssuesDir() string {
 	return filepath.Join(p.RepoDir(), ".tickets")
 }
 
-// GetAvailableWorktree returns an available worktree and marks it as in use.
-// If the worktree directory is missing, it will be recreated.
-// Returns ErrNoWorktreeAvailable if all worktrees are occupied.
-func (p *Project) GetAvailableWorktree(agentID string) (*Worktree, error) {
+// CreateWorktreeForAgent creates a dedicated worktree for an agent.
+// The worktree is named wt-{agentID} and checked out on a fab/{agentID} branch.
+// Returns ErrNoWorktreeAvailable if MaxAgents is reached.
+func (p *Project) CreateWorktreeForAgent(agentID string) (*Worktree, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for i := range p.Worktrees {
-		if !p.Worktrees[i].InUse {
-			// Ensure the worktree directory exists, recreate if missing
-			if err := p.ensureWorktreeExists(p.Worktrees[i].Path); err != nil {
-				// Skip this worktree if recreation fails, try next
-				continue
-			}
-			// Reset worktree to pristine state (origin/main)
-			// Log errors but don't fail - agent can still work with non-pristine state
-			_ = p.resetWorktree(p.Worktrees[i].Path)
-			// Create a branch for this agent's work
-			_ = p.createAgentBranch(p.Worktrees[i].Path, agentID)
-			p.Worktrees[i].InUse = true
-			p.Worktrees[i].AgentID = agentID
-			return &p.Worktrees[i], nil
-		}
+	// Check capacity
+	if len(p.Worktrees) >= p.MaxAgents {
+		return nil, ErrNoWorktreeAvailable
 	}
-	return nil, ErrNoWorktreeAvailable
+
+	// Create worktree path
+	wtPath := p.worktreePathForAgent(agentID)
+
+	// Create the git worktree
+	if err := p.createWorktree(wtPath); err != nil {
+		return nil, err
+	}
+
+	// Reset worktree to pristine state (origin/main)
+	_ = p.resetWorktree(wtPath)
+	// Create a branch for this agent's work
+	_ = p.createAgentBranch(wtPath, agentID)
+
+	wt := Worktree{
+		Path:    wtPath,
+		InUse:   true,
+		AgentID: agentID,
+	}
+	p.Worktrees = append(p.Worktrees, wt)
+
+	return &wt, nil
 }
 
-// ReleaseWorktree marks a worktree as available.
-// Returns ErrWorktreeNotFound if the worktree path doesn't match any in the pool.
-func (p *Project) ReleaseWorktree(path string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for i := range p.Worktrees {
-		if p.Worktrees[i].Path == path {
-			p.Worktrees[i].InUse = false
-			p.Worktrees[i].AgentID = ""
-			return nil
-		}
-	}
-	return ErrWorktreeNotFound
-}
-
-// ReleaseWorktreeByAgent marks a worktree as available by agent ID.
+// DeleteWorktreeForAgent removes an agent's worktree from disk and the tracking list.
 // Returns ErrWorktreeNotFound if no worktree is assigned to that agent.
-func (p *Project) ReleaseWorktreeByAgent(agentID string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for i := range p.Worktrees {
-		if p.Worktrees[i].AgentID == agentID {
-			p.Worktrees[i].InUse = false
-			p.Worktrees[i].AgentID = ""
-			return nil
-		}
-	}
-	return ErrWorktreeNotFound
-}
-
-// ReturnWorktreeToPool releases a worktree and resets it to a clean state.
-// This performs cleanup immediately rather than lazily on next allocation.
-// Returns ErrWorktreeNotFound if no worktree is assigned to that agent.
-func (p *Project) ReturnWorktreeToPool(agentID string) error {
+func (p *Project) DeleteWorktreeForAgent(agentID string) error {
 	p.mu.Lock()
 
 	var wtPath string
+	wtIndex := -1
 	for i := range p.Worktrees {
 		if p.Worktrees[i].AgentID == agentID {
 			wtPath = p.Worktrees[i].Path
-			p.Worktrees[i].InUse = false
-			p.Worktrees[i].AgentID = ""
+			wtIndex = i
 			break
 		}
 	}
-	p.mu.Unlock()
 
-	if wtPath == "" {
+	if wtIndex == -1 {
+		p.mu.Unlock()
 		return ErrWorktreeNotFound
 	}
 
-	// Reset worktree to pristine state (origin/main) outside the lock.
-	// Ignore errors - worktree is already marked available, and reset
-	// will be retried on next allocation if needed.
-	_ = p.resetWorktreeUnlocked(wtPath)
+	// Remove from tracking list
+	p.Worktrees = append(p.Worktrees[:wtIndex], p.Worktrees[wtIndex+1:]...)
+	p.mu.Unlock()
 
-	return nil
+	// Delete the worktree from disk outside the lock
+	return p.removeWorktree(wtPath)
 }
 
 // AvailableWorktreeCount returns the number of available worktrees.

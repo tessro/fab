@@ -170,11 +170,10 @@ type ProjectAddRequest struct {
 
 // ProjectAddResponse is the payload for project.add responses.
 type ProjectAddResponse struct {
-	Name      string   `json:"name"`
-	RemoteURL string   `json:"remote_url"`
-	RepoDir   string   `json:"repo_dir"` // Local clone path
-	MaxAgents int      `json:"max_agents"`
-	Worktrees []string `json:"worktrees"` // Created worktree paths
+	Name      string `json:"name"`
+	RemoteURL string `json:"remote_url"`
+	RepoDir   string `json:"repo_dir"` // Local clone path
+	MaxAgents int    `json:"max_agents"`
 }
 
 // ProjectRemoveRequest is the payload for project.remove requests.

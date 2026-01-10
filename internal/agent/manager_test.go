@@ -8,14 +8,9 @@ import (
 	"github.com/tessro/fab/internal/project"
 )
 
-func newTestProject(name string, worktreeCount int) *project.Project {
+func newTestProject(name string, maxAgents int) *project.Project {
 	p := project.NewProject(name, "/tmp/"+name)
-	for i := 0; i < worktreeCount; i++ {
-		p.AddWorktree(project.Worktree{
-			Path:  p.WorktreesDir() + "/wt-" + string(rune('0'+i)),
-			InUse: false,
-		})
-	}
+	p.MaxAgents = maxAgents
 	return p
 }
 
@@ -230,11 +225,11 @@ func TestManager_Delete(t *testing.T) {
 		}
 	})
 
-	t.Run("releases worktree", func(t *testing.T) {
-		// Worktree should be available again
-		available := proj.AvailableWorktreeCount()
-		if available != 3 {
-			t.Errorf("expected 3 available worktrees, got %d", available)
+	t.Run("deletes worktree", func(t *testing.T) {
+		// Worktree should be removed (new model: worktrees are deleted, not released)
+		activeCount := proj.ActiveAgentCount()
+		if activeCount != 0 {
+			t.Errorf("expected 0 active agents, got %d", activeCount)
 		}
 	})
 

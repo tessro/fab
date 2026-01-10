@@ -266,7 +266,6 @@ func TestClient_ProjectOperations(t *testing.T) {
 					RemoteURL: "git@github.com:user/test.git",
 					RepoDir:   "/path/to/test/repo",
 					MaxAgents: 3,
-					Worktrees: []string{"/path/to/test/worktrees/wt-001"},
 				},
 			}
 		case MsgProjectList:

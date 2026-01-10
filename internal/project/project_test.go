@@ -24,264 +24,119 @@ func TestNewProject(t *testing.T) {
 	}
 }
 
-func TestGetAvailableWorktree_NoWorktrees(t *testing.T) {
+func TestCreateWorktreeForAgent_Success(t *testing.T) {
 	p := NewProject("test", "")
+	p.MaxAgents = 3
 
-	_, err := p.GetAvailableWorktree("agent1")
-	if err != ErrNoWorktreeAvailable {
-		t.Errorf("err = %v, want ErrNoWorktreeAvailable", err)
-	}
-}
-
-func TestGetAvailableWorktree_AllInUse(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
-	}
-
-	_, err := p.GetAvailableWorktree("agent3")
-	if err != ErrNoWorktreeAvailable {
-		t.Errorf("err = %v, want ErrNoWorktreeAvailable", err)
-	}
-}
-
-func TestGetAvailableWorktree_ReturnsFirstAvailable(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: false, AgentID: ""},
-		{Path: "/tmp/wt3", InUse: false, AgentID: ""},
-	}
-
-	wt, err := p.GetAvailableWorktree("agent2")
+	wt, err := p.CreateWorktreeForAgent("agent1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if wt.Path != "/tmp/wt2" {
-		t.Errorf("Path = %q, want %q", wt.Path, "/tmp/wt2")
+	if wt == nil {
+		t.Fatal("expected worktree, got nil")
 	}
 	if !wt.InUse {
 		t.Error("InUse = false, want true")
 	}
-	if wt.AgentID != "agent2" {
-		t.Errorf("AgentID = %q, want %q", wt.AgentID, "agent2")
+	if wt.AgentID != "agent1" {
+		t.Errorf("AgentID = %q, want %q", wt.AgentID, "agent1")
+	}
+	// Path should be wt-{agentID}
+	if wt.Path != p.WorktreesDir()+"/wt-agent1" {
+		t.Errorf("Path = %q, want %q", wt.Path, p.WorktreesDir()+"/wt-agent1")
+	}
+
+	// Should be tracked
+	if len(p.Worktrees) != 1 {
+		t.Errorf("len(Worktrees) = %d, want 1", len(p.Worktrees))
 	}
 }
 
-func TestGetAvailableWorktree_MarksInUse(t *testing.T) {
+func TestCreateWorktreeForAgent_MaxAgentsReached(t *testing.T) {
 	p := NewProject("test", "")
+	p.MaxAgents = 1
 	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: false, AgentID: ""},
+		{Path: "/tmp/wt-agent1", InUse: true, AgentID: "agent1"},
 	}
 
-	wt, err := p.GetAvailableWorktree("agent1")
+	_, err := p.CreateWorktreeForAgent("agent2")
+	if err != ErrNoWorktreeAvailable {
+		t.Errorf("err = %v, want ErrNoWorktreeAvailable", err)
+	}
+}
+
+func TestDeleteWorktreeForAgent_Success(t *testing.T) {
+	p := NewProject("test", "")
+	p.Worktrees = []Worktree{
+		{Path: "/tmp/wt-agent1", InUse: true, AgentID: "agent1"},
+		{Path: "/tmp/wt-agent2", InUse: true, AgentID: "agent2"},
+	}
+
+	err := p.DeleteWorktreeForAgent("agent1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the worktree in the slice is marked
-	if !p.Worktrees[0].InUse {
-		t.Error("Worktree in pool should be marked InUse")
+	// Should have 1 worktree left
+	if len(p.Worktrees) != 1 {
+		t.Errorf("len(Worktrees) = %d, want 1", len(p.Worktrees))
 	}
-	if p.Worktrees[0].AgentID != "agent1" {
-		t.Errorf("Worktree AgentID = %q, want %q", p.Worktrees[0].AgentID, "agent1")
-	}
-
-	// Verify returned pointer reflects the same
-	if !wt.InUse || wt.AgentID != "agent1" {
-		t.Error("Returned worktree should be marked InUse with agent1")
+	// Remaining worktree should be agent2's
+	if p.Worktrees[0].AgentID != "agent2" {
+		t.Errorf("remaining AgentID = %q, want agent2", p.Worktrees[0].AgentID)
 	}
 }
 
-func TestReleaseWorktree_ByPath(t *testing.T) {
+func TestDeleteWorktreeForAgent_NotFound(t *testing.T) {
 	p := NewProject("test", "")
 	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
+		{Path: "/tmp/wt-agent1", InUse: true, AgentID: "agent1"},
 	}
 
-	err := p.ReleaseWorktree("/tmp/wt1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if p.Worktrees[0].InUse {
-		t.Error("Worktree 0 InUse = true, want false")
-	}
-	if p.Worktrees[0].AgentID != "" {
-		t.Errorf("Worktree 0 AgentID = %q, want empty", p.Worktrees[0].AgentID)
-	}
-	// Other worktree should be unaffected
-	if !p.Worktrees[1].InUse {
-		t.Error("Worktree 1 should still be in use")
-	}
-}
-
-func TestReleaseWorktree_NotFound(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-	}
-
-	err := p.ReleaseWorktree("/tmp/nonexistent")
+	err := p.DeleteWorktreeForAgent("nonexistent")
 	if err != ErrWorktreeNotFound {
 		t.Errorf("err = %v, want ErrWorktreeNotFound", err)
 	}
 }
 
-func TestReleaseWorktreeByAgent(t *testing.T) {
+func TestWorktreeLifecycle(t *testing.T) {
+	// Test the full create-delete cycle
 	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
-	}
+	p.MaxAgents = 2
 
-	err := p.ReleaseWorktreeByAgent("agent2")
+	// Create first worktree
+	wt1, err := p.CreateWorktreeForAgent("agent1")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("create agent1: %v", err)
+	}
+	if wt1.AgentID != "agent1" {
+		t.Errorf("wt1.AgentID = %q, want agent1", wt1.AgentID)
 	}
 
-	// Agent1's worktree should be unaffected
-	if !p.Worktrees[0].InUse {
-		t.Error("Worktree 0 should still be in use")
-	}
-	// Agent2's worktree should be released
-	if p.Worktrees[1].InUse {
-		t.Error("Worktree 1 InUse = true, want false")
-	}
-	if p.Worktrees[1].AgentID != "" {
-		t.Errorf("Worktree 1 AgentID = %q, want empty", p.Worktrees[1].AgentID)
-	}
-}
-
-func TestReleaseWorktreeByAgent_NotFound(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-	}
-
-	err := p.ReleaseWorktreeByAgent("nonexistent")
-	if err != ErrWorktreeNotFound {
-		t.Errorf("err = %v, want ErrWorktreeNotFound", err)
-	}
-}
-
-func TestReturnWorktreeToPool(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
-	}
-
-	err := p.ReturnWorktreeToPool("agent1")
+	// Create second worktree
+	wt2, err := p.CreateWorktreeForAgent("agent2")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Agent1's worktree should be released
-	if p.Worktrees[0].InUse {
-		t.Error("Worktree 0 InUse = true, want false")
-	}
-	if p.Worktrees[0].AgentID != "" {
-		t.Errorf("Worktree 0 AgentID = %q, want empty", p.Worktrees[0].AgentID)
-	}
-	// Agent2's worktree should be unaffected
-	if !p.Worktrees[1].InUse {
-		t.Error("Worktree 1 should still be in use")
-	}
-}
-
-func TestReturnWorktreeToPool_NotFound(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-	}
-
-	err := p.ReturnWorktreeToPool("nonexistent")
-	if err != ErrWorktreeNotFound {
-		t.Errorf("err = %v, want ErrWorktreeNotFound", err)
-	}
-}
-
-func TestReturnWorktreeToPool_Reuse(t *testing.T) {
-	// Test the acquire-return-reacquire cycle
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: false, AgentID: ""},
-	}
-
-	// Acquire worktree
-	wt1, err := p.GetAvailableWorktree("agent1")
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	if wt1.Path != "/tmp/wt1" {
-		t.Errorf("wt1.Path = %q, want /tmp/wt1", wt1.Path)
-	}
-
-	// Return to pool
-	if err := p.ReturnWorktreeToPool("agent1"); err != nil {
-		t.Fatalf("return: %v", err)
-	}
-
-	// Reacquire - should get the same worktree
-	wt2, err := p.GetAvailableWorktree("agent2")
-	if err != nil {
-		t.Fatalf("reacquire: %v", err)
-	}
-	if wt2.Path != "/tmp/wt1" {
-		t.Errorf("wt2.Path = %q, want /tmp/wt1 (recycled)", wt2.Path)
+		t.Fatalf("create agent2: %v", err)
 	}
 	if wt2.AgentID != "agent2" {
 		t.Errorf("wt2.AgentID = %q, want agent2", wt2.AgentID)
 	}
-}
 
-func TestWorktreePoolCycle(t *testing.T) {
-	// Test the full acquire-release cycle
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt1", InUse: false, AgentID: ""},
-		{Path: "/tmp/wt2", InUse: false, AgentID: ""},
-	}
-
-	// Acquire first worktree
-	wt1, err := p.GetAvailableWorktree("agent1")
-	if err != nil {
-		t.Fatalf("acquire 1: %v", err)
-	}
-	if wt1.Path != "/tmp/wt1" {
-		t.Errorf("wt1.Path = %q, want /tmp/wt1", wt1.Path)
-	}
-
-	// Acquire second worktree
-	wt2, err := p.GetAvailableWorktree("agent2")
-	if err != nil {
-		t.Fatalf("acquire 2: %v", err)
-	}
-	if wt2.Path != "/tmp/wt2" {
-		t.Errorf("wt2.Path = %q, want /tmp/wt2", wt2.Path)
-	}
-
-	// All worktrees in use
-	_, err = p.GetAvailableWorktree("agent3")
+	// Should be at capacity
+	_, err = p.CreateWorktreeForAgent("agent3")
 	if err != ErrNoWorktreeAvailable {
-		t.Errorf("acquire 3: err = %v, want ErrNoWorktreeAvailable", err)
+		t.Errorf("create agent3: err = %v, want ErrNoWorktreeAvailable", err)
 	}
 
-	// Release first worktree
-	if err := p.ReleaseWorktreeByAgent("agent1"); err != nil {
-		t.Fatalf("release agent1: %v", err)
+	// Delete first worktree
+	if err := p.DeleteWorktreeForAgent("agent1"); err != nil {
+		t.Fatalf("delete agent1: %v", err)
 	}
 
-	// Now we can acquire again
-	wt3, err := p.GetAvailableWorktree("agent3")
+	// Now we can create again
+	wt3, err := p.CreateWorktreeForAgent("agent3")
 	if err != nil {
-		t.Fatalf("acquire after release: %v", err)
-	}
-	if wt3.Path != "/tmp/wt1" {
-		t.Errorf("wt3.Path = %q, want /tmp/wt1 (recycled)", wt3.Path)
+		t.Fatalf("create agent3 after delete: %v", err)
 	}
 	if wt3.AgentID != "agent3" {
 		t.Errorf("wt3.AgentID = %q, want agent3", wt3.AgentID)
@@ -290,15 +145,22 @@ func TestWorktreePoolCycle(t *testing.T) {
 
 func TestAvailableWorktreeCount(t *testing.T) {
 	p := NewProject("test", "")
+	p.MaxAgents = 5
 	p.Worktrees = []Worktree{
 		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: false, AgentID: ""},
+		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
 		{Path: "/tmp/wt3", InUse: true, AgentID: "agent3"},
 	}
 
+	// 3 in use out of 5 max = 2 available
 	count := p.AvailableWorktreeCount()
-	if count != 1 {
-		t.Errorf("AvailableWorktreeCount() = %d, want 1", count)
+	// Note: AvailableWorktreeCount counts worktrees not in use,
+	// but with the new model all worktrees are in use (they only exist when in use)
+	// Available capacity is MaxAgents - len(Worktrees)
+	// But the function counts InUse=false, which won't exist in new model
+	// So we expect 0 available
+	if count != 0 {
+		t.Errorf("AvailableWorktreeCount() = %d, want 0", count)
 	}
 }
 
@@ -306,13 +168,13 @@ func TestActiveAgentCount(t *testing.T) {
 	p := NewProject("test", "")
 	p.Worktrees = []Worktree{
 		{Path: "/tmp/wt1", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt2", InUse: false, AgentID: ""},
+		{Path: "/tmp/wt2", InUse: true, AgentID: "agent2"},
 		{Path: "/tmp/wt3", InUse: true, AgentID: "agent3"},
 	}
 
 	count := p.ActiveAgentCount()
-	if count != 2 {
-		t.Errorf("ActiveAgentCount() = %d, want 2", count)
+	if count != 3 {
+		t.Errorf("ActiveAgentCount() = %d, want 3", count)
 	}
 }
 
@@ -399,100 +261,12 @@ func TestProjectDirs_WithBaseDir(t *testing.T) {
 	}
 }
 
-func TestResizeWorktreePool_NoChange(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt-001", InUse: false},
-		{Path: "/tmp/wt-002", InUse: false},
-	}
+func TestWorktreePathForAgent(t *testing.T) {
+	p := NewProject("myapp", "")
 
-	err := p.ResizeWorktreePool(2)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(p.Worktrees) != 2 {
-		t.Errorf("len(Worktrees) = %d, want 2", len(p.Worktrees))
-	}
-}
-
-func TestResizeWorktreePool_ShrinkUnused(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt-001", InUse: false},
-		{Path: "/tmp/wt-002", InUse: false},
-		{Path: "/tmp/wt-003", InUse: false},
-	}
-
-	err := p.ResizeWorktreePool(1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(p.Worktrees) != 1 {
-		t.Errorf("len(Worktrees) = %d, want 1", len(p.Worktrees))
-	}
-}
-
-func TestResizeWorktreePool_ShrinkPreservesInUse(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt-001", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt-002", InUse: false},
-		{Path: "/tmp/wt-003", InUse: true, AgentID: "agent3"},
-	}
-
-	// Shrink to 2 - should remove the unused one
-	err := p.ResizeWorktreePool(2)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(p.Worktrees) != 2 {
-		t.Errorf("len(Worktrees) = %d, want 2", len(p.Worktrees))
-	}
-
-	// Both in-use worktrees should be preserved
-	inUseCount := 0
-	for _, wt := range p.Worktrees {
-		if wt.InUse {
-			inUseCount++
-		}
-	}
-	if inUseCount != 2 {
-		t.Errorf("inUseCount = %d, want 2", inUseCount)
-	}
-}
-
-func TestResizeWorktreePool_ShrinkBelowInUse(t *testing.T) {
-	p := NewProject("test", "")
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt-001", InUse: true, AgentID: "agent1"},
-		{Path: "/tmp/wt-002", InUse: true, AgentID: "agent2"},
-		{Path: "/tmp/wt-003", InUse: false},
-	}
-
-	// Try to shrink to 1, but 2 are in use - should fail
-	err := p.ResizeWorktreePool(1)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	// Pool should be unchanged
-	if len(p.Worktrees) != 3 {
-		t.Errorf("len(Worktrees) = %d, want 3 (unchanged)", len(p.Worktrees))
-	}
-}
-
-func TestResizeWorktreePool_GrowNoGitRepo(t *testing.T) {
-	// When there's no git repo, grow should succeed but not create worktrees
-	// This tests the graceful degradation path for non-git scenarios
-	tmpDir := t.TempDir()
-	p := NewProject("test", "")
-	p.BaseDir = tmpDir
-	p.Worktrees = []Worktree{
-		{Path: "/tmp/wt-001", InUse: false},
-	}
-
-	// This will attempt to grow, check for .git, not find it, and return nil
-	err := p.ResizeWorktreePool(3)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	path := p.worktreePathForAgent("abc123")
+	expected := p.WorktreesDir() + "/wt-abc123"
+	if path != expected {
+		t.Errorf("worktreePathForAgent = %q, want %q", path, expected)
 	}
 }

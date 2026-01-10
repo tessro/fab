@@ -215,9 +215,7 @@ func TestSupervisor_HandleProjectAdd(t *testing.T) {
 	if payload.MaxAgents != 5 {
 		t.Errorf("expected max_agents 5, got %d", payload.MaxAgents)
 	}
-	if len(payload.Worktrees) != 5 {
-		t.Errorf("expected 5 worktrees, got %d", len(payload.Worktrees))
-	}
+	// Worktrees are now created on-demand when agents start, not upfront
 }
 
 func TestSupervisor_HandleProjectList(t *testing.T) {

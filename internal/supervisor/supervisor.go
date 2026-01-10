@@ -414,20 +414,13 @@ func (s *Supervisor) handleProjectAdd(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, fmt.Sprintf("failed to clone: %v\n%s", err, output))
 	}
 
-	// Create worktree pool
-	worktrees, err := proj.CreateWorktreePool()
-	if err != nil {
-		_ = s.registry.Remove(proj.Name)
-		_ = os.RemoveAll(projectDir)
-		return errorResponse(req, fmt.Sprintf("failed to create worktree pool: %v", err))
-	}
+	// Worktrees are created on-demand when agents start
 
 	return successResponse(req, daemon.ProjectAddResponse{
 		Name:      proj.Name,
 		RemoteURL: proj.RemoteURL,
 		RepoDir:   proj.RepoDir(),
 		MaxAgents: proj.MaxAgents,
-		Worktrees: worktrees,
 	})
 }
 
@@ -450,7 +443,7 @@ func (s *Supervisor) handleProjectRemove(ctx context.Context, req *daemon.Reques
 	if removeReq.DeleteWorktrees {
 		proj, err := s.registry.Get(removeReq.Name)
 		if err == nil {
-			_ = proj.DeleteWorktreePool()
+			_ = proj.DeleteAllWorktrees()
 		}
 	}
 
@@ -491,22 +484,12 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, "project name required")
 	}
 
-	// Get the project before updating to check if resize is needed
-	proj, err := s.registry.Get(setReq.Name)
-	if err != nil {
-		return errorResponse(req, fmt.Sprintf("project not found: %s", setReq.Name))
-	}
-
+	// Update the project settings
 	if err := s.registry.Update(setReq.Name, setReq.MaxAgents, setReq.Autostart); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to update project: %v", err))
 	}
 
-	// Resize worktree pool if MaxAgents changed
-	if setReq.MaxAgents != nil {
-		if err := proj.ResizeWorktreePool(*setReq.MaxAgents); err != nil {
-			return errorResponse(req, fmt.Sprintf("failed to resize worktree pool: %v", err))
-		}
-	}
+	// No need to resize worktree pool - worktrees are created/deleted on-demand
 
 	return successResponse(req, nil)
 }
@@ -1063,10 +1046,7 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 		return nil
 	}
 
-	// Ensure worktree pool is populated (for projects loaded from config)
-	if err := proj.RestoreWorktreePool(); err != nil {
-		return fmt.Errorf("restore worktree pool: %w", err)
-	}
+	// Worktrees are created on-demand when agents start
 
 	// Register project with agent manager
 	s.agents.RegisterProject(proj)
