@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // DefaultLogPath returns the default log file path (~/.fab/fab.log).
@@ -18,10 +19,29 @@ func DefaultLogPath() string {
 	return filepath.Join(home, ".fab", "fab.log")
 }
 
+// ParseLevel converts a log level string to slog.Level.
+// Valid values: "debug", "info", "warn", "error" (case-insensitive).
+// Returns slog.LevelInfo for unrecognized values.
+func ParseLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 // Setup initializes the global slog logger to write to the specified path.
 // If path is empty, uses DefaultLogPath().
+// The level parameter controls logging verbosity (use ParseLevel to convert from string).
 // Returns a cleanup function to close the log file.
-func Setup(path string) (cleanup func(), err error) {
+func Setup(path string, level slog.Level) (cleanup func(), err error) {
 	if path == "" {
 		path = DefaultLogPath()
 	}
@@ -40,7 +60,7 @@ func Setup(path string) (cleanup func(), err error) {
 
 	// Create JSON handler for structured logging
 	handler := slog.NewJSONHandler(f, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: level,
 	})
 
 	// Set as default logger
@@ -51,7 +71,8 @@ func Setup(path string) (cleanup func(), err error) {
 
 // SetupMulti initializes logging to both file and an additional writer (e.g., stderr).
 // Useful for development when you want console output too.
-func SetupMulti(path string, extra io.Writer) (cleanup func(), err error) {
+// The level parameter controls logging verbosity (use ParseLevel to convert from string).
+func SetupMulti(path string, extra io.Writer, level slog.Level) (cleanup func(), err error) {
 	if path == "" {
 		path = DefaultLogPath()
 	}
@@ -72,7 +93,7 @@ func SetupMulti(path string, extra io.Writer) (cleanup func(), err error) {
 	w := io.MultiWriter(f, extra)
 
 	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: level,
 	})
 
 	slog.SetDefault(slog.New(handler))

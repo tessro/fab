@@ -10,6 +10,10 @@ import (
 
 // GlobalConfig represents the global fab configuration.
 type GlobalConfig struct {
+	// LogLevel controls logging verbosity ("debug", "info", "warn", "error").
+	// Defaults to "info" if not specified.
+	LogLevel string `toml:"log_level"`
+
 	// Providers contains API provider configurations.
 	Providers ProvidersConfig `toml:"providers"`
 
@@ -41,6 +45,9 @@ const DefaultLLMAuthProvider = "anthropic"
 
 // DefaultLLMAuthModel is the default model for LLM authorization.
 const DefaultLLMAuthModel = "claude-haiku-4-5-20250514"
+
+// DefaultLogLevel is the default logging level.
+const DefaultLogLevel = "info"
 
 // GlobalConfigPath returns the path to the global fab config.
 func GlobalConfigPath() (string, error) {
@@ -107,4 +114,12 @@ func (c *GlobalConfig) GetLLMAuthModel() string {
 		return c.LLMAuth.Model
 	}
 	return DefaultLLMAuthModel
+}
+
+// GetLogLevel returns the configured log level or the default.
+func (c *GlobalConfig) GetLogLevel() string {
+	if c != nil && c.LogLevel != "" {
+		return c.LogLevel
+	}
+	return DefaultLogLevel
 }

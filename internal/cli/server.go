@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/plugin"
@@ -138,8 +139,15 @@ func daemonize() error {
 
 // runDaemon runs the daemon server in the foreground.
 func runDaemon() error {
+	// Load global config for log level
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	logLevel := logging.ParseLevel(cfg.GetLogLevel())
+
 	// Initialize logging
-	logCleanup, err := logging.Setup("")
+	logCleanup, err := logging.Setup("", logLevel)
 	if err != nil {
 		return fmt.Errorf("setup logging: %w", err)
 	}

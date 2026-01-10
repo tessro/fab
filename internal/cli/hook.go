@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/rules"
@@ -121,8 +122,12 @@ Example Claude settings.json:
 }
 
 func runHook(cmd *cobra.Command, args []string) error {
+	// Load global config for log level
+	cfg, _ := config.LoadGlobalConfig()
+	logLevel := logging.ParseLevel(cfg.GetLogLevel())
+
 	// Setup file logging so logs are visible (stdout is for Claude Code JSON response)
-	cleanup, err := logging.Setup("")
+	cleanup, err := logging.Setup("", logLevel)
 	if err == nil {
 		defer cleanup()
 	}
