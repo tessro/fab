@@ -138,6 +138,9 @@ func (l AgentList) View() string {
 		content = agentListEmptyStyle.Width(innerWidth).Height(innerHeight).Render("No agents")
 	} else {
 		var rows []string
+		// Column header row
+		columnHeader := l.renderColumnHeader(innerWidth)
+		rows = append(rows, columnHeader)
 		for i, agent := range l.agents {
 			row := l.renderAgent(i, agent, innerWidth)
 			rows = append(rows, row)
@@ -259,6 +262,42 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 
 	// Apply row styling with full width - padding is applied only here
 	return rowStyle.Width(width).Render(row)
+}
+
+// renderColumnHeader renders the column header row.
+func (l AgentList) renderColumnHeader(width int) string {
+	// Column header labels styled with muted color
+	headerStyle := lipgloss.NewStyle().Foreground(mutedColor)
+
+	// Build header: " " (state placeholder) | AGENT | PROJECT
+	stateHeader := headerStyle.Render(" ") // Single space placeholder for state icon
+	agentHeader := headerStyle.Render("AGENT")
+	projectHeader := headerStyle.Render("PROJECT")
+	timeHeader := headerStyle.Render("TIME")
+
+	// Compose left part
+	left := lipgloss.JoinHorizontal(lipgloss.Center,
+		stateHeader, " ",
+		agentHeader, " ",
+		projectHeader,
+	)
+
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(timeHeader)
+	// Available content width is total width minus padding (1 on each side = 2)
+	contentWidth := width - 2
+
+	// Right-align time header
+	spacerWidth := contentWidth - leftWidth - rightWidth
+	if spacerWidth < 1 {
+		spacerWidth = 1
+	}
+
+	spacer := strings.Repeat(" ", spacerWidth)
+	row := left + spacer + timeHeader
+
+	// Apply row styling with underline to separate from data rows
+	return agentRowStyle.Width(width).Render(row)
 }
 
 // stateIcon returns an icon for the agent state.
