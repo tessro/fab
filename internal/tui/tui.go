@@ -309,14 +309,15 @@ func isManager(agentID string) bool {
 }
 
 // sendAgentMessage sends a user message to an agent via stream-json.
-func (m Model) sendAgentMessage(agentID, content string) tea.Cmd {
+// project is required when agentID is "manager".
+func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
 		var err error
 		if isManager(agentID) {
-			err = m.client.ManagerSendMessage(content)
+			err = m.client.ManagerSendMessage(project, content)
 		} else {
 			err = m.client.AgentSendMessage(agentID, content)
 		}
@@ -325,7 +326,8 @@ func (m Model) sendAgentMessage(agentID, content string) tea.Cmd {
 }
 
 // fetchAgentChatHistory retrieves chat history for an agent (or manager).
-func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
+// project is required when agentID is "manager".
+func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
@@ -334,7 +336,7 @@ func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
 		var err error
 		if isManager(agentID) {
 			var resp *daemon.ManagerChatHistoryResponse
-			resp, err = m.client.ManagerChatHistory(0) // 0 = all entries
+			resp, err = m.client.ManagerChatHistory(project, 0) // 0 = all entries
 			if err == nil {
 				entries = resp.Entries
 			}
@@ -590,7 +592,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							Timestamp: time.Now().Format(time.RFC3339),
 						})
 						// Send to agent
-						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
+						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), m.chatView.Project(), input))
 						m.inputLine.AddToHistory(input)
 						m.inputLine.Clear()
 						// Exit input mode, return to chat view
@@ -1255,7 +1257,7 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
 	m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
 	m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(agent.ID))
-	return m.fetchAgentChatHistory(agent.ID)
+	return m.fetchAgentChatHistory(agent.ID, agent.Project)
 }
 
 // syncFocusToComponents updates component focus states to match the ModeState focus.

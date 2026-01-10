@@ -28,6 +28,9 @@ type ManagerModel struct {
 	attached  bool
 	eventChan <-chan daemon.EventResult
 
+	// Project this manager is for
+	project string
+
 	// Key bindings
 	keys KeyBindings
 }
@@ -49,14 +52,15 @@ type ManagerClearHistoryMsg struct {
 }
 
 // NewManagerModel creates a new manager TUI model.
-func NewManagerModel(client *daemon.Client) ManagerModel {
+func NewManagerModel(client *daemon.Client, project string) ManagerModel {
 	chatView := NewChatView()
-	chatView.SetAgent("manager", "fab")
+	chatView.SetAgent("manager", project)
 
 	return ManagerModel{
 		chatView:  chatView,
 		inputLine: NewInputLine(),
 		client:    client,
+		project:   project,
 		keys:      DefaultKeyBindings(),
 	}
 }
@@ -104,11 +108,12 @@ func (m ManagerModel) waitForEvent() tea.Cmd {
 
 // fetchManagerChatHistory retrieves chat history for the manager.
 func (m ManagerModel) fetchManagerChatHistory() tea.Cmd {
+	project := m.project
 	return func() tea.Msg {
 		if m.client == nil {
 			return ManagerChatHistoryMsg{Entries: nil}
 		}
-		resp, err := m.client.ManagerChatHistory(0)
+		resp, err := m.client.ManagerChatHistory(project, 0)
 		if err != nil {
 			return ManagerChatHistoryMsg{Err: err}
 		}
@@ -118,22 +123,24 @@ func (m ManagerModel) fetchManagerChatHistory() tea.Cmd {
 
 // sendManagerMessage sends a message to the manager.
 func (m ManagerModel) sendManagerMessage(content string) tea.Cmd {
+	project := m.project
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		err := m.client.ManagerSendMessage(content)
+		err := m.client.ManagerSendMessage(project, content)
 		return ManagerInputMsg{Err: err}
 	}
 }
 
 // clearManagerHistory clears the manager chat history.
 func (m ManagerModel) clearManagerHistory() tea.Cmd {
+	project := m.project
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		err := m.client.ManagerClearHistory()
+		err := m.client.ManagerClearHistory(project)
 		return ManagerClearHistoryMsg{Err: err}
 	}
 }
@@ -296,10 +303,10 @@ func (m *ManagerModel) updateLayout() {
 	m.chatView.SetSize(m.width, chatHeight)
 }
 
-// RunManagerMode starts the TUI in manager mode.
-func RunManagerMode(client *daemon.Client) error {
+// RunManagerMode starts the TUI in manager mode for a project.
+func RunManagerMode(client *daemon.Client, project string) error {
 	p := tea.NewProgram(
-		NewManagerModel(client),
+		NewManagerModel(client, project),
 		tea.WithAltScreen(),
 	)
 	_, err := p.Run()

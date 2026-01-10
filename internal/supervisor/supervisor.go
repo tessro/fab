@@ -40,9 +40,12 @@ type Supervisor struct {
 	// +checklocks:mu
 	orchestrators map[string]*orchestrator.Orchestrator // project name -> orchestrator
 
-	// Manager agent for interactive user conversation
+	// Manager allowed patterns loaded from global permissions
+	managerPatterns []string
+
+	// Per-project manager agents (project name -> manager)
 	// +checklocks:mu
-	manager *manager.Manager
+	managers map[string]*manager.Manager
 
 	// Planner agents for implementation planning
 	// +checklocks:mu
@@ -66,16 +69,17 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 	managerPatterns := loadManagerPatterns()
 
 	s := &Supervisor{
-		registry:      reg,
-		agents:        agents,
-		orchestrators: make(map[string]*orchestrator.Orchestrator),
-		orchConfig:    orchestrator.DefaultConfig(),
-		permissions:   daemon.NewPermissionManager(PermissionTimeout),
-		questions:     daemon.NewUserQuestionManager(PermissionTimeout),
-		startedAt:     time.Now(),
-		shutdownCh:    make(chan struct{}),
-		manager:       manager.New(manager.DefaultWorkDir(), managerPatterns),
-		planners:      planner.NewManager(),
+		registry:        reg,
+		agents:          agents,
+		orchestrators:   make(map[string]*orchestrator.Orchestrator),
+		orchConfig:      orchestrator.DefaultConfig(),
+		permissions:     daemon.NewPermissionManager(PermissionTimeout),
+		questions:       daemon.NewUserQuestionManager(PermissionTimeout),
+		startedAt:       time.Now(),
+		shutdownCh:      make(chan struct{}),
+		managerPatterns: managerPatterns,
+		managers:        make(map[string]*manager.Manager),
+		planners:        planner.NewManager(),
 	}
 
 	// Set up callback to start agent read loops when agent starts
@@ -86,14 +90,6 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 
 	// Register event handler to broadcast agent events
 	agents.OnEvent(s.handleAgentEvent)
-
-	// Set up manager callbacks for broadcasting events
-	s.manager.OnStateChange(func(old, new manager.State) {
-		s.broadcastManagerState(new)
-	})
-	s.manager.OnEntry(func(entry agent.ChatEntry) {
-		s.broadcastManagerChatEntry(entry)
-	})
 
 	// Set up planner event handlers
 	s.planners.OnEvent(s.handlePlannerEvent)
@@ -497,9 +493,6 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 // ManagerAgentID is the special agent ID for the manager in the agent list.
 const ManagerAgentID = "manager"
 
-// ManagerProject is the special project name for the manager in the agent list.
-const ManagerProject = "manager"
-
 // handleAgentList lists agents.
 func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var listReq daemon.AgentListRequest
@@ -513,22 +506,28 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 	slog.Debug("agent list requested", "filter", listReq.Project, "count", len(agents))
 	statuses := make([]daemon.AgentStatus, 0, len(agents)+1)
 
-	// Add manager agent as first entry if running and no project filter
+	// Add running project managers to the list
 	s.mu.RLock()
-	mgr := s.manager
-	s.mu.RUnlock()
+	for projectName, mgr := range s.managers {
+		// Skip if filtering by project and this isn't the one
+		if listReq.Project != "" && listReq.Project != projectName {
+			continue
+		}
 
-	if listReq.Project == "" && mgr.IsRunning() {
-		statuses = append(statuses, daemon.AgentStatus{
-			ID:          ManagerAgentID,
-			Project:     ManagerProject,
-			State:       string(mgr.State()),
-			Worktree:    "",
-			StartedAt:   mgr.StartedAt(),
-			Task:        "",
-			Description: "Manager",
-		})
+		// Check if project has a running manager
+		if mgr.IsRunning() {
+			statuses = append(statuses, daemon.AgentStatus{
+				ID:          ManagerAgentID,
+				Project:     projectName,
+				State:       string(mgr.State()),
+				Worktree:    mgr.WorkDir(),
+				StartedAt:   mgr.StartedAt(),
+				Task:        "",
+				Description: "Manager",
+			})
+		}
 	}
+	s.mu.RUnlock()
 
 	for _, a := range agents {
 		info := a.Info()
@@ -1767,39 +1766,133 @@ func (s *Supervisor) handleCommitList(_ context.Context, req *daemon.Request) *d
 	})
 }
 
-// handleManagerStart starts the manager agent.
-func (s *Supervisor) handleManagerStart(_ context.Context, req *daemon.Request) *daemon.Response {
+// getProjectManager returns the manager for a project, creating it if necessary.
+// It also creates the manager worktree if it doesn't exist.
+func (s *Supervisor) getProjectManager(projectName string) (*manager.Manager, error) {
+	proj, err := s.registry.Get(projectName)
+	if err != nil {
+		return nil, fmt.Errorf("project not found: %s", projectName)
+	}
+
+	// Check if we already have a manager for this project
 	s.mu.Lock()
-	mgr := s.manager
+	mgr, ok := s.managers[projectName]
+	if ok {
+		s.mu.Unlock()
+		return mgr, nil
+	}
+
+	// Ensure manager worktree exists
+	if err := proj.CreateManagerWorktree(); err != nil {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("create manager worktree: %w", err)
+	}
+
+	// Create new manager for this project
+	wtPath := proj.ManagerWorktreePath()
+	mgr = manager.New(wtPath, projectName, s.managerPatterns)
+	s.managers[projectName] = mgr
 	s.mu.Unlock()
+
+	return mgr, nil
+}
+
+// setupManagerCallbacks sets up callbacks for manager events to broadcast to TUI clients.
+func (s *Supervisor) setupManagerCallbacks(mgr *manager.Manager) {
+	projectName := mgr.Project()
+
+	mgr.OnStateChange(func(old, new manager.State) {
+		s.broadcastManagerState(projectName, new, mgr.StartedAt())
+	})
+	mgr.OnEntry(func(entry agent.ChatEntry) {
+		s.broadcastManagerChatEntry(projectName, entry)
+	})
+}
+
+// handleManagerStart starts the manager agent for a project.
+func (s *Supervisor) handleManagerStart(_ context.Context, req *daemon.Request) *daemon.Response {
+	var startReq daemon.ManagerStartRequest
+	if err := unmarshalPayload(req.Payload, &startReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if startReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	mgr, err := s.getProjectManager(startReq.Project)
+	if err != nil {
+		return errorResponse(req, err.Error())
+	}
+
+	// Set up callbacks before starting
+	s.setupManagerCallbacks(mgr)
 
 	if err := mgr.Start(); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to start manager: %v", err))
 	}
 
-	slog.Info("manager agent started")
+	slog.Info("manager agent started", "project", startReq.Project)
 	return successResponse(req, nil)
 }
 
-// handleManagerStop stops the manager agent.
+// handleManagerStop stops the manager agent for a project.
 func (s *Supervisor) handleManagerStop(_ context.Context, req *daemon.Request) *daemon.Response {
-	s.mu.Lock()
-	mgr := s.manager
-	s.mu.Unlock()
+	var stopReq daemon.ManagerStopRequest
+	if err := unmarshalPayload(req.Payload, &stopReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if stopReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	s.mu.RLock()
+	mgr, ok := s.managers[stopReq.Project]
+	s.mu.RUnlock()
+
+	if !ok {
+		return errorResponse(req, fmt.Sprintf("no manager running for project: %s", stopReq.Project))
+	}
 
 	if err := mgr.Stop(); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to stop manager: %v", err))
 	}
 
-	slog.Info("manager agent stopped")
+	slog.Info("manager agent stopped", "project", stopReq.Project)
 	return successResponse(req, nil)
 }
 
-// handleManagerStatus returns the manager agent status.
+// handleManagerStatus returns the manager agent status for a project.
 func (s *Supervisor) handleManagerStatus(_ context.Context, req *daemon.Request) *daemon.Response {
-	s.mu.Lock()
-	mgr := s.manager
-	s.mu.Unlock()
+	var statusReq daemon.ManagerStatusRequest
+	if err := unmarshalPayload(req.Payload, &statusReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if statusReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	proj, err := s.registry.Get(statusReq.Project)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("project not found: %s", statusReq.Project))
+	}
+
+	s.mu.RLock()
+	mgr, ok := s.managers[statusReq.Project]
+	s.mu.RUnlock()
+
+	if !ok {
+		// No manager exists yet - return stopped status
+		return successResponse(req, daemon.ManagerStatusResponse{
+			Project:   statusReq.Project,
+			Running:   false,
+			State:     string(manager.StateStopped),
+			StartedAt: "",
+			WorkDir:   proj.ManagerWorktreePath(),
+		})
+	}
 
 	startedAt := ""
 	if mgr.IsRunning() {
@@ -1807,22 +1900,32 @@ func (s *Supervisor) handleManagerStatus(_ context.Context, req *daemon.Request)
 	}
 
 	return successResponse(req, daemon.ManagerStatusResponse{
+		Project:   statusReq.Project,
 		Running:   mgr.IsRunning(),
 		State:     string(mgr.State()),
 		StartedAt: startedAt,
+		WorkDir:   mgr.WorkDir(),
 	})
 }
 
-// handleManagerSendMessage sends a message to the manager agent.
+// handleManagerSendMessage sends a message to the manager agent for a project.
 func (s *Supervisor) handleManagerSendMessage(_ context.Context, req *daemon.Request) *daemon.Response {
 	var sendReq daemon.ManagerSendMessageRequest
 	if err := unmarshalPayload(req.Payload, &sendReq); err != nil {
 		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
 	}
 
-	s.mu.Lock()
-	mgr := s.manager
-	s.mu.Unlock()
+	if sendReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	s.mu.RLock()
+	mgr, ok := s.managers[sendReq.Project]
+	s.mu.RUnlock()
+
+	if !ok {
+		return errorResponse(req, fmt.Sprintf("no manager running for project: %s", sendReq.Project))
+	}
 
 	if err := mgr.SendMessage(sendReq.Content); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
@@ -1831,18 +1934,28 @@ func (s *Supervisor) handleManagerSendMessage(_ context.Context, req *daemon.Req
 	return successResponse(req, nil)
 }
 
-// handleManagerChatHistory returns the manager chat history.
+// handleManagerChatHistory returns the manager chat history for a project.
 func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Request) *daemon.Response {
 	var histReq daemon.ManagerChatHistoryRequest
-	if req.Payload != nil {
-		if err := unmarshalPayload(req.Payload, &histReq); err != nil {
-			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
-		}
+	if err := unmarshalPayload(req.Payload, &histReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
 	}
 
-	s.mu.Lock()
-	mgr := s.manager
-	s.mu.Unlock()
+	if histReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	s.mu.RLock()
+	mgr, ok := s.managers[histReq.Project]
+	s.mu.RUnlock()
+
+	if !ok {
+		// No manager exists - return empty history
+		return successResponse(req, daemon.ManagerChatHistoryResponse{
+			Project: histReq.Project,
+			Entries: []daemon.ChatEntryDTO{},
+		})
+	}
 
 	entries := mgr.History().Entries(histReq.Limit)
 
@@ -1860,27 +1973,40 @@ func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Req
 	}
 
 	return successResponse(req, daemon.ManagerChatHistoryResponse{
+		Project: histReq.Project,
 		Entries: dtos,
 	})
 }
 
-// handleManagerClearHistory clears the manager chat history.
+// handleManagerClearHistory clears the manager chat history for a project.
 func (s *Supervisor) handleManagerClearHistory(_ context.Context, req *daemon.Request) *daemon.Response {
-	s.mu.Lock()
-	mgr := s.manager
-	s.mu.Unlock()
+	var clearReq daemon.ManagerClearHistoryRequest
+	if err := unmarshalPayload(req.Payload, &clearReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if clearReq.Project == "" {
+		return errorResponse(req, "project is required")
+	}
+
+	s.mu.RLock()
+	mgr, ok := s.managers[clearReq.Project]
+	s.mu.RUnlock()
+
+	if !ok {
+		return errorResponse(req, fmt.Sprintf("no manager running for project: %s", clearReq.Project))
+	}
 
 	mgr.History().Clear()
 
-	slog.Info("manager chat history cleared")
+	slog.Info("manager chat history cleared", "project", clearReq.Project)
 	return successResponse(req, nil)
 }
 
 // broadcastManagerState sends a manager state change to attached clients.
-func (s *Supervisor) broadcastManagerState(state manager.State) {
+func (s *Supervisor) broadcastManagerState(projectName string, state manager.State, startedAt time.Time) {
 	s.mu.RLock()
 	srv := s.server
-	mgr := s.manager
 	s.mu.RUnlock()
 
 	if srv == nil {
@@ -1889,19 +2015,20 @@ func (s *Supervisor) broadcastManagerState(state manager.State) {
 
 	event := &daemon.StreamEvent{
 		Type:         "manager_state",
+		Project:      projectName,
 		ManagerState: string(state),
 	}
 
 	// Include StartedAt when manager starts so TUI can add it to the agent list
 	if state == manager.StateStarting {
-		event.StartedAt = mgr.StartedAt().Format(time.RFC3339)
+		event.StartedAt = startedAt.Format(time.RFC3339)
 	}
 
 	srv.Broadcast(event)
 }
 
 // broadcastManagerChatEntry sends a manager chat entry to attached clients.
-func (s *Supervisor) broadcastManagerChatEntry(entry agent.ChatEntry) {
+func (s *Supervisor) broadcastManagerChatEntry(projectName string, entry agent.ChatEntry) {
 	s.mu.RLock()
 	srv := s.server
 	s.mu.RUnlock()
@@ -1920,6 +2047,7 @@ func (s *Supervisor) broadcastManagerChatEntry(entry agent.ChatEntry) {
 	}
 	srv.Broadcast(&daemon.StreamEvent{
 		Type:      "manager_chat_entry",
+		Project:   projectName,
 		ChatEntry: dto,
 	})
 }

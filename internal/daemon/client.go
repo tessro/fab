@@ -899,9 +899,12 @@ func (c *Client) StopEventStream() {
 	}
 }
 
-// ManagerStart starts the manager agent.
-func (c *Client) ManagerStart() error {
-	resp, err := c.Send(&Request{Type: MsgManagerStart})
+// ManagerStart starts the manager agent for a project.
+func (c *Client) ManagerStart(project string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerStart,
+		Payload: ManagerStartRequest{Project: project},
+	})
 	if err != nil {
 		return err
 	}
@@ -911,9 +914,12 @@ func (c *Client) ManagerStart() error {
 	return nil
 }
 
-// ManagerStop stops the manager agent.
-func (c *Client) ManagerStop() error {
-	resp, err := c.Send(&Request{Type: MsgManagerStop})
+// ManagerStop stops the manager agent for a project.
+func (c *Client) ManagerStop(project string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerStop,
+		Payload: ManagerStopRequest{Project: project},
+	})
 	if err != nil {
 		return err
 	}
@@ -923,9 +929,12 @@ func (c *Client) ManagerStop() error {
 	return nil
 }
 
-// ManagerStatus returns the manager agent status.
-func (c *Client) ManagerStatus() (*ManagerStatusResponse, error) {
-	resp, err := c.Send(&Request{Type: MsgManagerStatus})
+// ManagerStatus returns the manager agent status for a project.
+func (c *Client) ManagerStatus(project string) (*ManagerStatusResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerStatus,
+		Payload: ManagerStatusRequest{Project: project},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -941,11 +950,11 @@ func (c *Client) ManagerStatus() (*ManagerStatusResponse, error) {
 	return &result, nil
 }
 
-// ManagerSendMessage sends a message to the manager agent.
-func (c *Client) ManagerSendMessage(content string) error {
+// ManagerSendMessage sends a message to the manager agent for a project.
+func (c *Client) ManagerSendMessage(project, content string) error {
 	resp, err := c.Send(&Request{
 		Type:    MsgManagerSendMessage,
-		Payload: ManagerSendMessageRequest{Content: content},
+		Payload: ManagerSendMessageRequest{Project: project, Content: content},
 	})
 	if err != nil {
 		return err
@@ -956,11 +965,11 @@ func (c *Client) ManagerSendMessage(content string) error {
 	return nil
 }
 
-// ManagerChatHistory retrieves the chat history for the manager agent.
-func (c *Client) ManagerChatHistory(limit int) (*ManagerChatHistoryResponse, error) {
+// ManagerChatHistory retrieves the chat history for the manager agent of a project.
+func (c *Client) ManagerChatHistory(project string, limit int) (*ManagerChatHistoryResponse, error) {
 	resp, err := c.Send(&Request{
 		Type:    MsgManagerChatHistory,
-		Payload: ManagerChatHistoryRequest{Limit: limit},
+		Payload: ManagerChatHistoryRequest{Project: project, Limit: limit},
 	})
 	if err != nil {
 		return nil, err
@@ -977,9 +986,12 @@ func (c *Client) ManagerChatHistory(limit int) (*ManagerChatHistoryResponse, err
 	return &result, nil
 }
 
-// ManagerClearHistory clears the manager agent's chat history.
-func (c *Client) ManagerClearHistory() error {
-	resp, err := c.Send(&Request{Type: MsgManagerClearHistory})
+// ManagerClearHistory clears the manager agent's chat history for a project.
+func (c *Client) ManagerClearHistory(project string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgManagerClearHistory,
+		Payload: ManagerClearHistoryRequest{Project: project},
+	})
 	if err != nil {
 		return err
 	}

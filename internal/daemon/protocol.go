@@ -525,26 +525,51 @@ type UsageStats struct {
 	Plan         string `json:"plan"`       // "pro" or "max"
 }
 
+// ManagerStartRequest is the payload for manager.start requests.
+type ManagerStartRequest struct {
+	Project string `json:"project"` // Project name (required)
+}
+
+// ManagerStopRequest is the payload for manager.stop requests.
+type ManagerStopRequest struct {
+	Project string `json:"project"` // Project name (required)
+}
+
+// ManagerStatusRequest is the payload for manager.status requests.
+type ManagerStatusRequest struct {
+	Project string `json:"project"` // Project name (required)
+}
+
 // ManagerStatusResponse is the payload for manager.status responses.
 type ManagerStatusResponse struct {
+	Project   string `json:"project"`
 	Running   bool   `json:"running"`
 	State     string `json:"state"`      // "stopped", "starting", "running", "stopping"
 	StartedAt string `json:"started_at"` // RFC3339 format, empty if not running
+	WorkDir   string `json:"workdir"`    // Working directory (worktree path)
 }
 
 // ManagerSendMessageRequest is the payload for manager.send_message requests.
 type ManagerSendMessageRequest struct {
+	Project string `json:"project"` // Project name (required)
 	Content string `json:"content"`
 }
 
 // ManagerChatHistoryRequest is the payload for manager.chat_history requests.
 type ManagerChatHistoryRequest struct {
-	Limit int `json:"limit,omitempty"` // Max entries to return (0 = all)
+	Project string `json:"project"`         // Project name (required)
+	Limit   int    `json:"limit,omitempty"` // Max entries to return (0 = all)
 }
 
 // ManagerChatHistoryResponse is the payload for manager.chat_history responses.
 type ManagerChatHistoryResponse struct {
+	Project string         `json:"project"`
 	Entries []ChatEntryDTO `json:"entries"`
+}
+
+// ManagerClearHistoryRequest is the payload for manager.clear_history requests.
+type ManagerClearHistoryRequest struct {
+	Project string `json:"project"` // Project name (required)
 }
 
 // PlanStartRequest is the payload for plan.start requests.

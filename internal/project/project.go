@@ -11,6 +11,9 @@ import (
 // DefaultMaxAgents is the default number of concurrent agents per project.
 const DefaultMaxAgents = 3
 
+// ManagerWorktreeID is the worktree ID for the project manager.
+const ManagerWorktreeID = "manager"
+
 // ErrNoWorktreeAvailable is returned when all worktrees are in use.
 var ErrNoWorktreeAvailable = errors.New("no worktree available")
 
@@ -199,4 +202,32 @@ func (p *Project) IsRunning() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.Running
+}
+
+// ManagerWorktreePath returns the path to the manager's worktree.
+func (p *Project) ManagerWorktreePath() string {
+	return filepath.Join(p.WorktreesDir(), "wt-"+ManagerWorktreeID)
+}
+
+// CreateManagerWorktree creates the worktree for the project manager.
+// Unlike agent worktrees, the manager worktree persists across sessions.
+func (p *Project) CreateManagerWorktree() error {
+	wtPath := p.ManagerWorktreePath()
+
+	// Check if worktree already exists
+	if _, err := os.Stat(wtPath); err == nil {
+		// Already exists, just ensure it's up to date
+		_ = p.resetWorktreeUnlocked(wtPath)
+		return nil
+	}
+
+	// Create the worktree
+	if err := p.createWorktree(wtPath); err != nil {
+		return err
+	}
+
+	// Reset to pristine state
+	_ = p.resetWorktreeUnlocked(wtPath)
+
+	return nil
 }

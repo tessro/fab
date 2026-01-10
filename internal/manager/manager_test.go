@@ -51,7 +51,7 @@ func TestConvertPatternToClaudeCode(t *testing.T) {
 }
 
 func TestBuildAllowedTools(t *testing.T) {
-	m := New("", []string{"fab:*", "git:*", "ls"})
+	m := New("", "testproject", []string{"fab:*", "git:*", "ls"})
 
 	tools := m.buildAllowedTools()
 
@@ -67,7 +67,7 @@ func TestBuildAllowedTools(t *testing.T) {
 }
 
 func TestBuildSettings(t *testing.T) {
-	m := New("", []string{"fab:*"})
+	m := New("", "testproject", []string{"fab:*"})
 
 	settings := m.buildSettings()
 

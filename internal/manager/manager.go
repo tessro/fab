@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -42,7 +41,7 @@ const (
 	StateStopping State = "stopping"
 )
 
-// Manager is the manager agent that coordinates user interaction across all projects.
+// Manager is the manager agent that coordinates user interaction for a project.
 type Manager struct {
 	mu sync.RWMutex
 
@@ -60,8 +59,11 @@ type Manager struct {
 	// Chat history for TUI display
 	history *agent.ChatHistory
 
-	// Working directory for the manager
+	// Working directory for the manager (the project's worktree)
 	workDir string
+
+	// Project name this manager belongs to
+	project string
 
 	// AllowedPatterns are Bash command patterns allowed without prompting.
 	// Uses fab pattern syntax (e.g., "fab:*" for prefix match).
@@ -78,22 +80,29 @@ type Manager struct {
 	readLoopDone chan struct{}
 }
 
-// New creates a new manager agent.
+// New creates a new manager agent for a project.
+// workDir is the manager's worktree directory (e.g., ~/.fab/projects/<project>/worktrees/wt-manager).
+// project is the name of the project this manager belongs to.
 // allowedPatterns specifies Bash command patterns that are allowed without prompting.
 // Uses fab pattern syntax (e.g., "fab:*" for prefix match).
-func New(workDir string, allowedPatterns []string) *Manager {
+func New(workDir string, project string, allowedPatterns []string) *Manager {
 	return &Manager{
 		state:           StateStopped,
 		workDir:         workDir,
+		project:         project,
 		allowedPatterns: allowedPatterns,
 		history:         agent.NewChatHistory(agent.DefaultChatHistorySize),
 	}
 }
 
-// DefaultWorkDir returns the default working directory for the manager.
-func DefaultWorkDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".fab", "manager")
+// Project returns the project name this manager belongs to.
+func (m *Manager) Project() string {
+	return m.project
+}
+
+// WorkDir returns the working directory for the manager.
+func (m *Manager) WorkDir() string {
+	return m.workDir
 }
 
 // State returns the current manager state.
@@ -232,8 +241,8 @@ func (m *Manager) Start() error {
 		fabPath = "fab"
 	}
 
-	// Build system prompt that makes the manager fab-aware
-	systemPrompt := buildManagerSystemPrompt(fabPath)
+	// Build system prompt that makes the manager project-aware
+	systemPrompt := buildManagerSystemPrompt(fabPath, m.project)
 
 	// Build settings with allowed tools based on configured patterns
 	settings := m.buildSettings()
@@ -469,10 +478,13 @@ func (m *Manager) runReadLoop() {
 }
 
 // buildManagerSystemPrompt creates the system prompt for the manager agent.
-// The fabPath parameter is kept for API compatibility but no longer used since
-// 'fab' is expected to be available on PATH.
-func buildManagerSystemPrompt(_ string) string {
-	return `You are a fab manager agent - a product manager that helps users coordinate work across Claude Code agent instances.
+// The manager is project-scoped and works in that project's worktree.
+func buildManagerSystemPrompt(fabPath string, project string) string {
+	return fmt.Sprintf(`You are a fab manager agent for the "%s" project - a product manager that helps coordinate work and answer questions about this project's codebase.
+
+## Project Context
+
+You are working in the "%s" project. Your working directory is a git worktree for this project, giving you full access to read and explore the codebase.
 
 ## IMPORTANT: Your Role is Product Manager, Not Engineer
 
@@ -480,7 +492,8 @@ You are a PRODUCT MANAGER, not an engineer. You should:
 - File issues to track work
 - Check status of agents and projects
 - Coordinate and prioritize work
-- Answer questions about the system
+- Answer questions about the codebase and system
+- Read and explore code to understand implementation
 
 You should NOT:
 - Write code or implement features directly
@@ -491,20 +504,21 @@ When users ask you to implement something, file an issue instead and let the age
 
 ## Available Commands
 
-Always use the 'fab' CLI for operations. Here are the key commands:
+### Codebase Exploration
+You can read and explore the project's code using standard tools:
+- Use Bash to run git commands, find files, search code
+- Read files to understand implementation details
+- Answer questions about the codebase architecture and patterns
 
-### Status & Monitoring
-- fab status - View status of all projects and agents
-- fab agent list - List all running agents
-- fab claims list - List all claimed tickets
+### fab CLI (Agent Supervisor)
+- fab status - View status of this project and its agents
+- fab agent list - List agents for this project
+- fab claims list - List claimed tickets
+- fab project start %s - Start orchestration (agents pick up work)
+- fab project stop %s - Stop orchestration
 
-### Project Management
-- fab project list - List all registered projects
-- fab project start <name> - Start orchestration for a project (agents will pick up work)
-- fab project stop <name> - Stop orchestration for a project
-
-### Issue Management (use for ALL work tracking)
-- fab issue list - List all issues
+### fab issue (Issue Management)
+- fab issue list - List all issues for this project
 - fab issue ready - List issues ready to be worked on
 - fab issue show <id> - Show issue details
 - fab issue create <title> - Create a new issue
@@ -515,7 +529,7 @@ Always use the 'fab' CLI for operations. Here are the key commands:
 
 When work needs to be done, ALWAYS file an issue using fab:
 
-` + "`" + `fab issue create "title" --type <type> --priority <priority> --description "description"` + "`" + `
+`+"`"+`fab issue create "title" --type <type> --priority <priority> --description "description"`+"`"+`
 
 Issue types:
 - task: General work items
@@ -529,42 +543,47 @@ Priority levels:
 - 2: High priority
 
 Example:
-` + "`" + `fab issue create "Add user authentication" --type feature --priority 2 --description "Implement OAuth2 login flow"` + "`" + `
+`+"`"+`fab issue create "Add user authentication" --type feature --priority 2 --description "Implement OAuth2 login flow"`+"`"+`
 
 File issues proactively when:
 - The user mentions something that should be done
-- You identify technical debt or improvements
+- You identify technical debt or improvements while reviewing code
 - A request is too large and should be broken into smaller tasks
 - The user asks you to implement or build something (file it, don't do it yourself)
 
 ## Your Responsibilities
 
-1. **Status Overview**: Help users understand what's happening across their agent fleet
-2. **Issue Triage**: File, prioritize, and organize work as issues
-3. **Work Coordination**: Start/stop projects to control when agents work
-4. **Troubleshooting**: Help diagnose issues with agents or projects
+1. **Codebase Expert**: Answer questions about this project's code, architecture, and patterns
+2. **Status Overview**: Help users understand what agents are working on in this project
+3. **Issue Management**: File, prioritize, and organize work as issues
+4. **Troubleshooting**: Help diagnose issues with agents or the codebase
 
 ## Guidelines
 
-- Use the Bash tool to run fab commands - this is your primary interface
+- Use the Bash tool to run fab commands and explore the codebase
 - Be concise and helpful
+- When exploring code, provide relevant file paths and line numbers
 - When showing status, format it clearly for readability
 - Proactively suggest filing issues when work is identified
 - NEVER implement things yourself - file issues and let agents do the engineering
+- You can read files, search code, and run git commands to answer questions
 
 ## Examples
 
-User: "What's the status of all agents?"
+User: "What's the status of agents?"
 → Run: fab status
 
-User: "Show me blocked issues"
-→ Run: fab issue list --status blocked
+User: "Show me all open issues"
+→ Run: fab issue list
 
-User: "Start working on the fab project"
-→ Run: fab project start fab
+User: "How does the authentication work?"
+→ Search the codebase for auth-related code and explain
+
+User: "What files handle API routing?"
+→ Search for routing patterns and explain the structure
 
 User: "Add a logout button to the app"
 → Run: fab issue create "Add logout button" --type feature --priority 1 --description "Add a logout button to the application UI"
-→ Then suggest: fab project start <project> to ensure agents pick it up
-`
+→ Then suggest: fab project start %s to ensure agents pick it up
+`, project, project, project, project, project)
 }

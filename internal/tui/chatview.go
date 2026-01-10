@@ -130,6 +130,11 @@ func (v *ChatView) AgentID() string {
 	return v.agentID
 }
 
+// Project returns the project name of the current agent.
+func (v *ChatView) Project() string {
+	return v.project
+}
+
 // SetPendingAction sets the pending action for this chat view.
 func (v *ChatView) SetPendingAction(action *daemon.StagedAction) {
 	hadAction := v.pendingAction != nil
