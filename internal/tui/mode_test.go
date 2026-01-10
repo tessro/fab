@@ -77,13 +77,13 @@ func TestModeState_CycleFocus(t *testing.T) {
 			wantFocus:    FocusChatView,
 		},
 		{
-			name:         "chat view to action queue",
+			name:         "chat view to input line",
 			initialFocus: FocusChatView,
-			wantFocus:    FocusActionQueue,
+			wantFocus:    FocusInputLine,
 		},
 		{
-			name:         "action queue to agent list",
-			initialFocus: FocusActionQueue,
+			name:         "input line to agent list",
+			initialFocus: FocusInputLine,
 			wantFocus:    FocusAgentList,
 		},
 	}

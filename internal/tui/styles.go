@@ -206,30 +206,4 @@ var (
 			Foreground(errorColor).
 			Padding(0, 1)
 
-	// Action queue styles
-	actionQueueContainerStyle = lipgloss.NewStyle()
-
-	actionQueueEmptyStyle = lipgloss.NewStyle().
-				Foreground(mutedColor).
-				Padding(0, 1)
-
-	actionQueueRowStyle = lipgloss.NewStyle().
-				Padding(0, 1)
-
-	actionQueueRowSelectedStyle = lipgloss.NewStyle().
-					Background(lipgloss.Color("#3B3B3B")).
-					Padding(0, 1)
-
-	actionQueueAgentStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true)
-
-	actionQueueProjectStyle = lipgloss.NewStyle().
-				Foreground(primaryColor)
-
-	actionQueuePayloadStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#A0A0A0"))
-
-	actionQueueAgeStyle = lipgloss.NewStyle().
-				Foreground(mutedColor)
 )

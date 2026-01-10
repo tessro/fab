@@ -80,14 +80,10 @@ func (h HelpBar) View() string {
 		if h.modeState.NeedsApproval() {
 			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Tab, h.keys.Quit}
 		} else {
-			bindings = []key.Binding{h.keys.Submit, h.keys.Down, h.keys.PageUp, h.keys.Abort, h.keys.Quit}
+			bindings = []key.Binding{h.keys.FocusChat, h.keys.Down, h.keys.PageUp, h.keys.Abort, h.keys.Quit}
 		}
-	case FocusActionQueue:
-		if h.modeState.NeedsApproval() {
-			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Tab, h.keys.Quit}
-		} else {
-			bindings = []key.Binding{h.keys.Down, h.keys.Tab, h.keys.Quit}
-		}
+	case FocusInputLine:
+		bindings = []key.Binding{h.keys.Tab, h.keys.Quit}
 	}
 
 	helpText := formatHelp(bindings)

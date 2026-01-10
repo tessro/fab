@@ -5,10 +5,10 @@ import "github.com/charmbracelet/bubbles/key"
 // KeyBindings defines all keyboard shortcuts for the TUI.
 type KeyBindings struct {
 	// Global keys
-	Quit         key.Binding
-	Tab          key.Binding
-	FocusActions key.Binding
-	Reconnect    key.Binding
+	Quit      key.Binding
+	Tab       key.Binding
+	FocusChat key.Binding
+	Reconnect key.Binding
 
 	// Navigation keys
 	Up       key.Binding
@@ -39,9 +39,9 @@ func DefaultKeyBindings() KeyBindings {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch pane"),
 		),
-		FocusActions: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "actions"),
+		FocusChat: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "input"),
 		),
 		Reconnect: key.NewBinding(
 			key.WithKeys("r"),
