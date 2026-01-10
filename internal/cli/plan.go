@@ -28,6 +28,8 @@ Planning agents:
 - Run in a worktree if --project is specified
 - Are not subject to max-agents limit
 
+Use 'fab tui' or 'fab plan chat <id>' to interact with the planning agent.
+
 Examples:
   fab plan "Add user authentication"
   fab plan --project myapp "Implement dark mode"
@@ -63,15 +65,11 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Project: %s\n", resp.Project)
 	}
 	fmt.Printf("   Working directory: %s\n", resp.WorkDir)
+	fmt.Println()
+	fmt.Printf("Use 'fab tui' or 'fab plan chat %s' to interact with the agent.\n", resp.ID)
 
-	// Launch main TUI with the planner selected
-	initialAgentID := tui.PlannerAgentIDPrefix + resp.ID
-	slog.Debug("plan: launching TUI", "initial_agent_id", initialAgentID)
-	err = tui.RunWithClient(client, &tui.TUIOptions{
-		InitialAgentID: initialAgentID,
-	})
-	slog.Debug("plan: TUI exited", "error", err)
-	return err
+	client.Close()
+	return nil
 }
 
 var planListCmd = &cobra.Command{
