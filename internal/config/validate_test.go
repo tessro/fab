@@ -365,6 +365,33 @@ func TestValidationError(t *testing.T) {
 	})
 }
 
+func TestIsEmptyOrWhitespace(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty string", "", true},
+		{"single space", " ", true},
+		{"multiple spaces", "   ", true},
+		{"tab", "\t", true},
+		{"newline", "\n", true},
+		{"mixed whitespace", " \t\n ", true},
+		{"non-empty", "hello", false},
+		{"leading space", " hello", false},
+		{"trailing space", "hello ", false},
+		{"surrounded by spaces", " hello ", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isEmptyOrWhitespace(tt.input); got != tt.want {
+				t.Errorf("isEmptyOrWhitespace(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 // repeatByte creates a string of repeated bytes.
 func repeatByte(b byte, count int) []byte {
 	result := make([]byte, count)

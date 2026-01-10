@@ -73,6 +73,11 @@ var validActions = map[string]bool{
 	"pass":  true,
 }
 
+// isEmptyOrWhitespace returns true if the string is empty or contains only whitespace.
+func isEmptyOrWhitespace(s string) bool {
+	return s == "" || strings.TrimSpace(s) == ""
+}
+
 // ValidationError wraps a validation error with context.
 type ValidationError struct {
 	Field   string
@@ -240,7 +245,7 @@ func ValidatePattern(pattern string) error {
 	}
 
 	// Patterns with only whitespace are invalid
-	if strings.TrimSpace(pattern) == "" {
+	if isEmptyOrWhitespace(pattern) {
 		return &ValidationError{
 			Field:   "pattern",
 			Message: "cannot be empty when specified",
@@ -254,7 +259,7 @@ func ValidatePattern(pattern string) error {
 // ValidatePatterns validates a patterns array.
 func ValidatePatterns(patterns []string) error {
 	for i, p := range patterns {
-		if p == "" || strings.TrimSpace(p) == "" {
+		if isEmptyOrWhitespace(p) {
 			return &ValidationError{
 				Field:   fmt.Sprintf("patterns[%d]", i),
 				Message: "cannot be empty",
@@ -297,7 +302,7 @@ func ValidateRule(tool, action, pattern string, patterns []string, script string
 // Patterns must be non-empty strings. Empty array is valid (uses defaults).
 func ValidateManagerAllowedPatterns(patterns []string) error {
 	for i, p := range patterns {
-		if p == "" || strings.TrimSpace(p) == "" {
+		if isEmptyOrWhitespace(p) {
 			return &ValidationError{
 				Field:   fmt.Sprintf("manager.allowed_patterns[%d]", i),
 				Message: "cannot be empty",
