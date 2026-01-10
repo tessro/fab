@@ -110,6 +110,24 @@ func (c *Client) nextID() string {
 	return fmt.Sprintf("req-%d", c.reqID.Add(1))
 }
 
+// decodePayload decodes the response payload into the given type.
+// Returns a pointer to the decoded value, or an error if decoding fails.
+// If payload is nil, returns a pointer to the zero value of T.
+func decodePayload[T any](payload any) (*T, error) {
+	var result T
+	if payload == nil {
+		return &result, nil
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal payload: %w", err)
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal payload: %w", err)
+	}
+	return &result, nil
+}
+
 // Send sends a request and waits for the response.
 // This blocks until the response is received or an error occurs.
 // Send and RecvEvent are mutually exclusive - only one can run at a time.
@@ -179,19 +197,7 @@ func (c *Client) Ping() (*PingResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("ping failed: %s", resp.Error)
 	}
-
-	// Decode payload
-	var ping PingResponse
-	if resp.Payload != nil {
-		data, err := json.Marshal(resp.Payload)
-		if err != nil {
-			return nil, fmt.Errorf("marshal payload: %w", err)
-		}
-		if err := json.Unmarshal(data, &ping); err != nil {
-			return nil, fmt.Errorf("unmarshal ping response: %w", err)
-		}
-	}
-	return &ping, nil
+	return decodePayload[PingResponse](resp.Payload)
 }
 
 // Shutdown requests the daemon to shut down.
@@ -215,18 +221,7 @@ func (c *Client) Status() (*StatusResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("status failed: %s", resp.Error)
 	}
-
-	var status StatusResponse
-	if resp.Payload != nil {
-		data, err := json.Marshal(resp.Payload)
-		if err != nil {
-			return nil, fmt.Errorf("marshal payload: %w", err)
-		}
-		if err := json.Unmarshal(data, &status); err != nil {
-			return nil, fmt.Errorf("unmarshal status response: %w", err)
-		}
-	}
-	return &status, nil
+	return decodePayload[StatusResponse](resp.Payload)
 }
 
 // Start starts orchestration for a project.
@@ -271,13 +266,7 @@ func (c *Client) ProjectAdd(remoteURL, name string, maxAgents int, autostart boo
 	if !resp.Success {
 		return nil, fmt.Errorf("project add failed: %s", resp.Error)
 	}
-
-	var result ProjectAddResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ProjectAddResponse](resp.Payload)
 }
 
 // ProjectRemove removes a project from the daemon.
@@ -304,13 +293,7 @@ func (c *Client) ProjectList() (*ProjectListResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("project list failed: %s", resp.Error)
 	}
-
-	var result ProjectListResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ProjectListResponse](resp.Payload)
 }
 
 // ProjectSet updates project settings.
@@ -341,13 +324,7 @@ func (c *Client) ProjectConfigShow(name string) (*ProjectConfigShowResponse, err
 	if !resp.Success {
 		return nil, fmt.Errorf("project config show failed: %s", resp.Error)
 	}
-
-	var result ProjectConfigShowResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ProjectConfigShowResponse](resp.Payload)
 }
 
 // ProjectConfigGet returns a single config value for a project.
@@ -362,13 +339,7 @@ func (c *Client) ProjectConfigGet(name, key string) (*ProjectConfigGetResponse, 
 	if !resp.Success {
 		return nil, fmt.Errorf("project config get failed: %s", resp.Error)
 	}
-
-	var result ProjectConfigGetResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ProjectConfigGetResponse](resp.Payload)
 }
 
 // ProjectConfigSet sets a single config value for a project.
@@ -398,13 +369,7 @@ func (c *Client) AgentList(project string) (*AgentListResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("agent list failed: %s", resp.Error)
 	}
-
-	var result AgentListResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[AgentListResponse](resp.Payload)
 }
 
 // AgentCreate creates a new agent for a project.
@@ -419,13 +384,7 @@ func (c *Client) AgentCreate(project, task string) (*AgentCreateResponse, error)
 	if !resp.Success {
 		return nil, fmt.Errorf("agent create failed: %s", resp.Error)
 	}
-
-	var result AgentCreateResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[AgentCreateResponse](resp.Payload)
 }
 
 // AgentDelete deletes an agent.
@@ -486,13 +445,7 @@ func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("agent output failed: %s", resp.Error)
 	}
-
-	var result AgentOutputResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[AgentOutputResponse](resp.Payload)
 }
 
 // AgentDone signals that an agent has completed its task.
@@ -546,13 +499,7 @@ func (c *Client) ClaimList(project string) (*ClaimListResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("claim list failed: %s", resp.Error)
 	}
-
-	var result ClaimListResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ClaimListResponse](resp.Payload)
 }
 
 // AgentSendMessage sends a user message to an agent via stream-json.
@@ -597,13 +544,7 @@ func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryRespon
 	if !resp.Success {
 		return nil, fmt.Errorf("agent chat history failed: %s", resp.Error)
 	}
-
-	var result AgentChatHistoryResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[AgentChatHistoryResponse](resp.Payload)
 }
 
 // ListStagedActions returns pending actions for user approval.
@@ -618,13 +559,7 @@ func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, erro
 	if !resp.Success {
 		return nil, fmt.Errorf("list actions failed: %s", resp.Error)
 	}
-
-	var result StagedActionsResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[StagedActionsResponse](resp.Payload)
 }
 
 // ApproveAction approves and executes a staged action.
@@ -671,13 +606,7 @@ func (c *Client) RequestPermission(req *PermissionRequestPayload) (*PermissionRe
 	if !resp.Success {
 		return nil, fmt.Errorf("permission request failed: %s", resp.Error)
 	}
-
-	var result PermissionResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[PermissionResponse](resp.Payload)
 }
 
 // RespondPermission sends a response to a pending permission request.
@@ -715,13 +644,7 @@ func (c *Client) RequestUserQuestion(req *UserQuestionRequestPayload) (*UserQues
 	if !resp.Success {
 		return nil, fmt.Errorf("user question request failed: %s", resp.Error)
 	}
-
-	var result UserQuestionResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[UserQuestionResponse](resp.Payload)
 }
 
 // RespondUserQuestion sends a response to a pending user question.
@@ -755,13 +678,7 @@ func (c *Client) Stats(project string) (*StatsResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("stats failed: %s", resp.Error)
 	}
-
-	var result StatsResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[StatsResponse](resp.Payload)
 }
 
 // ListPendingPermissions returns pending permission requests awaiting user approval.
@@ -776,13 +693,7 @@ func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse
 	if !resp.Success {
 		return nil, fmt.Errorf("list permissions failed: %s", resp.Error)
 	}
-
-	var result PermissionListResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[PermissionListResponse](resp.Payload)
 }
 
 // Attach subscribes to streaming events.
@@ -1017,13 +928,7 @@ func (c *Client) ManagerStatus(project string) (*ManagerStatusResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("manager status failed: %s", resp.Error)
 	}
-
-	var result ManagerStatusResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ManagerStatusResponse](resp.Payload)
 }
 
 // ManagerSendMessage sends a message to the manager agent for a project.
@@ -1053,13 +958,7 @@ func (c *Client) ManagerChatHistory(project string, limit int) (*ManagerChatHist
 	if !resp.Success {
 		return nil, fmt.Errorf("manager chat history failed: %s", resp.Error)
 	}
-
-	var result ManagerChatHistoryResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[ManagerChatHistoryResponse](resp.Payload)
 }
 
 // ManagerClearHistory clears the manager agent's chat history for a project.
@@ -1089,13 +988,7 @@ func (c *Client) PlanStart(project, prompt string) (*PlanStartResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("plan start failed: %s", resp.Error)
 	}
-
-	var result PlanStartResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[PlanStartResponse](resp.Payload)
 }
 
 // PlanStop stops a planning agent.
@@ -1125,13 +1018,7 @@ func (c *Client) PlanList(project string) (*PlanListResponse, error) {
 	if !resp.Success {
 		return nil, fmt.Errorf("plan list failed: %s", resp.Error)
 	}
-
-	var result PlanListResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[PlanListResponse](resp.Payload)
 }
 
 // PlanSendMessage sends a message to a planning agent.
@@ -1161,11 +1048,5 @@ func (c *Client) PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse
 	if !resp.Success {
 		return nil, fmt.Errorf("plan chat history failed: %s", resp.Error)
 	}
-
-	var result PlanChatHistoryResponse
-	if resp.Payload != nil {
-		data, _ := json.Marshal(resp.Payload)
-		_ = json.Unmarshal(data, &result)
-	}
-	return &result, nil
+	return decodePayload[PlanChatHistoryResponse](resp.Payload)
 }

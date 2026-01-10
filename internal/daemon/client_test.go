@@ -5,9 +5,97 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestDecodePayload(t *testing.T) {
+	t.Run("nil payload returns zero value", func(t *testing.T) {
+		result, err := decodePayload[PingResponse](nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+		if result.Version != "" || result.Uptime != "" {
+			t.Error("expected zero value struct")
+		}
+	})
+
+	t.Run("valid payload decodes correctly", func(t *testing.T) {
+		payload := map[string]any{
+			"version": "1.0.0",
+			"uptime":  "1h30m",
+		}
+		result, err := decodePayload[PingResponse](payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Version != "1.0.0" {
+			t.Errorf("expected version 1.0.0, got %s", result.Version)
+		}
+		if result.Uptime != "1h30m" {
+			t.Errorf("expected uptime 1h30m, got %s", result.Uptime)
+		}
+	})
+
+	t.Run("complex struct decodes correctly", func(t *testing.T) {
+		payload := map[string]any{
+			"projects": []map[string]any{
+				{"name": "proj1", "remote_url": "git@github.com:user/p1.git", "max_agents": 3, "running": true},
+				{"name": "proj2", "remote_url": "git@github.com:user/p2.git", "max_agents": 2, "running": false},
+			},
+		}
+		result, err := decodePayload[ProjectListResponse](payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result.Projects) != 2 {
+			t.Fatalf("expected 2 projects, got %d", len(result.Projects))
+		}
+		if result.Projects[0].Name != "proj1" {
+			t.Errorf("expected proj1, got %s", result.Projects[0].Name)
+		}
+		if result.Projects[1].MaxAgents != 2 {
+			t.Errorf("expected max agents 2, got %d", result.Projects[1].MaxAgents)
+		}
+	})
+
+	t.Run("type mismatch returns error", func(t *testing.T) {
+		// Create a payload that can't be unmarshaled to the target type
+		// JSON unmarshal is lenient, so we need a truly incompatible type
+		type BadTarget struct {
+			Count int `json:"count"`
+		}
+		payload := map[string]any{
+			"count": "not a number", // string instead of int
+		}
+		_, err := decodePayload[BadTarget](payload)
+		if err == nil {
+			t.Error("expected error for type mismatch")
+		}
+		if !strings.Contains(err.Error(), "unmarshal payload") {
+			t.Errorf("expected unmarshal error, got: %v", err)
+		}
+	})
+
+	t.Run("already typed payload decodes correctly", func(t *testing.T) {
+		// When server returns an already-typed response that gets re-encoded
+		payload := PingResponse{
+			Version: "2.0.0",
+			Uptime:  "2h",
+		}
+		result, err := decodePayload[PingResponse](payload)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.Version != "2.0.0" {
+			t.Errorf("expected version 2.0.0, got %s", result.Version)
+		}
+	})
+}
 
 // shortTempDir creates a temp directory with a short path for socket tests.
 // Unix sockets have a path limit (~104 chars on macOS), and t.TempDir()
