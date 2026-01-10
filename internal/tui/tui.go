@@ -515,9 +515,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modeState.IsInputting() {
 			switch {
 			case key.Matches(msg, m.keys.Cancel):
-				// Exit input mode, return to agent list
+				// Exit input mode, return to chat view
 				_ = m.modeState.ExitInputMode()
-				m.inputLine.SetFocused(false)
+				m.syncFocusToComponents(FocusChatView)
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			case key.Matches(msg, m.keys.Submit):
 				// Check if we're answering a user question with freeform "Other" input
@@ -534,9 +534,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, m.answerUserQuestion(question.ID, map[string]string{header: input}))
 						m.inputLine.Clear()
 						m.inputLine.SetPlaceholder("Type a message...")
-						// Exit input mode, return to agent list
+						// Exit input mode, return to chat view
 						_ = m.modeState.ExitInputMode()
-						m.inputLine.SetFocused(false)
+						m.syncFocusToComponents(FocusChatView)
 						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				} else if m.client != nil && m.chatView.AgentID() != "" {
@@ -552,16 +552,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Send to agent
 						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
 						m.inputLine.Clear()
-						// Exit input mode, return to agent list
+						// Exit input mode, return to chat view
 						_ = m.modeState.ExitInputMode()
-						m.inputLine.SetFocused(false)
+						m.syncFocusToComponents(FocusChatView)
 						m.chatView.SetInputView(m.inputLine.View(), 1)
 					}
 				}
 			case key.Matches(msg, m.keys.Tab):
-				// Exit input mode, return to agent list
+				// Exit input mode, return to chat view
 				_ = m.modeState.ExitInputMode()
-				m.inputLine.SetFocused(false)
+				m.syncFocusToComponents(FocusChatView)
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			default:
 				// Pass all other keys to input
@@ -581,24 +581,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Tab):
-			// Cycle focus: agent list -> chat view -> input line -> agent list
+			// Cycle focus: agent list -> chat view -> action queue -> agent list
 			newFocus, _ := m.modeState.CycleFocus()
 			m.syncFocusToComponents(newFocus)
-
-		case key.Matches(msg, m.keys.FocusChat):
-			// Focus input line (vim-style) - enters input mode
-			if m.chatView.AgentID() != "" && m.modeState.IsNormal() {
-				_ = m.modeState.EnterInputMode()
-				m.chatView.SetFocused(false)
-				m.inputLine.SetFocused(true)
-				m.chatView.SetInputView(m.inputLine.View(), 1)
-			}
 
 		case key.Matches(msg, m.keys.FocusActions):
 			// Focus action queue
 			if m.modeState.IsNormal() {
 				_ = m.modeState.SetFocus(FocusActionQueue)
 				m.syncFocusToComponents(FocusActionQueue)
+			}
+
+		case key.Matches(msg, m.keys.Submit):
+			// Enter key in normal mode: enter input mode when ChatView is focused
+			// and there's no pending approval to handle
+			if m.modeState.IsNormal() && m.modeState.Focus == FocusChatView {
+				agentID := m.chatView.AgentID()
+				// Only enter input mode if there's no pending approval
+				hasPending := m.pendingUserQuestionForAgent(agentID) != nil ||
+					m.pendingPermissionForAgent(agentID) != nil ||
+					m.pendingActionForAgent(agentID) != nil
+				if agentID != "" && !hasPending {
+					_ = m.modeState.EnterInputMode()
+					m.syncFocusToComponents(FocusInputLine)
+					m.chatView.SetInputView(m.inputLine.View(), 1)
+				}
 			}
 
 		case key.Matches(msg, m.keys.Approve):

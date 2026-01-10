@@ -7,7 +7,6 @@ type KeyBindings struct {
 	// Global keys
 	Quit         key.Binding
 	Tab          key.Binding
-	FocusChat    key.Binding
 	FocusActions key.Binding
 	Reconnect    key.Binding
 
@@ -39,10 +38,6 @@ func DefaultKeyBindings() KeyBindings {
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch pane"),
-		),
-		FocusChat: key.NewBinding(
-			key.WithKeys("i"),
-			key.WithHelp("i", "input"),
 		),
 		FocusActions: key.NewBinding(
 			key.WithKeys("a"),

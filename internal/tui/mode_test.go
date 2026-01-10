@@ -82,13 +82,8 @@ func TestModeState_CycleFocus(t *testing.T) {
 			wantFocus:    FocusActionQueue,
 		},
 		{
-			name:         "action queue to input line",
+			name:         "action queue to agent list",
 			initialFocus: FocusActionQueue,
-			wantFocus:    FocusInputLine,
-		},
-		{
-			name:         "input line to agent list",
-			initialFocus: FocusInputLine,
 			wantFocus:    FocusAgentList,
 		},
 	}
@@ -149,8 +144,8 @@ func TestModeState_InputMode(t *testing.T) {
 	if state.IsInputting() {
 		t.Error("expected IsInputting() to be false")
 	}
-	if state.Focus != FocusAgentList {
-		t.Errorf("Focus = %v, want FocusAgentList", state.Focus)
+	if state.Focus != FocusChatView {
+		t.Errorf("Focus = %v, want FocusChatView", state.Focus)
 	}
 
 	// Double exit should fail
