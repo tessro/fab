@@ -226,14 +226,10 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("repo not found: %s", repoDir)
 	}
 
-	// Detach the worktree from its branch so we can checkout the branch in the repo.
-	// Git doesn't allow the same branch to be checked out in multiple places.
-	if wtPath := p.getWorktreePathForAgent(agentID); wtPath != "" {
-		detachCmd := exec.Command("git", "checkout", "--detach", "HEAD")
-		detachCmd.Dir = wtPath
-		if output, err := detachCmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("detach worktree: %w\n%s", err, output)
-		}
+	// Get the worktree path for this agent
+	wtPath := p.getWorktreePathForAgent(agentID)
+	if wtPath == "" {
+		return nil, fmt.Errorf("worktree not found for agent %s", agentID)
 	}
 
 	// Fetch latest from origin
@@ -243,22 +239,16 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		return nil, fmt.Errorf("fetch: %w\n%s", err, output)
 	}
 
-	// Checkout the agent's branch to rebase it
-	checkoutBranchCmd := exec.Command("git", "checkout", branchName)
-	checkoutBranchCmd.Dir = repoDir
-	if output, err := checkoutBranchCmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("checkout %s: %w\n%s", branchName, err, output)
-	}
-
-	// Rebase the agent's branch onto origin/main
+	// Rebase the agent's branch onto origin/main directly in the worktree.
+	// No need to detach - the branch stays checked out in the worktree throughout.
 	rebaseCmd := exec.Command("git", "rebase", "origin/main")
-	rebaseCmd.Dir = repoDir
+	rebaseCmd.Dir = wtPath
 	rebaseOutput, rebaseErr := rebaseCmd.CombinedOutput()
 
 	if rebaseErr != nil {
-		// Rebase failed - abort and return error
+		// Rebase failed - abort and return error (worktree stays on its branch)
 		abortCmd := exec.Command("git", "rebase", "--abort")
-		abortCmd.Dir = repoDir
+		abortCmd.Dir = wtPath
 		_ = abortCmd.Run()
 
 		return &MergeResult{
@@ -268,9 +258,9 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		}, nil
 	}
 
-	// Get the SHA of the rebased branch tip before fast-forwarding main
+	// Get the SHA of the rebased branch tip
 	shaCmd := exec.Command("git", "rev-parse", "HEAD")
-	shaCmd.Dir = repoDir
+	shaCmd.Dir = wtPath
 	shaOutput, shaErr := shaCmd.Output()
 	sha := ""
 	if shaErr == nil {
@@ -281,14 +271,9 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		}
 	}
 
-	// Checkout main and fast-forward to the rebased branch
-	checkoutMainCmd := exec.Command("git", "checkout", "main")
-	checkoutMainCmd.Dir = repoDir
-	if output, err := checkoutMainCmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("checkout main: %w\n%s", err, output)
-	}
-
-	// Fast-forward main to the rebased branch
+	// Fast-forward main to the rebased branch.
+	// This works even though the branch is checked out in the worktree -
+	// we're just moving the main ref, not checking out the branch.
 	ffCmd := exec.Command("git", "merge", "--ff-only", branchName)
 	ffCmd.Dir = repoDir
 	if output, err := ffCmd.CombinedOutput(); err != nil {
