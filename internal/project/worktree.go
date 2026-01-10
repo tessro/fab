@@ -188,6 +188,7 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		// Rebase failed - abort and return error (worktree stays on its branch)
 		abortCmd := exec.Command("git", "rebase", "--abort")
 		abortCmd.Dir = wtPath
+		// Ignore abort error - rebase may not be in progress if conflict detection failed
 		_ = abortCmd.Run()
 
 		return &MergeResult{
@@ -226,6 +227,7 @@ func (p *Project) MergeAgentBranch(agentID string) (*MergeResult, error) {
 		// Rollback: reset main to origin/main
 		resetCmd := exec.Command("git", "reset", "--hard", "origin/main")
 		resetCmd.Dir = repoDir
+		// Ignore reset error - best-effort rollback after push failure
 		_ = resetCmd.Run()
 		return nil, fmt.Errorf("push main: %w\n%s", err, output)
 	}
@@ -259,6 +261,7 @@ func (p *Project) RebaseWorktreeOnMain(agentID string) error {
 	// Fetch latest from origin
 	fetchCmd := exec.Command("git", "fetch", "origin")
 	fetchCmd.Dir = repoDir
+	// Ignore fetch error - rebase will still work with local refs
 	_ = fetchCmd.Run()
 
 	// Rebase onto origin/main
@@ -268,6 +271,7 @@ func (p *Project) RebaseWorktreeOnMain(agentID string) error {
 		// Abort failed rebase
 		abortCmd := exec.Command("git", "rebase", "--abort")
 		abortCmd.Dir = wtPath
+		// Ignore abort error - rebase may not be in progress if conflict detection failed
 		_ = abortCmd.Run()
 		return fmt.Errorf("rebase failed: %w\n%s", err, output)
 	}

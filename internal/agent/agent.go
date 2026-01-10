@@ -568,6 +568,7 @@ func (a *Agent) StopWithTimeout(timeout time.Duration) error {
 	// Try graceful termination with SIGTERM first
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		// Process may have already exited, try to reap it
+		// Ignore wait error - process may have already been reaped
 		_ = cmd.Wait()
 		return nil
 	}
