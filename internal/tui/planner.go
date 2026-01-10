@@ -77,31 +77,12 @@ func (m PlannerModel) Init() tea.Cmd {
 
 // attachToStream connects to the daemon event stream.
 func (m PlannerModel) attachToStream() tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		eventChan, err := m.client.StreamEvents(nil)
-		if err != nil {
-			return StreamEventMsg{Err: err}
-		}
-		return StreamStartMsg{EventChan: eventChan}
-	}
+	return attachToStreamCmd(m.client)
 }
 
 // waitForEvent waits for the next event from the channel.
 func (m PlannerModel) waitForEvent() tea.Cmd {
-	if m.eventChan == nil {
-		return nil
-	}
-	ch := m.eventChan
-	return func() tea.Msg {
-		result, ok := <-ch
-		if !ok {
-			return StreamEventMsg{Err: fmt.Errorf("event stream closed")}
-		}
-		return StreamEventMsg{Event: result.Event, Err: result.Err}
-	}
+	return waitForEventCmd(m.eventChan)
 }
 
 // fetchPlannerChatHistory retrieves chat history for the planner.

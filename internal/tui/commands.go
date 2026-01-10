@@ -17,6 +17,36 @@ func (m Model) tickCmd() tea.Cmd {
 	})
 }
 
+// attachToStreamCmd returns a command that connects to the daemon event stream.
+// This is a shared helper used by multiple TUI models.
+func attachToStreamCmd(client *daemon.Client) tea.Cmd {
+	return func() tea.Msg {
+		if client == nil {
+			return nil
+		}
+		eventChan, err := client.StreamEvents(nil)
+		if err != nil {
+			return StreamEventMsg{Err: err}
+		}
+		return StreamStartMsg{EventChan: eventChan}
+	}
+}
+
+// waitForEventCmd returns a command that waits for the next event from a channel.
+// This is a shared helper used by multiple TUI models.
+func waitForEventCmd(eventChan <-chan daemon.EventResult) tea.Cmd {
+	if eventChan == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		result, ok := <-eventChan
+		if !ok {
+			return StreamEventMsg{Err: fmt.Errorf("event stream closed")}
+		}
+		return StreamEventMsg{Event: result.Event, Err: result.Err}
+	}
+}
+
 // clearErrorCmd returns a command that clears the error after a delay.
 func clearErrorCmd() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
@@ -33,16 +63,7 @@ func (m *Model) setError(err error) tea.Cmd {
 
 // attachToStream connects to the daemon event stream using a dedicated connection.
 func (m Model) attachToStream() tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		eventChan, err := m.client.StreamEvents(nil)
-		if err != nil {
-			return StreamEventMsg{Err: err}
-		}
-		return StreamStartMsg{EventChan: eventChan}
-	}
+	return attachToStreamCmd(m.client)
 }
 
 // attemptReconnect tries to reconnect to the daemon after a delay.
@@ -71,18 +92,7 @@ func (m Model) attemptReconnect() tea.Cmd {
 
 // waitForEvent waits for the next event from the channel.
 func (m Model) waitForEvent() tea.Cmd {
-	if m.eventChan == nil {
-		return nil
-	}
-	ch := m.eventChan
-	return func() tea.Msg {
-		result, ok := <-ch
-		if !ok {
-			// Channel closed
-			return StreamEventMsg{Err: fmt.Errorf("event stream closed")}
-		}
-		return StreamEventMsg{Event: result.Event, Err: result.Err}
-	}
+	return waitForEventCmd(m.eventChan)
 }
 
 // fetchAgentList retrieves the current agent list (including planners).
