@@ -213,8 +213,10 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	// Calculate available width for description and add it if present
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(durationStr)
-	// Reserve space for: left content, space before desc, desc, min spacer (1), duration, padding (2)
-	availableForDesc := width - leftWidth - rightWidth - 2 - 1 - 1 // -1 for space before desc, -1 for min spacer
+	// Available content width is total width minus padding (1 on each side = 2)
+	contentWidth := width - 2
+	// Reserve space for: left content, space before desc, min spacer (1), duration
+	availableForDesc := contentWidth - leftWidth - rightWidth - 1 - 1 // -1 for space before desc, -1 for min spacer
 	if agent.Description != "" && availableForDesc > 3 {
 		desc := truncateDescription(agent.Description, availableForDesc)
 		descStr := agentDescriptionStyle.Inherit(rowStyle).Render(desc)
@@ -223,13 +225,30 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	}
 
 	// Right-align duration - the spacer needs the row background too
-	spacerWidth := width - leftWidth - rightWidth - 2 // padding
+	// Ensure spacer width never makes total content exceed available width
+	spacerWidth := contentWidth - leftWidth - rightWidth
 	if spacerWidth < 1 {
 		spacerWidth = 1
 	}
-	spacer := rowStyle.Render(strings.Repeat(" ", spacerWidth))
 
+	// Build row content, ensuring it fits within contentWidth
+	spacer := rowStyle.Render(strings.Repeat(" ", spacerWidth))
 	row := left + spacer + durationStr
+
+	// If row is too wide (edge case), truncate and re-render
+	rowWidth := lipgloss.Width(row)
+	if rowWidth > contentWidth && contentWidth > rightWidth+1 {
+		// Truncate left portion to make room
+		maxLeftWidth := contentWidth - rightWidth - 1
+		// Re-render with truncated content - just use the duration
+		spacerWidth = contentWidth - leftWidth - rightWidth
+		if spacerWidth < 1 || leftWidth > maxLeftWidth {
+			spacerWidth = 1
+			left = rowStyle.Render(strings.Repeat(" ", maxLeftWidth-1))
+		}
+		spacer = rowStyle.Render(strings.Repeat(" ", spacerWidth))
+		row = left + spacer + durationStr
+	}
 
 	// Apply row styling with full width
 	return rowStyle.Width(width).Render(row)
@@ -281,6 +300,7 @@ func (l AgentList) stateStyle(agentID, state string) lipgloss.Style {
 }
 
 // formatDuration formats a duration in a human-friendly way.
+// Output is kept concise to prevent line wrapping in the agent list.
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
@@ -288,7 +308,14 @@ func formatDuration(d time.Duration) string {
 	if d < time.Hour {
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	}
-	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	hours := int(d.Hours())
+	if hours < 24 {
+		return fmt.Sprintf("%dh%dm", hours, int(d.Minutes())%60)
+	}
+	// For durations >= 24h, show days to keep it concise
+	days := hours / 24
+	remainingHours := hours % 24
+	return fmt.Sprintf("%dd%dh", days, remainingHours)
 }
 
 // truncateDescription truncates a description to fit within maxLen characters.
