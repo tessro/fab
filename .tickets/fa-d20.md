@@ -1,6 +1,6 @@
 ---
 id: fa-d20
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T21:06:40.636501-08:00
