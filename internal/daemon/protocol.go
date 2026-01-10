@@ -20,10 +20,13 @@ const (
 	MsgStatus MessageType = "status" // Get daemon/supervisor status
 
 	// Project management
-	MsgProjectAdd    MessageType = "project.add"
-	MsgProjectRemove MessageType = "project.remove"
-	MsgProjectList   MessageType = "project.list"
-	MsgProjectSet    MessageType = "project.set"
+	MsgProjectAdd        MessageType = "project.add"
+	MsgProjectRemove     MessageType = "project.remove"
+	MsgProjectList       MessageType = "project.list"
+	MsgProjectSet        MessageType = "project.set"         // Deprecated: use project.config.*
+	MsgProjectConfigShow MessageType = "project.config.show" // Show all config for a project
+	MsgProjectConfigGet  MessageType = "project.config.get"  // Get a single config value
+	MsgProjectConfigSet  MessageType = "project.config.set"  // Set a single config value
 
 	// Agent management
 	MsgAgentList     MessageType = "agent.list"
@@ -196,10 +199,42 @@ type ProjectInfo struct {
 }
 
 // ProjectSetRequest is the payload for project.set requests.
+// Deprecated: Use ProjectConfigSetRequest instead.
 type ProjectSetRequest struct {
 	Name      string `json:"name"`
 	MaxAgents *int   `json:"max_agents,omitempty"` // Pointer to distinguish unset from zero
 	Autostart *bool  `json:"autostart,omitempty"`  // Pointer to distinguish unset from false
+}
+
+// ProjectConfigShowRequest is the payload for project.config.show requests.
+type ProjectConfigShowRequest struct {
+	Name string `json:"name"` // Project name
+}
+
+// ProjectConfigShowResponse is the payload for project.config.show responses.
+type ProjectConfigShowResponse struct {
+	Name   string         `json:"name"`   // Project name
+	Config map[string]any `json:"config"` // Config key-value pairs
+}
+
+// ProjectConfigGetRequest is the payload for project.config.get requests.
+type ProjectConfigGetRequest struct {
+	Name string `json:"name"` // Project name
+	Key  string `json:"key"`  // Config key
+}
+
+// ProjectConfigGetResponse is the payload for project.config.get responses.
+type ProjectConfigGetResponse struct {
+	Name  string `json:"name"`  // Project name
+	Key   string `json:"key"`   // Config key
+	Value any    `json:"value"` // Config value
+}
+
+// ProjectConfigSetRequest is the payload for project.config.set requests.
+type ProjectConfigSetRequest struct {
+	Name  string `json:"name"`  // Project name
+	Key   string `json:"key"`   // Config key
+	Value string `json:"value"` // Config value (as string, will be parsed based on key type)
 }
 
 // AgentCreateRequest is the payload for agent.create requests.

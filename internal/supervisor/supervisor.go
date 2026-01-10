@@ -125,6 +125,12 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleProjectList(ctx, req)
 	case daemon.MsgProjectSet:
 		return s.handleProjectSet(ctx, req)
+	case daemon.MsgProjectConfigShow:
+		return s.handleProjectConfigShow(ctx, req)
+	case daemon.MsgProjectConfigGet:
+		return s.handleProjectConfigGet(ctx, req)
+	case daemon.MsgProjectConfigSet:
+		return s.handleProjectConfigSet(ctx, req)
 
 	// Agent management
 	case daemon.MsgAgentList:
@@ -470,6 +476,7 @@ func (s *Supervisor) handleProjectList(ctx context.Context, req *daemon.Request)
 }
 
 // handleProjectSet updates project settings.
+// Deprecated: Use handleProjectConfigSet instead.
 func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var setReq daemon.ProjectSetRequest
 	if err := unmarshalPayload(req.Payload, &setReq); err != nil {
@@ -486,6 +493,83 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 	}
 
 	// No need to resize worktree pool - worktrees are created/deleted on-demand
+
+	return successResponse(req, nil)
+}
+
+// handleProjectConfigShow returns all config for a project.
+func (s *Supervisor) handleProjectConfigShow(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var showReq daemon.ProjectConfigShowRequest
+	if err := unmarshalPayload(req.Payload, &showReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if showReq.Name == "" {
+		return errorResponse(req, "project name required")
+	}
+
+	config, err := s.registry.GetConfig(showReq.Name)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to get config: %v", err))
+	}
+
+	return successResponse(req, daemon.ProjectConfigShowResponse{
+		Name:   showReq.Name,
+		Config: config,
+	})
+}
+
+// handleProjectConfigGet returns a single config value for a project.
+func (s *Supervisor) handleProjectConfigGet(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var getReq daemon.ProjectConfigGetRequest
+	if err := unmarshalPayload(req.Payload, &getReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if getReq.Name == "" {
+		return errorResponse(req, "project name required")
+	}
+	if getReq.Key == "" {
+		return errorResponse(req, "config key required")
+	}
+
+	if !registry.IsValidConfigKey(getReq.Key) {
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend)", getReq.Key))
+	}
+
+	value, err := s.registry.GetConfigValue(getReq.Name, registry.ConfigKey(getReq.Key))
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to get config value: %v", err))
+	}
+
+	return successResponse(req, daemon.ProjectConfigGetResponse{
+		Name:  getReq.Name,
+		Key:   getReq.Key,
+		Value: value,
+	})
+}
+
+// handleProjectConfigSet sets a single config value for a project.
+func (s *Supervisor) handleProjectConfigSet(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var setReq daemon.ProjectConfigSetRequest
+	if err := unmarshalPayload(req.Payload, &setReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if setReq.Name == "" {
+		return errorResponse(req, "project name required")
+	}
+	if setReq.Key == "" {
+		return errorResponse(req, "config key required")
+	}
+
+	if !registry.IsValidConfigKey(setReq.Key) {
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend)", setReq.Key))
+	}
+
+	if err := s.registry.SetConfigValue(setReq.Name, registry.ConfigKey(setReq.Key), setReq.Value); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to set config value: %v", err))
+	}
 
 	return successResponse(req, nil)
 }

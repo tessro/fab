@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/BurntSushi/toml"
@@ -270,6 +272,118 @@ func (r *Registry) Update(name string, maxAgents *int, autostart *bool) error {
 	}
 	if autostart != nil {
 		p.Autostart = *autostart
+	}
+
+	return r.save()
+}
+
+// ConfigKey represents a valid project configuration key.
+type ConfigKey string
+
+// Valid configuration keys.
+const (
+	ConfigKeyMaxAgents    ConfigKey = "max-agents"
+	ConfigKeyAutostart    ConfigKey = "autostart"
+	ConfigKeyIssueBackend ConfigKey = "issue-backend"
+)
+
+// ValidConfigKeys returns all valid configuration keys.
+func ValidConfigKeys() []ConfigKey {
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend}
+}
+
+// IsValidConfigKey returns true if the key is a valid configuration key.
+func IsValidConfigKey(key string) bool {
+	for _, k := range ValidConfigKeys() {
+		if string(k) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// GetConfigValue returns the value of a single configuration key for a project.
+func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, exists := r.projects[name]
+	if !exists {
+		return nil, ErrProjectNotFound
+	}
+
+	switch key {
+	case ConfigKeyMaxAgents:
+		return p.MaxAgents, nil
+	case ConfigKeyAutostart:
+		return p.Autostart, nil
+	case ConfigKeyIssueBackend:
+		backend := p.IssueBackend
+		if backend == "" {
+			backend = "tk"
+		}
+		return backend, nil
+	default:
+		return nil, errors.New("invalid configuration key")
+	}
+}
+
+// GetConfig returns all configuration for a project as a map.
+func (r *Registry) GetConfig(name string) (map[string]any, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, exists := r.projects[name]
+	if !exists {
+		return nil, ErrProjectNotFound
+	}
+
+	issueBackend := p.IssueBackend
+	if issueBackend == "" {
+		issueBackend = "tk"
+	}
+
+	return map[string]any{
+		string(ConfigKeyMaxAgents):    p.MaxAgents,
+		string(ConfigKeyAutostart):    p.Autostart,
+		string(ConfigKeyIssueBackend): issueBackend,
+	}, nil
+}
+
+// SetConfigValue sets a single configuration key for a project.
+func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, exists := r.projects[name]
+	if !exists {
+		return ErrProjectNotFound
+	}
+
+	switch key {
+	case ConfigKeyMaxAgents:
+		maxAgents, err := strconv.Atoi(value)
+		if err != nil {
+			return errors.New("invalid value for max-agents: must be a positive integer")
+		}
+		if err := configPkg.ValidateMaxAgents(maxAgents); err != nil {
+			return err
+		}
+		p.MaxAgents = maxAgents
+	case ConfigKeyAutostart:
+		autostart, err := strconv.ParseBool(value)
+		if err != nil {
+			return errors.New("invalid value for autostart: must be true or false")
+		}
+		p.Autostart = autostart
+	case ConfigKeyIssueBackend:
+		v := strings.ToLower(value)
+		if v != "tk" && v != "linear" {
+			return errors.New("invalid value for issue-backend: must be 'tk' or 'linear'")
+		}
+		p.IssueBackend = v
+	default:
+		return errors.New("invalid configuration key")
 	}
 
 	return r.save()

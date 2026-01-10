@@ -296,6 +296,7 @@ func (c *Client) ProjectList() (*ProjectListResponse, error) {
 }
 
 // ProjectSet updates project settings.
+// Deprecated: Use ProjectConfigSet instead.
 func (c *Client) ProjectSet(name string, maxAgents *int, autostart *bool) error {
 	resp, err := c.Send(&Request{
 		Type:    MsgProjectSet,
@@ -306,6 +307,63 @@ func (c *Client) ProjectSet(name string, maxAgents *int, autostart *bool) error 
 	}
 	if !resp.Success {
 		return fmt.Errorf("project set failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// ProjectConfigShow returns all config for a project.
+func (c *Client) ProjectConfigShow(name string) (*ProjectConfigShowResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgProjectConfigShow,
+		Payload: ProjectConfigShowRequest{Name: name},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("project config show failed: %s", resp.Error)
+	}
+
+	var result ProjectConfigShowResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// ProjectConfigGet returns a single config value for a project.
+func (c *Client) ProjectConfigGet(name, key string) (*ProjectConfigGetResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgProjectConfigGet,
+		Payload: ProjectConfigGetRequest{Name: name, Key: key},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("project config get failed: %s", resp.Error)
+	}
+
+	var result ProjectConfigGetResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// ProjectConfigSet sets a single config value for a project.
+func (c *Client) ProjectConfigSet(name, key, value string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgProjectConfigSet,
+		Payload: ProjectConfigSetRequest{Name: name, Key: key, Value: value},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("project config set failed: %s", resp.Error)
 	}
 	return nil
 }

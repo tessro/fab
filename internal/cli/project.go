@@ -68,15 +68,34 @@ var projectRemoveCmd = &cobra.Command{
 	RunE:  runProjectRemove,
 }
 
-var projectSetMaxAgents int
-var projectSetAutostart bool
+var projectConfigCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Manage project configuration",
+	Long:  "Commands for viewing and modifying project configuration settings.",
+}
 
-var projectSetCmd = &cobra.Command{
-	Use:   "set <name>",
-	Short: "Update project settings",
-	Long:  "Update settings for a registered project, such as the maximum number of concurrent agents.",
+var projectConfigShowCmd = &cobra.Command{
+	Use:   "show <project>",
+	Short: "Show all configuration for a project",
+	Long:  "Display all configuration settings for a registered project.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runProjectSet,
+	RunE:  runProjectConfigShow,
+}
+
+var projectConfigGetCmd = &cobra.Command{
+	Use:   "get <project> <key>",
+	Short: "Get a configuration value",
+	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runProjectConfigGet,
+}
+
+var projectConfigSetCmd = &cobra.Command{
+	Use:   "set <project> <key> <value>",
+	Short: "Set a configuration value",
+	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents     Maximum concurrent agents (1-100)\n  autostart      Start orchestration when daemon starts (true/false)\n  issue-backend  Issue backend type (tk/linear)",
+	Args:  cobra.ExactArgs(3),
+	RunE:  runProjectConfigSet,
 }
 
 func runProjectAdd(cmd *cobra.Command, args []string) error {
@@ -290,42 +309,57 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runProjectSet(cmd *cobra.Command, args []string) error {
+func runProjectConfigShow(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
-
-	// Check if any flags were provided
-	if !cmd.Flags().Changed("max-agents") && !cmd.Flags().Changed("autostart") {
-		return fmt.Errorf("no settings to update; use --max-agents or --autostart")
-	}
 
 	client := MustConnect()
 	defer client.Close()
 
-	var maxAgents *int
-	if cmd.Flags().Changed("max-agents") {
-		maxAgents = &projectSetMaxAgents
+	result, err := client.ProjectConfigShow(projectName)
+	if err != nil {
+		return fmt.Errorf("get config: %w", err)
 	}
 
-	var autostart *bool
-	if cmd.Flags().Changed("autostart") {
-		autostart = &projectSetAutostart
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintf(w, "Project:\t%s\n", result.Name)
+	_, _ = fmt.Fprintln(w, "\nConfiguration:")
+	_, _ = fmt.Fprintf(w, "  max-agents:\t%v\n", result.Config["max-agents"])
+	_, _ = fmt.Fprintf(w, "  autostart:\t%v\n", result.Config["autostart"])
+	_, _ = fmt.Fprintf(w, "  issue-backend:\t%v\n", result.Config["issue-backend"])
+	_ = w.Flush()
+
+	return nil
+}
+
+func runProjectConfigGet(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+	key := args[1]
+
+	client := MustConnect()
+	defer client.Close()
+
+	result, err := client.ProjectConfigGet(projectName, key)
+	if err != nil {
+		return fmt.Errorf("get config: %w", err)
 	}
 
-	if err := client.ProjectSet(projectName, maxAgents, autostart); err != nil {
-		return fmt.Errorf("set project: %w", err)
+	fmt.Println(result.Value)
+	return nil
+}
+
+func runProjectConfigSet(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+	key := args[1]
+	value := args[2]
+
+	client := MustConnect()
+	defer client.Close()
+
+	if err := client.ProjectConfigSet(projectName, key, value); err != nil {
+		return fmt.Errorf("set config: %w", err)
 	}
 
-	fmt.Printf("🚌 Updated project: %s\n", projectName)
-	if maxAgents != nil {
-		fmt.Printf("   Max agents: %d\n", *maxAgents)
-	}
-	if autostart != nil {
-		if *autostart {
-			fmt.Println("   Autostart: enabled")
-		} else {
-			fmt.Println("   Autostart: disabled")
-		}
-	}
+	fmt.Printf("🚌 Set %s = %s for project %s\n", key, value, projectName)
 	return nil
 }
 
@@ -340,14 +374,16 @@ func init() {
 	projectRemoveCmd.Flags().BoolVarP(&projectRemoveForce, "force", "f", false, "Skip confirmation prompt")
 	projectRemoveCmd.Flags().BoolVar(&projectRemoveDeleteWorktrees, "delete-worktrees", false, "Delete associated worktrees")
 
-	projectSetCmd.Flags().IntVarP(&projectSetMaxAgents, "max-agents", "m", 0, "Maximum concurrent agents")
-	projectSetCmd.Flags().BoolVar(&projectSetAutostart, "autostart", false, "Start orchestration when daemon starts")
+	// Set up project config subcommands
+	projectConfigCmd.AddCommand(projectConfigShowCmd)
+	projectConfigCmd.AddCommand(projectConfigGetCmd)
+	projectConfigCmd.AddCommand(projectConfigSetCmd)
 
 	projectCmd.AddCommand(projectAddCmd)
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectStartCmd)
 	projectCmd.AddCommand(projectStopCmd)
 	projectCmd.AddCommand(projectRemoveCmd)
-	projectCmd.AddCommand(projectSetCmd)
+	projectCmd.AddCommand(projectConfigCmd)
 	rootCmd.AddCommand(projectCmd)
 }
