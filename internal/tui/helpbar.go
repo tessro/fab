@@ -65,7 +65,7 @@ func (h HelpBar) View() string {
 	if h.modeState.IsInputting() {
 		bindings = []key.Binding{h.keys.Submit, h.keys.Cancel, h.keys.Tab}
 		helpText := formatHelp(bindings)
-		return statusStyle.Width(h.width).Render(helpText)
+		return statusStyle.Width(h.width).Render("-- INPUT -- " + helpText)
 	}
 
 	// Normal mode bindings depend on focus and pending approvals

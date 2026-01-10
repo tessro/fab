@@ -516,7 +516,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.inputLine.Clear()
 				_ = m.modeState.ExitInputMode()
 				m.syncFocusToComponents(FocusChatView)
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, false)
 			case key.Matches(msg, m.keys.Submit):
 				// Check if we're answering a user question with freeform "Other" input
 				if question := m.pendingUserQuestionForAgent(m.chatView.AgentID()); question != nil {
@@ -536,7 +536,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Exit input mode, return to chat view
 						_ = m.modeState.ExitInputMode()
 						m.syncFocusToComponents(FocusChatView)
-						m.chatView.SetInputView(m.inputLine.View(), 1)
+						m.chatView.SetInputView(m.inputLine.View(), 1, false)
 					}
 				} else if m.client != nil && m.chatView.AgentID() != "" {
 					// Submit input to agent (normal message flow)
@@ -555,27 +555,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Exit input mode, return to chat view
 						_ = m.modeState.ExitInputMode()
 						m.syncFocusToComponents(FocusChatView)
-						m.chatView.SetInputView(m.inputLine.View(), 1)
+						m.chatView.SetInputView(m.inputLine.View(), 1, false)
 					}
 				}
 			case key.Matches(msg, m.keys.Tab):
 				// Exit input mode, return to chat view
 				_ = m.modeState.ExitInputMode()
 				m.syncFocusToComponents(FocusChatView)
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, false)
 			case key.Matches(msg, m.keys.HistoryUp):
 				// Navigate to previous (older) history entry
 				m.inputLine.HistoryUp()
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, true)
 			case key.Matches(msg, m.keys.HistoryDown):
 				// Navigate to next (newer) history entry
 				m.inputLine.HistoryDown()
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, true)
 			default:
 				// Pass all other keys to input
 				cmd := m.inputLine.Update(msg)
 				cmds = append(cmds, cmd)
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, true)
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -598,7 +598,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.chatView.AgentID() != "" && m.modeState.IsNormal() {
 				_ = m.modeState.EnterInputMode()
 				m.syncFocusToComponents(FocusInputLine)
-				m.chatView.SetInputView(m.inputLine.View(), 1)
+				m.chatView.SetInputView(m.inputLine.View(), 1, true)
 			}
 
 		case key.Matches(msg, m.keys.Approve):
@@ -1222,7 +1222,7 @@ func (m *Model) syncFocusToComponents(focus Focus) {
 	m.inputLine.SetFocused(focus == FocusInputLine)
 
 	if focus == FocusInputLine {
-		m.chatView.SetInputView(m.inputLine.View(), 1)
+		m.chatView.SetInputView(m.inputLine.View(), 1, true)
 	}
 }
 
@@ -1274,7 +1274,7 @@ func (m *Model) updateLayout() {
 	// Height: 1 line content + 1 line divider = 2 total
 	inputLineHeight := 2
 	m.inputLine.SetSize(chatWidth-2, 1) // Width accounts for chat pane border only
-	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight)
+	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight, m.modeState.IsInputting())
 }
 
 // Run starts the TUI without a daemon connection.

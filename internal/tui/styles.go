@@ -125,7 +125,14 @@ var (
 			Padding(0, 1)
 
 	inputLineFocusedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#252525")).
+				Background(lipgloss.Color("#2D1F4E")). // Purple-tinted background when focused
+				Padding(0, 1)
+
+	// Input mode indicator style (shown on divider line)
+	inputModeIndicatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(primaryColor).
+				Bold(true).
 				Padding(0, 1)
 
 	// Input divider style (horizontal line above input)

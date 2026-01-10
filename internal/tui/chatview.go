@@ -27,6 +27,7 @@ type ChatView struct {
 	questionIndex       int                       // which question we're on (for multi-question)
 	inputView           string                    // rendered input line view
 	inputHeight         int                       // height of input line (for layout)
+	inputFocused        bool                      // whether input line is focused (input mode)
 	abortConfirming     bool                      // awaiting abort confirmation
 	abortAgentID        string                    // agent being aborted
 }
@@ -252,9 +253,10 @@ func (v *ChatView) calculateUserQuestionHeight() int {
 }
 
 // SetInputView sets the rendered input line view to display.
-func (v *ChatView) SetInputView(view string, height int) {
+func (v *ChatView) SetInputView(view string, height int, focused bool) {
 	v.inputView = view
 	v.inputHeight = height
+	v.inputFocused = focused
 }
 
 // SetAbortConfirming sets the abort confirmation state.
@@ -544,11 +546,22 @@ func (v ChatView) View() string {
 	// Add input line with divider if present
 	if v.inputView != "" {
 		// Draw a horizontal divider line above the input
-		dividerStyle := inputDividerStyle
-		if v.focused {
-			dividerStyle = inputDividerFocusedStyle
+		// When in input mode, show "INPUT" indicator prominently
+		var divider string
+		if v.inputFocused {
+			indicator := inputModeIndicatorStyle.Render(" INPUT ")
+			indicatorWidth := lipgloss.Width(indicator)
+			remainingWidth := v.width - 2 - indicatorWidth
+			leftDash := inputDividerFocusedStyle.Render(strings.Repeat("─", 2))
+			rightDash := inputDividerFocusedStyle.Render(strings.Repeat("─", remainingWidth-2))
+			divider = leftDash + indicator + rightDash
+		} else {
+			dividerStyle := inputDividerStyle
+			if v.focused {
+				dividerStyle = inputDividerFocusedStyle
+			}
+			divider = dividerStyle.Render(strings.Repeat("─", v.width-2))
 		}
-		divider := dividerStyle.Render(strings.Repeat("─", v.width-2))
 		parts = append(parts, divider, v.inputView)
 	}
 
