@@ -1,6 +1,6 @@
-# fab - Coding Agent Supervisor
+# 🚌 fab - Coding Agent Supervisor
 
-A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple projects, with automatic task orchestration via ticket (tk) integration.
+A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple projects, with automatic task orchestration via pluggable issue backends.
 
 ## Architecture
 
@@ -10,9 +10,10 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 │  ┌─────────────┐  ┌─────────────────────────────────────────────────────┐   │
 │  │   IPC       │  │  Supervisor                                         │   │
 │  │  (Unix      │◄─┤  - Project registry                                 │   │
-│  │   socket)   │  │  - Worktree pools                                   │   │
-│  └──────┬──────┘  │  - Agent orchestration                              │   │
-│         │         │  - Done detection + kickstart                       │   │
+│  │   socket)   │  │  - Orchestrators (per-project)                      │   │
+│  └──────┬──────┘  │  - Planner agents                                   │   │
+│         │         │  - Manager agents                                   │   │
+│         │         │  - Permission handling                              │   │
 │         │         └─────────────────────────────────────────────────────┘   │
 │         │                           │                                        │
 │         ▼                           ▼                                        │
@@ -32,18 +33,67 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 |---------|-------------|
 | `fab server start` | Start the daemon process |
 | `fab server stop` | Stop the daemon |
-| `fab start <project> [--all]` | Start orchestration for a project (or all) |
-| `fab stop <project> [--all]` | Stop orchestration for a project (or all) |
+| `fab server restart` | Restart the daemon |
 | `fab status` | Show daemon, supervisor, and agent status |
-| `fab attach` | Launch interactive TUI |
-| `fab project add <path> [--name NAME] [--max-agents N]` | Register a project |
+| `fab tui` / `fab attach` | Launch interactive TUI |
+| **Project Management** | |
+| `fab project add <remote-url>` | Register a project by git remote URL |
 | `fab project remove <name>` | Unregister a project |
 | `fab project list` | List registered projects |
+| `fab project start <name>` | Start orchestration for a project |
+| `fab project stop <name>` | Stop orchestration for a project |
+| `fab project config show <name>` | Show project configuration |
+| `fab project config get <name> <key>` | Get a config value |
+| `fab project config set <name> <key> <value>` | Set a config value |
+| **Agent Management** | |
+| `fab agent list` | List all agents |
+| `fab agent abort <id>` | Abort/kill an agent |
+| `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
+| `fab agent done` | Signal task completion (called by agents) |
+| `fab agent describe "<text>"` | Set agent description (called by agents) |
+| **Issue/Task Management** | |
+| `fab issue list` | List all issues |
+| `fab issue show <id>` | Show issue details |
+| `fab issue ready` | List unblocked issues ready to work |
+| `fab issue create` | Create a new issue |
+| `fab issue update <id>` | Update an issue |
+| `fab issue close <id>` | Close an issue |
+| `fab issue commit <id> <sha>` | Record a commit for an issue |
+| **Planning Agents** | |
+| `fab plan <prompt>` | Start a planning agent |
+| `fab plan list` | List planning agents |
+| `fab plan stop <id>` | Stop a planning agent |
+| `fab plan chat <id>` | Send message to a planner |
+| **Other** | |
+| `fab claims` | List active ticket claims |
+| `fab branch cleanup` | Clean up merged branches |
+| `fab version` | Show version information |
+
+## Agent Types
+
+### Task Agents
+Standard agents that work on issues. Each runs in an isolated worktree and:
+- Claims issues via `fab agent claim <id>`
+- Signals completion via `fab agent done`
+- Counts against `max-agents` limit per project
+
+### Planner Agents
+Specialized agents for design and exploration work:
+- Run in plan mode with codebase exploration tools
+- Write implementation plans to `.fab/plans/<id>.md`
+- Do NOT count against `max-agents` limit
+- Identified by `plan:` prefix in TUI
+
+### Manager Agents
+Interactive agents for user coordination:
+- One per project, runs in dedicated `wt-manager` worktree
+- For direct user conversation and task delegation
+- Persists across sessions
 
 ## TUI Layout
 
 ```
-┌─ fab ─────────────────────────────────────────────────────────────────────┐
+┌─ 🚌 fab ──────────────────────────────────────────────────────────────────┐
 │ 6 agents (5 run, 1 idle)  │  12 closed  8 commits  │  Usage: ████░░ 67%  │
 ├───────────────────┬───────────────────────────────────────────────────────┤
 │ myapp             │                                                       │
@@ -57,11 +107,10 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 │   agent-g4h [R]   │  I see the authentication handler. Now let me...     │
 │   agent-i5j [D]   │                                                       │
 │                   │                                                       │
-│ infra             │                                                       │
+│ plan:abc123 [R]   │                                                       │
 │ ────────────────  │                                                       │
-│   agent-k6l [R]   │                                                       │
 ├───────────────────┴───────────────────────────────────────────────────────┤
-│ j/k:nav  Enter:type  n:new agent  t:new task  d:delete  q:quit           │
+│ j/k:nav  Enter:chat  a:approve  r:reject  d:delete  q:quit               │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,71 +118,136 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 - Top bar: status summary (agent counts), session stats (tickets closed, commits made), usage meter
 - Left rail: all agents grouped by project, state indicators [S]tarting/[R]unning/[I]dle/[D]one
 - Main pane: selected agent's chat view (scrollable, interactive)
-- In-game chat style input: `Enter` opens input line, type message, `Enter` again to send
+- Permission requests and staged actions displayed inline
 
 **Key bindings:**
 - `j/k` or arrows: navigate agents
-- `n`: spawn new agent (prompts for project)
-- `t`: create task via `tk create`
+- `Enter`: open input line for chat
+- `a`: approve pending action/permission
+- `r`: reject pending action/permission
 - `d`: delete selected agent
-- `Enter`: open input line for chat (in-game chat style)
 - `Esc`: cancel input / return to navigation
 - `q`: quit TUI (detach, agents keep running)
 
 ## Project & Worktree Model
 
-```go
-type Project struct {
-    Name      string   // e.g., "myapp"
-    Path      string   // e.g., "/home/tess/repos/myapp"
-    MaxAgents int      // max concurrent agents (default: 3)
-    Running   bool     // orchestration active for this project
-    Worktrees []Worktree
-}
+**Registry** (`~/.config/fab/config.toml`):
+```toml
+[projects.myapp]
+remote-url = "git@github.com:user/myapp.git"
+max-agents = 3
+issue-backend = "tk"
+autostart = true
+permissions-checker = "manual"
+allowed-authors = ["user@example.com"]
+```
 
-type Worktree struct {
-    Path      string   // e.g., "~/.fab/worktrees/myapp/wt-001"
-    InUse     bool
-    AgentID   string   // if in use
-}
+**Project directory structure** (`~/.fab/projects/<name>/`):
+```
+myapp/
+├── repo/                    # Cloned git repository
+│   └── .tickets/            # Issue files (tk backend)
+├── worktrees/               # Agent worktrees
+│   ├── wt-abc123/           # Agent worktree
+│   └── wt-def456/           # Another agent worktree
+└── manager/                 # Manager agent worktree
+    └── wt-manager/
 ```
 
 **Worktree pool behavior:**
-- On project add: create `MaxAgents` worktrees upfront (avoids churn)
-- Worktrees live in `~/.fab/worktrees/<project>/wt-NNN/`
-- Each agent gets an exclusive worktree from the pool
-- When agent exits, worktree returns to pool (git clean/reset)
-- Pool size can be adjusted with `fab project set <name> --max-agents N`
+- Pool created when project is added (size = `max-agents`)
+- Each agent gets exclusive worktree from pool
+- Worktree returned to pool when agent signals `fab agent done`
+- Orchestrator handles merge to main and worktree reset
 
-## Supervisor Logic
+## Issue Backend System
 
-**Agent-driven task picking**: Agents autonomously select their own tasks using `tk ready`. This design keeps the supervisor simple and leverages ticket's dependency tracking - agents see only unblocked tasks and pick based on priority. No central scheduler is needed.
+The issue backend abstraction (`internal/issue/`) supports pluggable task tracking:
 
-1. **Kickstart**: When an agent is spawned or becomes idle, send prompt:
-   ```
-   Run `tk ready` to find a task, then work on it.
-   When done, close it with `tk close <id>`, then run `fab agent done`.
-   ```
+```go
+type Backend interface {
+    ReadBackend
+    WriteBackend
+}
 
-2. **Done detection**:
-   - Primary: `fab agent done` IPC message from agent
-   - Fallback: idle timeout (no output for configured duration)
+type ReadBackend interface {
+    Get(ctx context.Context, id string) (*Issue, error)
+    List(ctx context.Context, opts ListOptions) ([]*Issue, error)
+    Ready(ctx context.Context) ([]*Issue, error)  // Unblocked issues
+}
 
-3. **On done**:
-   - Merge agent's branch to main (local merge workflow)
-   - Return worktree to pool
-   - Spawn replacement agent if orchestration is active
+type WriteBackend interface {
+    Create(ctx context.Context, i *Issue) error
+    Update(ctx context.Context, i *Issue) error
+    Close(ctx context.Context, id string) error
+    Commit(ctx context.Context, id, sha string) error
+}
+```
 
-4. **User intervention**: User can type in any agent's chat at any time; supervisor pauses kickstart for that agent until user is done (detected via input silence).
+**Implementations:**
+- **tk** (default): Plain text TOML files in `.tickets/` directory
+- **gh**: GitHub Issues API integration
 
-## Usage Tracking
+**Issue type:**
+```go
+type Issue struct {
+    ID           string
+    Title        string
+    Description  string
+    Status       Status  // open, closed, blocked
+    Priority     int
+    Type         string
+    Dependencies []string
+    Labels       []string
+    Links        []Link
+    Created      time.Time
+    Updated      time.Time
+}
+```
 
-Parse Claude Code's local JSONL files (`~/.claude/projects/*/sessions/*.jsonl`):
-- Sum `usage.input_tokens` and `usage.output_tokens` from assistant messages
-- Map to billing blocks (5-hour windows for Pro/Max)
-- Display as progress bar in TUI header
+## Orchestrator Logic
 
-Fallback: periodically send `/usage` to an agent and parse response.
+Each project gets an `Orchestrator` that manages the agent lifecycle:
+
+1. **Task polling**: Periodically checks `backend.Ready()` for unblocked issues
+2. **Agent spawning**: Creates agents up to `max-agents` with kickstart prompt
+3. **Claim tracking**: Prevents multiple agents claiming the same issue
+4. **Done handling**: On `fab agent done`:
+   - Merges agent's branch to main
+   - Records commit via `backend.Commit()`
+   - Returns worktree to pool
+   - Spawns replacement agent if tasks remain
+
+**Operating modes:**
+- **Manual mode** (default): Actions queued for user approval in TUI
+- **Auto mode**: Actions execute immediately
+
+## Permission System
+
+Claude Code tool permissions can be handled via:
+
+1. **Manual mode**: TUI prompts user to approve/deny each request
+2. **LLM mode**: LLM evaluates requests for safety and task consistency
+3. **Rules**: Pattern-based rules in `permissions.toml`
+
+Permission requests flow through the `fab hook` command, which the Claude Code plugin calls before tool execution.
+
+## IPC Protocol
+
+Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
+
+**Message categories:**
+- Server management: `ping`, `shutdown`
+- Supervisor control: `start`, `stop`, `status`
+- Project management: `project.add`, `project.remove`, `project.list`, `project.config.*`
+- Agent management: `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.done`, `agent.claim`, `agent.describe`
+- TUI streaming: `attach`, `detach`, `agent.chat_history`, `agent.send_message`
+- Orchestrator: `orchestrator.actions`, `orchestrator.approve`, `orchestrator.reject`
+- Permissions: `permission.request`, `permission.respond`, `permission.list`
+- Questions: `question.request`, `question.respond`
+- Planning: `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history`
+- Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`
+- Stats: `stats`, `claim.list`, `commit.list`
 
 ## Directory Structure
 
@@ -143,41 +257,92 @@ fab/
 │   └── fab/
 │       └── main.go              # Entry point
 ├── internal/
-│   ├── cli/
-│   │   ├── root.go              # Cobra root command
-│   │   ├── server.go            # server start/stop
-│   │   ├── supervisor.go        # start/stop/status
-│   │   ├── project.go           # project add/remove/list
-│   │   └── attach.go            # TUI launch
-│   ├── config/
-│   │   └── config.go            # ~/.config/fab/config.toml
-│   ├── daemon/
-│   │   ├── daemon.go            # Daemonization
+│   ├── cli/                     # CLI commands (Cobra)
+│   │   ├── root.go              # Root command
+│   │   ├── server.go            # server start/stop/restart
+│   │   ├── project.go           # project add/remove/list/start/stop/config
+│   │   ├── agent.go             # agent list/abort/claim/done/describe
+│   │   ├── issue.go             # issue list/show/ready/create/update/close/commit
+│   │   ├── plan.go              # plan start/list/stop/chat
+│   │   ├── manager.go           # manager commands
+│   │   ├── attach.go            # tui/attach command
+│   │   ├── status.go            # status command
+│   │   ├── claims.go            # claims list
+│   │   ├── branch.go            # branch cleanup
+│   │   ├── hook.go              # Permission hook callbacks
+│   │   └── version.go           # version command
+│   ├── daemon/                  # IPC server
 │   │   ├── server.go            # Unix socket RPC server
-│   │   └── protocol.go          # IPC message types
-│   ├── ipc/
-│   │   └── client.go            # Client for CLI/TUI
-│   ├── project/
+│   │   ├── client.go            # Client for CLI/TUI
+│   │   ├── protocol.go          # IPC message types
+│   │   ├── permissions.go       # Permission request handling
+│   │   ├── questions.go         # User question handling
+│   │   └── errors.go            # Error types
+│   ├── supervisor/              # Request handler
+│   │   ├── supervisor.go        # Main handler implementation
+│   │   ├── handle_*.go          # Per-category handlers
+│   │   └── helpers.go           # Shared utilities
+│   ├── orchestrator/            # Per-project orchestration
+│   │   ├── orchestrator.go      # Orchestration loop
+│   │   ├── actions.go           # Staged actions
+│   │   ├── claims.go            # Ticket claim tracking
+│   │   └── commits.go           # Commit tracking
+│   ├── agent/                   # Agent management
+│   │   ├── agent.go             # Agent type + lifecycle
+│   │   ├── manager.go           # Agent registry
+│   │   ├── chathistory.go       # Chat history buffer
+│   │   └── streamjson.go        # Stream-JSON protocol parsing
+│   ├── project/                 # Project management
 │   │   ├── project.go           # Project type
 │   │   └── worktree.go          # Worktree pool management
-│   ├── agent/
-│   │   ├── agent.go             # Agent type + lifecycle
-│   │   ├── streamjson.go        # Stream-JSON protocol parsing
-│   │   └── ringbuffer.go        # Output buffer
-│   ├── supervisor/
-│   │   ├── supervisor.go        # Main orchestration loop
-│   │   └── done.go              # Completion detection
-│   ├── usage/
+│   ├── registry/                # Project persistence
+│   │   └── registry.go          # TOML config load/save
+│   ├── issue/                   # Issue backend abstraction
+│   │   ├── backend.go           # Backend interface
+│   │   ├── issue.go             # Issue type
+│   │   ├── resolver.go          # Backend resolution
+│   │   ├── tk/                  # tk backend (TOML files)
+│   │   └── gh/                  # GitHub backend
+│   ├── planner/                 # Planning agents
+│   │   ├── planner.go           # Planner type
+│   │   └── manager.go           # Planner registry
+│   ├── manager/                 # Manager agents
+│   │   └── manager.go           # Manager type + lifecycle
+│   ├── config/                  # Configuration
+│   │   ├── global.go            # Global config loading
+│   │   └── validate.go          # Config validation
+│   ├── rules/                   # Permission rules
+│   │   ├── rules.go             # Rule types
+│   │   ├── matcher.go           # Pattern matching
+│   │   └── evaluator.go         # Rule evaluation
+│   ├── llmauth/                 # LLM-based permissions
+│   │   └── llmauth.go           # LLM permission checker
+│   ├── tui/                     # Terminal UI (Bubbletea)
+│   │   ├── tui.go               # Main model
+│   │   ├── update.go            # Update logic
+│   │   ├── header.go            # Status bar
+│   │   ├── agentlist.go         # Agent list component
+│   │   ├── chatview.go          # Chat view component
+│   │   ├── inputline.go         # Input line component
+│   │   ├── helpbar.go           # Help bar component
+│   │   ├── planner.go           # Planner view
+│   │   ├── manager.go           # Manager view
+│   │   ├── mode.go              # View modes
+│   │   ├── keybindings.go       # Key bindings
+│   │   ├── styles.go            # Lipgloss styles
+│   │   └── commands.go          # Bubbletea commands
+│   ├── usage/                   # Usage tracking
 │   │   └── usage.go             # JSONL parsing for usage stats
-│   └── tui/
-│       ├── app.go               # Bubbletea main model
-│       ├── styles.go            # Lipgloss styles
-│       └── components/
-│           ├── header.go        # Top status summary + usage + stats
-│           ├── agentlist.go     # Left rail agent list
-│           ├── chatview.go      # Chat message viewport
-│           ├── inputline.go     # In-game chat style input
-│           └── helpbar.go       # Bottom help bar
+│   ├── event/                   # Event system
+│   │   └── emitter.go           # Generic event emitter
+│   ├── plugin/                  # Claude Code plugin
+│   │   └── plugin.go            # Plugin installation
+│   ├── logging/                 # Logging
+│   │   └── logging.go           # Structured logging setup
+│   ├── id/                      # ID generation
+│   │   └── id.go                # Short ID utilities
+│   └── version/                 # Version info
+│       └── version.go           # Build version
 ├── go.mod
 └── go.sum
 ```
@@ -186,63 +351,27 @@ fab/
 
 ```go
 require (
-    github.com/charmbracelet/bubbletea v1.3+
-    github.com/charmbracelet/lipgloss v1.1+
-    github.com/charmbracelet/bubbles v0.21+
-    github.com/spf13/cobra v1.10+
-    github.com/pelletier/go-toml/v2 v2.2+
-    github.com/google/uuid v1.6+
+    github.com/BurntSushi/toml v1.6.0
+    github.com/charmbracelet/bubbles v0.21.0
+    github.com/charmbracelet/bubbletea v1.3.10
+    github.com/charmbracelet/lipgloss v1.1.0
+    github.com/spf13/cobra v1.10.2
 )
 ```
-
-## Implementation Phases
-
-### Phase 1: Foundation
-1. Project scaffolding (go.mod, directory structure)
-2. Config file support (`~/.config/fab/config.toml`)
-3. IPC protocol + Unix socket server/client
-4. Daemon lifecycle (start/stop, PID file, signals)
-5. CLI: `fab server start/stop`, `fab status`
-
-### Phase 2: Projects & Worktrees
-1. Project registry (add/remove/list)
-2. Worktree pool creation and management
-3. Git operations (checkout, clean, reset)
-4. CLI: `fab project add/remove/list`
-
-### Phase 3: Agent Management
-1. Agent type with stream-json I/O
-2. Ring buffer for output capture
-3. Agent lifecycle (create, destroy, state machine)
-4. Basic supervisor (no orchestration yet)
-
-### Phase 4: TUI
-1. Bubbletea app structure
-2. Header component (status summary, usage placeholder)
-3. Agent list component (grouped by project)
-4. Chat view component (scrolling, focus, input)
-5. CLI: `fab attach`
-
-### Phase 5: Orchestration
-1. Done detection (IPC message, idle timeout fallback)
-2. Kickstart logic (agent-driven task picking via `tk ready`)
-3. Local merge workflow on task completion
-4. CLI: `fab start <project>/stop <project>`
-
-### Phase 6: Usage & Polish
-1. JSONL parser for usage stats
-2. Usage display in TUI
-3. Error handling and recovery
-4. Config tuning and validation
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `internal/daemon/server.go` | Unix socket RPC, bridges CLI to supervisor |
-| `internal/supervisor/supervisor.go` | Core orchestration: per-project agent management, kickstart loop |
+| `internal/daemon/server.go` | Unix socket RPC server |
+| `internal/daemon/protocol.go` | IPC message types (40+ message types) |
+| `internal/supervisor/supervisor.go` | Main request handler, implements daemon.Handler |
+| `internal/orchestrator/orchestrator.go` | Per-project agent lifecycle and task orchestration |
+| `internal/agent/agent.go` | Agent type, state machine, process management |
 | `internal/agent/streamjson.go` | Stream-JSON protocol parsing for Claude Code I/O |
 | `internal/project/worktree.go` | Worktree pool: create, assign, recycle |
-| `internal/tui/tui.go` | Bubbletea model, component coordination |
-| `internal/tui/chatview.go` | Chat message rendering |
-| `internal/tui/header.go` | Status summary across all projects + usage |
+| `internal/issue/backend.go` | Pluggable issue backend interface |
+| `internal/registry/registry.go` | Project configuration persistence |
+| `internal/tui/tui.go` | Bubbletea main model |
+| `internal/tui/chatview.go` | Chat message rendering and interaction |
+| `internal/planner/planner.go` | Planning agent implementation |
