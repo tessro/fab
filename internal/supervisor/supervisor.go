@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -1454,7 +1455,30 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 	var proj *project.Project
 
 	if permReq.AgentID != "" {
-		if a, err := s.agents.Get(permReq.AgentID); err == nil {
+		// Check if this is a planner (agent ID starts with "plan:")
+		if strings.HasPrefix(permReq.AgentID, "plan:") {
+			plannerID := strings.TrimPrefix(permReq.AgentID, "plan:")
+			if p, err := s.planners.Get(plannerID); err == nil {
+				info := p.Info()
+				projectName = info.Project
+				agentTask = "Planning agent"
+
+				// Get recent conversation history for context
+				entries := p.History().Entries(10) // Last 10 entries
+				for _, e := range entries {
+					if e.Role == "assistant" && e.Content != "" {
+						conversationCtx = append(conversationCtx, fmt.Sprintf("Assistant: %s", truncate(e.Content, 500)))
+					} else if e.Role == "user" && e.Content != "" {
+						conversationCtx = append(conversationCtx, fmt.Sprintf("User: %s", truncate(e.Content, 500)))
+					}
+				}
+
+				// Look up project to check LLM auth setting
+				if projectName != "" {
+					proj, _ = s.registry.Get(projectName)
+				}
+			}
+		} else if a, err := s.agents.Get(permReq.AgentID); err == nil {
 			info := a.Info()
 			projectName = info.Project
 			agentTask = info.Description

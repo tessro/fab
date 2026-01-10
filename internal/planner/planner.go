@@ -255,9 +255,10 @@ func (p *Planner) Start() error {
 	cmd.Dir = p.workDir
 
 	// Set environment
+	// FAB_AGENT_ID uses "plan:" prefix to match TUI agent ID format and enable
+	// permission handling (including LLM auth) via the standard agent flow.
 	cmd.Env = append(os.Environ(),
-		"FAB_PLANNER_ID="+p.id,
-		"FAB_PLANNER_PROJECT="+p.project,
+		"FAB_AGENT_ID=plan:"+p.id,
 	)
 
 	// Set up pipes
