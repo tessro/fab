@@ -36,7 +36,7 @@ type ProjectEntry struct {
 	IssueBackend   string   `toml:"issue_backend,omitempty"`   // "tk" (default), "linear", "github", "gh"
 	AllowedAuthors []string `toml:"allowed_authors,omitempty"` // GitHub usernames allowed to create issues
 	Autostart      bool     `toml:"autostart,omitempty"`       // Start orchestration when daemon starts
-	LLMAuth        bool     `toml:"llm_auth,omitempty"`        // Use LLM-based permission authorization
+	PermissionsChecker string `toml:"permissions_checker,omitempty"` // Permission checker: "manual" (default), "llm"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 }
@@ -114,7 +114,7 @@ func (r *Registry) load() error {
 			p.AllowedAuthors = entry.AllowedAuthors
 		}
 		p.Autostart = entry.Autostart
-		p.LLMAuth = entry.LLMAuth
+		p.PermissionsChecker = entry.PermissionsChecker
 		r.projects[entry.Name] = p
 	}
 
@@ -137,13 +137,13 @@ func (r *Registry) save() error {
 
 	for _, p := range r.projects {
 		config.Projects = append(config.Projects, ProjectEntry{
-			Name:           p.Name,
-			RemoteURL:      p.RemoteURL,
-			MaxAgents:      p.MaxAgents,
-			IssueBackend:   p.IssueBackend,
-			AllowedAuthors: p.AllowedAuthors,
-			Autostart:      p.Autostart,
-			LLMAuth:        p.LLMAuth,
+			Name:               p.Name,
+			RemoteURL:          p.RemoteURL,
+			MaxAgents:          p.MaxAgents,
+			IssueBackend:       p.IssueBackend,
+			AllowedAuthors:     p.AllowedAuthors,
+			Autostart:          p.Autostart,
+			PermissionsChecker: p.PermissionsChecker,
 		})
 	}
 
@@ -294,12 +294,12 @@ const (
 	ConfigKeyAutostart      ConfigKey = "autostart"
 	ConfigKeyIssueBackend   ConfigKey = "issue-backend"
 	ConfigKeyAllowedAuthors ConfigKey = "allowed-authors"
-	ConfigKeyLLMAuth        ConfigKey = "llm-auth"
+	ConfigKeyPermissionsChecker ConfigKey = "permissions-checker"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyLLMAuth}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -335,8 +335,12 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 		return backend, nil
 	case ConfigKeyAllowedAuthors:
 		return p.AllowedAuthors, nil
-	case ConfigKeyLLMAuth:
-		return p.LLMAuth, nil
+	case ConfigKeyPermissionsChecker:
+		checker := p.PermissionsChecker
+		if checker == "" {
+			checker = "manual"
+		}
+		return checker, nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -357,12 +361,17 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		issueBackend = "tk"
 	}
 
+	permissionsChecker := p.PermissionsChecker
+	if permissionsChecker == "" {
+		permissionsChecker = "manual"
+	}
+
 	return map[string]any{
-		string(ConfigKeyMaxAgents):      p.MaxAgents,
-		string(ConfigKeyAutostart):      p.Autostart,
-		string(ConfigKeyIssueBackend):   issueBackend,
-		string(ConfigKeyAllowedAuthors): p.AllowedAuthors,
-		string(ConfigKeyLLMAuth):        p.LLMAuth,
+		string(ConfigKeyMaxAgents):          p.MaxAgents,
+		string(ConfigKeyAutostart):          p.Autostart,
+		string(ConfigKeyIssueBackend):       issueBackend,
+		string(ConfigKeyAllowedAuthors):     p.AllowedAuthors,
+		string(ConfigKeyPermissionsChecker): permissionsChecker,
 	}, nil
 }
 
@@ -409,12 +418,12 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			}
 			p.AllowedAuthors = authors
 		}
-	case ConfigKeyLLMAuth:
-		llmAuth, err := strconv.ParseBool(value)
-		if err != nil {
-			return errors.New("invalid value for llm-auth: must be true or false")
+	case ConfigKeyPermissionsChecker:
+		v := strings.ToLower(value)
+		if v != "manual" && v != "llm" {
+			return errors.New("invalid value for permissions-checker: must be 'manual' or 'llm'")
 		}
-		p.LLMAuth = llmAuth
+		p.PermissionsChecker = v
 	default:
 		return errors.New("invalid configuration key")
 	}

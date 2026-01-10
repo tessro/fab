@@ -102,10 +102,10 @@ The LLM authorizer enables fully autonomous agent operation by using an LLM to e
 
 ### Configuration
 
-Enable LLM auth per-project:
+Enable LLM permissions checker per-project:
 
 ```bash
-fab project set myproject llm-auth true
+fab project config set myproject permissions-checker llm
 ```
 
 Configure the provider and model in `~/.config/fab/config.toml`:

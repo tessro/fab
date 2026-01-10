@@ -28,7 +28,7 @@ type Project struct {
 	IssueBackend   string   // Issue backend type: "tk" (default), "linear", "github", "gh"
 	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
 	Autostart      bool     // Start orchestration when daemon starts
-	LLMAuth        bool     // Use LLM-based permission authorization instead of TUI prompts
+	PermissionsChecker string // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
 	BaseDir        string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active

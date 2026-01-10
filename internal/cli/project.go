@@ -85,7 +85,7 @@ var projectConfigShowCmd = &cobra.Command{
 var projectConfigGetCmd = &cobra.Command{
 	Use:   "get <project> <key>",
 	Short: "Get a configuration value",
-	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend",
+	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend, permissions-checker",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runProjectConfigGet,
 }
@@ -93,7 +93,7 @@ var projectConfigGetCmd = &cobra.Command{
 var projectConfigSetCmd = &cobra.Command{
 	Use:   "set <project> <key> <value>",
 	Short: "Set a configuration value",
-	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents     Maximum concurrent agents (1-100)\n  autostart      Start orchestration when daemon starts (true/false)\n  issue-backend  Issue backend type (tk/linear)",
+	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents           Maximum concurrent agents (1-100)\n  autostart            Start orchestration when daemon starts (true/false)\n  issue-backend        Issue backend type (tk/linear)\n  permissions-checker  Permission authorization method (manual/llm)",
 	Args:  cobra.ExactArgs(3),
 	RunE:  runProjectConfigSet,
 }

@@ -549,7 +549,7 @@ func (s *Supervisor) handleProjectConfigGet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(getReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, llm-auth)", getReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker)", getReq.Key))
 	}
 
 	value, err := s.registry.GetConfigValue(getReq.Name, registry.ConfigKey(getReq.Key))
@@ -579,7 +579,7 @@ func (s *Supervisor) handleProjectConfigSet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(setReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, llm-auth)", setReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker)", setReq.Key))
 	}
 
 	if err := s.registry.SetConfigValue(setReq.Name, registry.ConfigKey(setReq.Key), setReq.Value); err != nil {
@@ -1484,8 +1484,8 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 		"input", string(permReq.ToolInput),
 	)
 
-	// Check if LLM auth is enabled for this project
-	if proj != nil && proj.LLMAuth {
+	// Check if LLM permissions checker is enabled for this project
+	if proj != nil && proj.PermissionsChecker == "llm" {
 		resp := s.handleLLMAuth(ctx, permReq, projectName, agentTask, conversationCtx)
 		if resp != nil {
 			return successResponse(req, resp)
