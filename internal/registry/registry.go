@@ -33,7 +33,7 @@ type ProjectEntry struct {
 	Name         string `toml:"name"`
 	RemoteURL    string `toml:"remote_url"`
 	MaxAgents    int    `toml:"max_agents,omitempty"`
-	IssueBackend string `toml:"issue_backend,omitempty"` // "tk" (default), "linear"
+	IssueBackend string `toml:"issue_backend,omitempty"` // "tk" (default), "linear", "github", "gh"
 	Autostart    bool   `toml:"autostart,omitempty"`     // Start orchestration when daemon starts
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
@@ -378,8 +378,8 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 		p.Autostart = autostart
 	case ConfigKeyIssueBackend:
 		v := strings.ToLower(value)
-		if v != "tk" && v != "linear" {
-			return errors.New("invalid value for issue-backend: must be 'tk' or 'linear'")
+		if v != "tk" && v != "linear" && v != "github" && v != "gh" {
+			return errors.New("invalid value for issue-backend: must be 'tk', 'linear', 'github', or 'gh'")
 		}
 		p.IssueBackend = v
 	default:

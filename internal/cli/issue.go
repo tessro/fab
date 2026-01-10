@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tessro/fab/internal/issue"
+	"github.com/tessro/fab/internal/issue/gh"
 	"github.com/tessro/fab/internal/issue/tk"
 	"github.com/tessro/fab/internal/registry"
 )
@@ -322,6 +323,8 @@ func getIssueBackend() (issue.Backend, error) {
 	switch backendType {
 	case "tk":
 		return tk.New(project.RepoDir())
+	case "github", "gh":
+		return gh.New(project.RepoDir())
 	default:
 		return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 	}

@@ -25,7 +25,7 @@ type Project struct {
 	Name         string // Unique identifier (e.g., "myapp")
 	RemoteURL    string // Git remote URL (e.g., "git@github.com:user/repo.git")
 	MaxAgents    int    // Max concurrent agents (default: 3)
-	IssueBackend string // Issue backend type: "tk" (default), "linear"
+	IssueBackend string // Issue backend type: "tk" (default), "linear", "github", "gh"
 	Autostart    bool   // Start orchestration when daemon starts
 	BaseDir      string // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
