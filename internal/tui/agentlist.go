@@ -169,15 +169,22 @@ func isManagerAgent(agentID string) bool {
 func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) string {
 	isSelected := index == l.selected
 
-	// Get row style based on selection
+	// Get row style based on selection - this will be applied once at the end
 	rowStyle := agentRowStyle
 	if isSelected {
 		rowStyle = agentRowSelectedStyle
 	}
 
-	// State indicator with color - inherit background from row style
+	// Create a background-only style for inheriting (no padding)
+	// This ensures text elements get the correct background color without adding extra padding
+	bgStyle := lipgloss.NewStyle()
+	if isSelected {
+		bgStyle = bgStyle.Background(lipgloss.Color("#3B3B3B"))
+	}
+
+	// State indicator with color
 	stateIcon := l.stateIcon(agent.ID, agent.State)
-	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(rowStyle)
+	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(bgStyle)
 	stateStr := stateStyle.Render(stateIcon)
 
 	// Agent ID - use special style for manager
@@ -185,20 +192,20 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	if isManagerAgent(agent.ID) {
 		idStyle = agentManagerIDStyle
 	}
-	idStr := idStyle.Inherit(rowStyle).Render(agent.ID)
+	idStr := idStyle.Inherit(bgStyle).Render(agent.ID)
 
-	// Project name - inherit background from row style
-	projectStr := agentProjectStyle.Inherit(rowStyle).Render(agent.Project)
+	// Project name
+	projectStr := agentProjectStyle.Inherit(bgStyle).Render(agent.Project)
 
-	// Task (if any) - inherit background from row style
+	// Task (if any)
 	taskStr := ""
 	if agent.Task != "" {
-		taskStr = agentTaskStyle.Inherit(rowStyle).Render(agent.Task)
+		taskStr = agentTaskStyle.Inherit(bgStyle).Render(agent.Task)
 	}
 
-	// Duration since started - inherit background from row style
+	// Duration since started
 	duration := time.Since(agent.StartedAt).Truncate(time.Second)
-	durationStr := agentDurationStyle.Inherit(rowStyle).Render(formatDuration(duration))
+	durationStr := agentDurationStyle.Inherit(bgStyle).Render(formatDuration(duration))
 
 	// Compose the left part (without description first)
 	left := lipgloss.JoinHorizontal(lipgloss.Center,
@@ -219,20 +226,20 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	availableForDesc := contentWidth - leftWidth - rightWidth - 1 - 1 // -1 for space before desc, -1 for min spacer
 	if agent.Description != "" && availableForDesc > 3 {
 		desc := truncateDescription(agent.Description, availableForDesc)
-		descStr := agentDescriptionStyle.Inherit(rowStyle).Render(desc)
+		descStr := agentDescriptionStyle.Inherit(bgStyle).Render(desc)
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", descStr)
 		leftWidth = lipgloss.Width(left)
 	}
 
-	// Right-align duration - the spacer needs the row background too
+	// Right-align duration
 	// Ensure spacer width never makes total content exceed available width
 	spacerWidth := contentWidth - leftWidth - rightWidth
 	if spacerWidth < 1 {
 		spacerWidth = 1
 	}
 
-	// Build row content, ensuring it fits within contentWidth
-	spacer := rowStyle.Render(strings.Repeat(" ", spacerWidth))
+	// Build row content - use bgStyle for spacer to get correct background
+	spacer := bgStyle.Render(strings.Repeat(" ", spacerWidth))
 	row := left + spacer + durationStr
 
 	// If row is too wide (edge case), truncate and re-render
@@ -244,13 +251,13 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 		spacerWidth = contentWidth - leftWidth - rightWidth
 		if spacerWidth < 1 || leftWidth > maxLeftWidth {
 			spacerWidth = 1
-			left = rowStyle.Render(strings.Repeat(" ", maxLeftWidth-1))
+			left = bgStyle.Render(strings.Repeat(" ", maxLeftWidth-1))
 		}
-		spacer = rowStyle.Render(strings.Repeat(" ", spacerWidth))
+		spacer = bgStyle.Render(strings.Repeat(" ", spacerWidth))
 		row = left + spacer + durationStr
 	}
 
-	// Apply row styling with full width
+	// Apply row styling with full width - padding is applied only here
 	return rowStyle.Width(width).Render(row)
 }
 
