@@ -1020,4 +1020,3 @@ func (a *Agent) IsReadLoopRunning() bool {
 		return true
 	}
 }
-

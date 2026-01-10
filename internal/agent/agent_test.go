@@ -340,3 +340,49 @@ func TestDefaultInterventionSilence(t *testing.T) {
 		t.Errorf("expected DefaultInterventionSilence to be 60s, got %v", DefaultInterventionSilence)
 	}
 }
+
+func TestFlexContent_String(t *testing.T) {
+	// String content should parse as string
+	input := `{"type":"tool_result","tool_use_id":"123","content":"hello world"}`
+	msg, err := ParseStreamMessage([]byte(`{"type":"user","message":{"role":"user","content":[` + input + `]}}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Message == nil || len(msg.Message.Content) != 1 {
+		t.Fatal("expected one content block")
+	}
+	if string(msg.Message.Content[0].Content) != "hello world" {
+		t.Errorf("expected 'hello world', got %q", msg.Message.Content[0].Content)
+	}
+}
+
+func TestFlexContent_Array(t *testing.T) {
+	// Array content should parse and join text parts
+	input := `{"type":"tool_result","tool_use_id":"123","content":[{"type":"text","text":"part1"},{"type":"text","text":"part2"}]}`
+	msg, err := ParseStreamMessage([]byte(`{"type":"user","message":{"role":"user","content":[` + input + `]}}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Message == nil || len(msg.Message.Content) != 1 {
+		t.Fatal("expected one content block")
+	}
+	expected := "part1\npart2"
+	if string(msg.Message.Content[0].Content) != expected {
+		t.Errorf("expected %q, got %q", expected, msg.Message.Content[0].Content)
+	}
+}
+
+func TestFlexContent_EmptyArray(t *testing.T) {
+	// Empty array should result in empty string
+	input := `{"type":"tool_result","tool_use_id":"123","content":[]}`
+	msg, err := ParseStreamMessage([]byte(`{"type":"user","message":{"role":"user","content":[` + input + `]}}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Message == nil || len(msg.Message.Content) != 1 {
+		t.Fatal("expected one content block")
+	}
+	if string(msg.Message.Content[0].Content) != "" {
+		t.Errorf("expected empty string, got %q", msg.Message.Content[0].Content)
+	}
+}

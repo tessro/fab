@@ -35,9 +35,43 @@ type ContentBlock struct {
 	ID        string          `json:"id,omitempty"`          // tool_use ID
 	Name      string          `json:"name,omitempty"`        // Tool name (Bash, Read, etc.)
 	Input     json.RawMessage `json:"input,omitempty"`       // Tool input as raw JSON
-	Content   string          `json:"content,omitempty"`     // tool_result content
+	Content   FlexContent     `json:"content,omitempty"`     // tool_result content (string or array)
 	ToolUseID string          `json:"tool_use_id,omitempty"` // Links result to tool_use
 	IsError   bool            `json:"is_error,omitempty"`    // tool_result error flag
+}
+
+// FlexContent handles the "content" field which can be either a string
+// or an array of content parts (e.g., [{"type":"text","text":"..."}]).
+type FlexContent string
+
+// UnmarshalJSON implements custom unmarshaling for FlexContent.
+func (f *FlexContent) UnmarshalJSON(data []byte) error {
+	// Try string first (most common case)
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = FlexContent(s)
+		return nil
+	}
+
+	// Try array of content parts
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data, &parts); err == nil {
+		var texts []string
+		for _, p := range parts {
+			if p.Text != "" {
+				texts = append(texts, p.Text)
+			}
+		}
+		*f = FlexContent(strings.Join(texts, "\n"))
+		return nil
+	}
+
+	// If neither works, just store the raw JSON as string for debugging
+	*f = FlexContent(string(data))
+	return nil
 }
 
 // Usage contains token usage information.
@@ -125,7 +159,7 @@ func (m *StreamMessage) ToChatEntries() []ChatEntry {
 		case "tool_result":
 			entries = append(entries, ChatEntry{
 				Role:       "tool",
-				ToolResult: block.Content,
+				ToolResult: string(block.Content),
 				Timestamp:  now,
 			})
 		}
