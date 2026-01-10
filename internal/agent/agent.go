@@ -902,10 +902,10 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			)
 		}
 
-		// Log token usage when present
+		// Log token usage when present (debug level to reduce noise)
 		if msg.Message != nil && msg.Message.Usage != nil {
 			u := msg.Message.Usage
-			slog.Info("readloop: token usage",
+			slog.Debug("readloop: token usage",
 				"agent", a.ID,
 				"input_tokens", u.InputTokens,
 				"output_tokens", u.OutputTokens,
@@ -914,9 +914,9 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			)
 		}
 
-		// Log stop reason when present
+		// Log stop reason when present (debug level to reduce noise)
 		if msg.Message != nil && msg.Message.StopReason != "" {
-			slog.Info("readloop: stop reason",
+			slog.Debug("readloop: stop reason",
 				"agent", a.ID,
 				"stop_reason", msg.Message.StopReason,
 			)
