@@ -19,6 +19,7 @@ var projectCmd = &cobra.Command{
 
 var projectAddName string
 var projectAddMaxAgents int
+var projectAddAutostart bool
 
 var projectAddCmd = &cobra.Command{
 	Use:   "add <path>",
@@ -68,6 +69,7 @@ var projectRemoveCmd = &cobra.Command{
 }
 
 var projectSetMaxAgents int
+var projectSetAutostart bool
 
 var projectSetCmd = &cobra.Command{
 	Use:   "set <name>",
@@ -114,7 +116,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
 	defer client.Close()
 
-	result, err := client.ProjectAdd(remoteURL, projectAddName, projectAddMaxAgents)
+	result, err := client.ProjectAdd(remoteURL, projectAddName, projectAddMaxAgents, projectAddAutostart)
 	if err != nil {
 		return fmt.Errorf("add project: %w", err)
 	}
@@ -123,6 +125,9 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Remote: %s\n", result.RemoteURL)
 	fmt.Printf("   Clone:  %s\n", result.RepoDir)
 	fmt.Printf("   Max agents: %d\n", result.MaxAgents)
+	if projectAddAutostart {
+		fmt.Println("   Autostart: enabled")
+	}
 
 	return nil
 }
@@ -289,8 +294,8 @@ func runProjectSet(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
 
 	// Check if any flags were provided
-	if !cmd.Flags().Changed("max-agents") {
-		return fmt.Errorf("no settings to update; use --max-agents to set maximum concurrent agents")
+	if !cmd.Flags().Changed("max-agents") && !cmd.Flags().Changed("autostart") {
+		return fmt.Errorf("no settings to update; use --max-agents or --autostart")
 	}
 
 	client := MustConnect()
@@ -301,7 +306,12 @@ func runProjectSet(cmd *cobra.Command, args []string) error {
 		maxAgents = &projectSetMaxAgents
 	}
 
-	if err := client.ProjectSet(projectName, maxAgents); err != nil {
+	var autostart *bool
+	if cmd.Flags().Changed("autostart") {
+		autostart = &projectSetAutostart
+	}
+
+	if err := client.ProjectSet(projectName, maxAgents, autostart); err != nil {
 		return fmt.Errorf("set project: %w", err)
 	}
 
@@ -309,12 +319,20 @@ func runProjectSet(cmd *cobra.Command, args []string) error {
 	if maxAgents != nil {
 		fmt.Printf("   Max agents: %d\n", *maxAgents)
 	}
+	if autostart != nil {
+		if *autostart {
+			fmt.Println("   Autostart: enabled")
+		} else {
+			fmt.Println("   Autostart: disabled")
+		}
+	}
 	return nil
 }
 
 func init() {
 	projectAddCmd.Flags().StringVarP(&projectAddName, "name", "n", "", "Project name (default: directory name)")
 	projectAddCmd.Flags().IntVarP(&projectAddMaxAgents, "max-agents", "m", 3, "Maximum concurrent agents")
+	projectAddCmd.Flags().BoolVar(&projectAddAutostart, "autostart", false, "Start orchestration when daemon starts")
 
 	projectStartCmd.Flags().BoolVarP(&projectStartAll, "all", "a", false, "Start all projects")
 	projectStopCmd.Flags().BoolVarP(&projectStopAll, "all", "a", false, "Stop all projects")
@@ -323,6 +341,7 @@ func init() {
 	projectRemoveCmd.Flags().BoolVar(&projectRemoveDeleteWorktrees, "delete-worktrees", false, "Delete associated worktrees")
 
 	projectSetCmd.Flags().IntVarP(&projectSetMaxAgents, "max-agents", "m", 0, "Maximum concurrent agents")
+	projectSetCmd.Flags().BoolVar(&projectSetAutostart, "autostart", false, "Start orchestration when daemon starts")
 
 	projectCmd.AddCommand(projectAddCmd)
 	projectCmd.AddCommand(projectListCmd)

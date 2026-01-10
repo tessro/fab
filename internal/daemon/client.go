@@ -242,10 +242,10 @@ func (c *Client) Stop(project string, all bool) error {
 }
 
 // ProjectAdd adds a project to the daemon.
-func (c *Client) ProjectAdd(remoteURL, name string, maxAgents int) (*ProjectAddResponse, error) {
+func (c *Client) ProjectAdd(remoteURL, name string, maxAgents int, autostart bool) (*ProjectAddResponse, error) {
 	resp, err := c.Send(&Request{
 		Type:    MsgProjectAdd,
-		Payload: ProjectAddRequest{RemoteURL: remoteURL, Name: name, MaxAgents: maxAgents},
+		Payload: ProjectAddRequest{RemoteURL: remoteURL, Name: name, MaxAgents: maxAgents, Autostart: autostart},
 	})
 	if err != nil {
 		return nil, err
@@ -296,10 +296,10 @@ func (c *Client) ProjectList() (*ProjectListResponse, error) {
 }
 
 // ProjectSet updates project settings.
-func (c *Client) ProjectSet(name string, maxAgents *int) error {
+func (c *Client) ProjectSet(name string, maxAgents *int, autostart *bool) error {
 	resp, err := c.Send(&Request{
 		Type:    MsgProjectSet,
-		Payload: ProjectSetRequest{Name: name, MaxAgents: maxAgents},
+		Payload: ProjectSetRequest{Name: name, MaxAgents: maxAgents, Autostart: autostart},
 	})
 	if err != nil {
 		return err

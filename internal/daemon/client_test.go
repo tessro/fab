@@ -300,7 +300,7 @@ func TestClient_ProjectOperations(t *testing.T) {
 	defer c.Close()
 
 	t.Run("add", func(t *testing.T) {
-		result, err := c.ProjectAdd("/path/to/test", "test-proj", 3)
+		result, err := c.ProjectAdd("/path/to/test", "test-proj", 3, false)
 		if err != nil {
 			t.Fatalf("project add: %v", err)
 		}
@@ -327,7 +327,7 @@ func TestClient_ProjectOperations(t *testing.T) {
 
 	t.Run("set", func(t *testing.T) {
 		maxAgents := 5
-		if err := c.ProjectSet("test-proj", &maxAgents); err != nil {
+		if err := c.ProjectSet("test-proj", &maxAgents, nil); err != nil {
 			t.Fatalf("project set: %v", err)
 		}
 	})

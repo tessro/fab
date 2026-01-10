@@ -353,7 +353,7 @@ func (s *Supervisor) handleProjectAdd(ctx context.Context, req *daemon.Request) 
 	}
 
 	// Register project in config first (validates and generates name)
-	proj, err := s.registry.Add(addReq.RemoteURL, addReq.Name, addReq.MaxAgents)
+	proj, err := s.registry.Add(addReq.RemoteURL, addReq.Name, addReq.MaxAgents, addReq.Autostart)
 	if err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to add project: %v", err))
 	}
@@ -457,7 +457,7 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 		return errorResponse(req, fmt.Sprintf("project not found: %s", setReq.Name))
 	}
 
-	if err := s.registry.Update(setReq.Name, setReq.MaxAgents); err != nil {
+	if err := s.registry.Update(setReq.Name, setReq.MaxAgents, setReq.Autostart); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to update project: %v", err))
 	}
 
@@ -1013,6 +1013,22 @@ func (s *Supervisor) stopOrchestrator(projectName string) {
 	s.mu.Lock()
 	delete(s.orchestrators, projectName)
 	s.mu.Unlock()
+}
+
+// StartAutostart starts orchestration for all projects with autostart=true.
+// This should be called once during daemon startup.
+func (s *Supervisor) StartAutostart() {
+	ctx := context.Background()
+	for _, proj := range s.registry.List() {
+		if proj.Autostart {
+			slog.Info("autostarting project", "project", proj.Name)
+			if err := s.startOrchestrator(ctx, proj); err != nil {
+				slog.Error("failed to autostart project",
+					"project", proj.Name,
+					"error", err)
+			}
+		}
+	}
 }
 
 // ShutdownTimeout is the maximum time to wait for graceful shutdown.

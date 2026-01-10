@@ -37,7 +37,7 @@ func TestRegistry_Add(t *testing.T) {
 	}
 
 	// Add project
-	p, err := r.Add(remoteURL, "myproject", 0)
+	p, err := r.Add(remoteURL, "myproject", 0, false)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -74,11 +74,11 @@ func TestRegistry_AddDuplicate(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0, false); err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0); err != ErrProjectExists {
+	if _, err := r.Add(remoteURL, "myproject", 0, false); err != ErrProjectExists {
 		t.Errorf("second Add() error = %v, want ErrProjectExists", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestRegistry_AddEmptyURL(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add("", "test", 0); err != ErrInvalidRemoteURL {
+	if _, err := r.Add("", "test", 0, false); err != ErrInvalidRemoteURL {
 		t.Errorf("Add() error = %v, want ErrInvalidRemoteURL", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestRegistry_AddDefaultName(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	p, err := r.Add(remoteURL, "", 0)
+	p, err := r.Add(remoteURL, "", 0, false)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRegistry_Remove(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -164,7 +164,7 @@ func TestRegistry_Get(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 5); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 5, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -205,10 +205,10 @@ func TestRegistry_List(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add("git@github.com:user/project1.git", "project1", 0); err != nil {
+	if _, err := r.Add("git@github.com:user/project1.git", "project1", 0, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	if _, err := r.Add("git@github.com:user/project2.git", "project2", 0); err != nil {
+	if _, err := r.Add("git@github.com:user/project2.git", "project2", 0, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -228,12 +228,12 @@ func TestRegistry_Update(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 3); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 3, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
 	newMax := 5
-	if err := r.Update("myproject", &newMax); err != nil {
+	if err := r.Update("myproject", &newMax, nil); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
@@ -254,7 +254,7 @@ func TestRegistry_Persistence(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r1.Add(remoteURL, "myproject", 7); err != nil {
+	if _, err := r1.Add(remoteURL, "myproject", 7, false); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 

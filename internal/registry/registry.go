@@ -32,6 +32,7 @@ type ProjectEntry struct {
 	RemoteURL    string `toml:"remote_url"`
 	MaxAgents    int    `toml:"max_agents,omitempty"`
 	IssueBackend string `toml:"issue_backend,omitempty"` // "tk" (default), "linear"
+	Autostart    bool   `toml:"autostart,omitempty"`     // Start orchestration when daemon starts
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 }
@@ -105,6 +106,7 @@ func (r *Registry) load() error {
 		if entry.IssueBackend != "" {
 			p.IssueBackend = entry.IssueBackend
 		}
+		p.Autostart = entry.Autostart
 		r.projects[entry.Name] = p
 	}
 
@@ -131,6 +133,7 @@ func (r *Registry) save() error {
 			RemoteURL:    p.RemoteURL,
 			MaxAgents:    p.MaxAgents,
 			IssueBackend: p.IssueBackend,
+			Autostart:    p.Autostart,
 		})
 	}
 
@@ -146,7 +149,7 @@ func (r *Registry) save() error {
 
 // Add registers a new project.
 // If name is empty, it defaults to the repository name from the URL.
-func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project, error) {
+func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*project.Project, error) {
 	// Validate remote URL
 	if err := config.ValidateRemoteURL(remoteURL); err != nil {
 		return nil, ErrInvalidRemoteURL
@@ -182,6 +185,7 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int) (*project.Project,
 
 	p := project.NewProject(name, remoteURL)
 	p.MaxAgents = maxAgents
+	p.Autostart = autostart
 	p.BaseDir = r.projectBaseDir // Empty unless set for testing
 	r.projects[name] = p
 
@@ -245,7 +249,7 @@ func (r *Registry) List() []*project.Project {
 }
 
 // Update modifies a project's settings.
-func (r *Registry) Update(name string, maxAgents *int) error {
+func (r *Registry) Update(name string, maxAgents *int, autostart *bool) error {
 	// Validate max agents if provided
 	if maxAgents != nil {
 		if err := config.ValidateMaxAgents(*maxAgents); err != nil {
@@ -263,6 +267,9 @@ func (r *Registry) Update(name string, maxAgents *int) error {
 
 	if maxAgents != nil {
 		p.MaxAgents = *maxAgents
+	}
+	if autostart != nil {
+		p.Autostart = *autostart
 	}
 
 	return r.save()

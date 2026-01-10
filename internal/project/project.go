@@ -23,6 +23,7 @@ type Project struct {
 	RemoteURL    string // Git remote URL (e.g., "git@github.com:user/repo.git")
 	MaxAgents    int    // Max concurrent agents (default: 3)
 	IssueBackend string // Issue backend type: "tk" (default), "linear"
+	Autostart    bool   // Start orchestration when daemon starts
 	BaseDir      string // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active

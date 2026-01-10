@@ -151,6 +151,7 @@ type ProjectAddRequest struct {
 	RemoteURL string `json:"remote_url"`           // Git remote URL
 	Name      string `json:"name,omitempty"`       // Optional override
 	MaxAgents int    `json:"max_agents,omitempty"` // Default: 3
+	Autostart bool   `json:"autostart,omitempty"`  // Start orchestration when daemon starts
 }
 
 // ProjectAddResponse is the payload for project.add responses.
@@ -185,6 +186,7 @@ type ProjectInfo struct {
 type ProjectSetRequest struct {
 	Name      string `json:"name"`
 	MaxAgents *int   `json:"max_agents,omitempty"` // Pointer to distinguish unset from zero
+	Autostart *bool  `json:"autostart,omitempty"`  // Pointer to distinguish unset from false
 }
 
 // AgentCreateRequest is the payload for agent.create requests.

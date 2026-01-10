@@ -177,6 +177,9 @@ func runDaemon() error {
 	}
 	defer func() { _ = srv.Stop() }()
 
+	// Start orchestration for projects with autostart=true
+	sup.StartAutostart()
+
 	fmt.Println("🚌 fab daemon running...")
 
 	// Set up signal handling
