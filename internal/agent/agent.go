@@ -868,7 +868,6 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		}
 
 		// Parse the JSONL line as a StreamMessage
-		slog.Debug("readloop: raw line", "line", string(line))
 		msg, err := ParseStreamMessage(line)
 		if err != nil {
 			slog.Warn("readloop: parse error", "agent", a.ID, "error", err, "line", string(line))
