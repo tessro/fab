@@ -1,13 +1,12 @@
 package planner
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"sync"
 
 	"github.com/tessro/fab/internal/event"
+	"github.com/tessro/fab/internal/id"
 )
 
 // Manager errors.
@@ -68,14 +67,14 @@ func (m *Manager) emit(e Event) {
 
 // GenerateID generates a new unique planner ID.
 func (m *Manager) GenerateID() string {
-	return generateID()
+	return id.Generate()
 }
 
 // Create creates a new planning agent.
 // workDir is the directory the planner will work in.
 // prompt is the planning task to work on.
 func (m *Manager) Create(project, workDir, prompt string) (*Planner, error) {
-	return m.CreateWithID(generateID(), project, workDir, prompt)
+	return m.CreateWithID(id.Generate(), project, workDir, prompt)
 }
 
 // CreateWithID creates a new planning agent with a specific ID.
@@ -236,11 +235,4 @@ func (m *Manager) ActivePlanners() []*Planner {
 		}
 	}
 	return active
-}
-
-// generateID generates a random 6-character hex ID.
-func generateID() string {
-	b := make([]byte, 3)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }

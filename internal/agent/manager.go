@@ -2,13 +2,12 @@
 package agent
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"sync"
 
 	"github.com/tessro/fab/internal/event"
+	"github.com/tessro/fab/internal/id"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -143,10 +142,10 @@ func (m *Manager) emitProjectEvent(e ProjectEvent) {
 // It creates a dedicated worktree for the agent and returns the new agent.
 // Returns ErrNoCapacity if max agents reached.
 func (m *Manager) Create(proj *project.Project) (*Agent, error) {
-	id := generateID()
+	agentID := id.Generate()
 
 	// Create a dedicated worktree for this agent
-	wt, err := proj.CreateWorktreeForAgent(id)
+	wt, err := proj.CreateWorktreeForAgent(agentID)
 	if err != nil {
 		if errors.Is(err, project.ErrNoWorktreeAvailable) {
 			slog.Warn("max agents reached for project", "project", proj.Name)
@@ -156,7 +155,7 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 		return nil, err
 	}
 
-	agent := New(id, proj, wt)
+	agent := New(agentID, proj, wt)
 
 	// Register state change callback to emit events
 	agent.OnStateChange(func(old, new State) {
@@ -189,12 +188,12 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 	})
 
 	m.mu.Lock()
-	m.agents[id] = agent
+	m.agents[agentID] = agent
 	m.projects[proj.Name] = append(m.projects[proj.Name], agent)
 	m.mu.Unlock()
 
 	slog.Info("agent created",
-		"agent", id,
+		"agent", agentID,
 		"project", proj.Name,
 		"worktree", wt.Path,
 	)
@@ -418,11 +417,4 @@ func (m *Manager) IdleAgents() []*Agent {
 		}
 	}
 	return idle
-}
-
-// generateID generates a random 6-character hex ID.
-func generateID() string {
-	b := make([]byte, 3)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }

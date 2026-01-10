@@ -434,22 +434,6 @@ func TestManager_Concurrent(t *testing.T) {
 	}
 }
 
-func TestGenerateID(t *testing.T) {
-	ids := make(map[string]bool)
-
-	// Generate 1000 IDs and check uniqueness
-	for i := 0; i < 1000; i++ {
-		id := generateID()
-		if len(id) != 6 {
-			t.Errorf("expected 6 char ID, got %d: %s", len(id), id)
-		}
-		if ids[id] {
-			t.Errorf("duplicate ID generated: %s", id)
-		}
-		ids[id] = true
-	}
-}
-
 func TestManager_RegisterProject(t *testing.T) {
 	m := NewManager()
 	proj := newTestProject("test-proj", 3)
