@@ -302,7 +302,7 @@ func (m *Manager) CountByState() map[State]int {
 
 // Delete removes an agent from the manager.
 // The agent should be stopped before calling Delete.
-// This releases the agent's worktree back to the pool.
+// This deletes the agent's worktree from disk.
 func (m *Manager) Delete(id string) error {
 	m.mu.Lock()
 

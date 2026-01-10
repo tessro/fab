@@ -28,13 +28,13 @@ type Project struct {
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
-	Worktrees []Worktree // Pool of worktrees for agents
+	Worktrees []Worktree // Active worktrees for agents
 
 	mu      sync.RWMutex // Protects Running and Worktrees
 	mergeMu sync.Mutex   // Serializes merge operations
 }
 
-// AddWorktree appends a worktree to the pool (for testing).
+// AddWorktree appends a worktree to the list (for testing).
 func (p *Project) AddWorktree(wt Worktree) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
