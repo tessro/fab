@@ -1169,7 +1169,7 @@ func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
 		case "tk":
 			return tk.New(repoDir)
 		case "github", "gh":
-			return gh.New(repoDir)
+			return gh.New(repoDir, proj.AllowedAuthors)
 		default:
 			return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 		}
