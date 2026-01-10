@@ -118,6 +118,14 @@ func (l AgentList) View() string {
 	return agentListContainerStyle.Width(l.width).Height(l.height).Render(content)
 }
 
+// ManagerAgentID is the special agent ID for the supervisor/manager.
+const ManagerAgentID = "manager"
+
+// isManagerAgent returns true if the agent is the special manager agent.
+func isManagerAgent(agentID string) bool {
+	return agentID == ManagerAgentID
+}
+
 // renderAgent renders a single agent row.
 func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	isSelected := index == l.selected
@@ -133,8 +141,12 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(rowStyle)
 	stateStr := stateStyle.Render(stateIcon)
 
-	// Agent ID - inherit background from row style
-	idStr := agentIDStyle.Inherit(rowStyle).Render(agent.ID)
+	// Agent ID - use special style for manager
+	idStyle := agentIDStyle
+	if isManagerAgent(agent.ID) {
+		idStyle = agentManagerIDStyle
+	}
+	idStr := idStyle.Inherit(rowStyle).Render(agent.ID)
 
 	// Project name - inherit background from row style
 	projectStr := agentProjectStyle.Inherit(rowStyle).Render(agent.Project)

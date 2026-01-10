@@ -294,28 +294,52 @@ func (m Model) fetchAgentList() tea.Cmd {
 	}
 }
 
+// isManager returns true if the given agent ID is the manager agent.
+func isManager(agentID string) bool {
+	return isManagerAgent(agentID)
+}
+
 // sendAgentMessage sends a user message to an agent via stream-json.
 func (m Model) sendAgentMessage(agentID, content string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		err := m.client.AgentSendMessage(agentID, content)
+		var err error
+		if isManager(agentID) {
+			err = m.client.ManagerSendMessage(content)
+		} else {
+			err = m.client.AgentSendMessage(agentID, content)
+		}
 		return AgentInputMsg{Err: err}
 	}
 }
 
-// fetchAgentChatHistory retrieves chat history for an agent.
+// fetchAgentChatHistory retrieves chat history for an agent (or manager).
 func (m Model) fetchAgentChatHistory(agentID string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
 		}
-		resp, err := m.client.AgentChatHistory(agentID, 0) // 0 = all entries
+		var entries []daemon.ChatEntryDTO
+		var err error
+		if isManager(agentID) {
+			var resp *daemon.ManagerChatHistoryResponse
+			resp, err = m.client.ManagerChatHistory(0) // 0 = all entries
+			if err == nil {
+				entries = resp.Entries
+			}
+		} else {
+			var resp *daemon.AgentChatHistoryResponse
+			resp, err = m.client.AgentChatHistory(agentID, 0) // 0 = all entries
+			if err == nil {
+				entries = resp.Entries
+			}
+		}
 		if err != nil {
 			return AgentChatHistoryMsg{AgentID: agentID, Err: err}
 		}
-		return AgentChatHistoryMsg{AgentID: agentID, Entries: resp.Entries}
+		return AgentChatHistoryMsg{AgentID: agentID, Entries: entries}
 	}
 }
 
@@ -972,6 +996,24 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 			// Update attention indicators
 			m.updateNeedsAttention()
 		}
+
+	case "manager_chat_entry":
+		// Manager agent chat entry - display if manager is selected
+		if event.ChatEntry != nil && m.chatView.AgentID() == ManagerAgentID {
+			m.chatView.AppendEntry(*event.ChatEntry)
+		}
+
+	case "manager_state":
+		// Manager agent state changed - update in the agent list
+		agents := m.agentList.Agents()
+		for i := range agents {
+			if agents[i].ID == ManagerAgentID {
+				agents[i].State = event.ManagerState
+				m.agentList.SetAgents(agents)
+				break
+			}
+		}
+		m.header.SetAgentCounts(len(agents), countRunning(agents))
 	}
 	return nil
 }

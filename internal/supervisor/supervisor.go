@@ -475,6 +475,12 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 	return successResponse(req, nil)
 }
 
+// ManagerAgentID is the special agent ID for the manager in the agent list.
+const ManagerAgentID = "manager"
+
+// ManagerProject is the special project name for the manager in the agent list.
+const ManagerProject = "supervisor"
+
 // handleAgentList lists agents.
 func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var listReq daemon.AgentListRequest
@@ -486,7 +492,24 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 
 	agents := s.agents.List(listReq.Project)
 	slog.Debug("agent list requested", "filter", listReq.Project, "count", len(agents))
-	statuses := make([]daemon.AgentStatus, 0, len(agents))
+	statuses := make([]daemon.AgentStatus, 0, len(agents)+1)
+
+	// Add manager agent as first entry if running and no project filter
+	s.mu.RLock()
+	mgr := s.manager
+	s.mu.RUnlock()
+
+	if listReq.Project == "" && mgr.IsRunning() {
+		statuses = append(statuses, daemon.AgentStatus{
+			ID:          ManagerAgentID,
+			Project:     ManagerProject,
+			State:       string(mgr.State()),
+			Worktree:    "",
+			StartedAt:   mgr.StartedAt(),
+			Task:        "",
+			Description: "Supervisor",
+		})
+	}
 
 	for _, a := range agents {
 		info := a.Info()
