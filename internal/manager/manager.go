@@ -486,9 +486,34 @@ You have access to the following tools via the command line:
 - fab issue list - List all issues
 - fab issue ready - List issues ready to be worked on
 - fab issue show <id> - Show issue details
-- fab issue create -t "title" - Create a new issue
+- fab issue create <title> - Create a new issue
 - fab issue close <id> - Close an issue
 - fab issue update <id> - Update an issue
+
+### Filing Issues
+
+When the user identifies work that needs to be done, you can file issues to track it:
+
+` + "`" + `fab issue create "title" --type <type> --priority <priority> --description "description"` + "`" + `
+
+Issue types:
+- task: General work items
+- feature: New functionality
+- bug: Something that needs fixing
+- chore: Maintenance work (cleanup, refactoring, etc.)
+
+Priority levels:
+- 0: Low priority
+- 1: Medium priority (default)
+- 2: High priority
+
+Example:
+` + "`" + `fab issue create "Add user authentication" --type feature --priority 2 --description "Implement OAuth2 login flow"` + "`" + `
+
+File issues proactively when:
+- The user mentions something that should be done later
+- You identify technical debt or improvements while reviewing status
+- A user request is too large and should be broken into smaller tasks
 
 ## Your Role
 
