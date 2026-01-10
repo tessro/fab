@@ -63,6 +63,10 @@ type Manager struct {
 	// Working directory for the manager
 	workDir string
 
+	// AllowedPatterns are Bash command patterns allowed without prompting.
+	// Uses fab pattern syntax (e.g., "fab:*" for prefix match).
+	allowedPatterns []string
+
 	// Callbacks
 	// +checklocks:mu
 	onStateChange func(old, new State)
@@ -75,11 +79,14 @@ type Manager struct {
 }
 
 // New creates a new manager agent.
-func New(workDir string) *Manager {
+// allowedPatterns specifies Bash command patterns that are allowed without prompting.
+// Uses fab pattern syntax (e.g., "fab:*" for prefix match).
+func New(workDir string, allowedPatterns []string) *Manager {
 	return &Manager{
-		state:   StateStopped,
-		workDir: workDir,
-		history: agent.NewChatHistory(agent.DefaultChatHistorySize),
+		state:           StateStopped,
+		workDir:         workDir,
+		allowedPatterns: allowedPatterns,
+		history:         agent.NewChatHistory(agent.DefaultChatHistorySize),
 	}
 }
 
@@ -142,6 +149,61 @@ func (m *Manager) setState(new State) {
 	}
 }
 
+// buildSettings creates the Claude Code settings with allowed tool permissions.
+// It converts fab pattern syntax (e.g., "fab:*") to Claude Code format (e.g., "Bash(fab *)").
+func (m *Manager) buildSettings() map[string]any {
+	allowedTools := m.buildAllowedTools()
+	return map[string]any{
+		"permissions": map[string]any{
+			"allow": allowedTools,
+		},
+	}
+}
+
+// buildAllowedTools converts fab patterns to Claude Code allowedTools format.
+// Fab patterns use the format "prefix:*" for prefix matching.
+// Claude Code uses "Bash(prefix *)" for Bash command prefix matching.
+func (m *Manager) buildAllowedTools() []string {
+	var tools []string
+
+	for _, pattern := range m.allowedPatterns {
+		tool := convertPatternToClaudeCode(pattern)
+		if tool != "" {
+			tools = append(tools, tool)
+		}
+	}
+
+	return tools
+}
+
+// convertPatternToClaudeCode converts a fab permission pattern to Claude Code format.
+// Fab pattern syntax:
+//   - "prefix:*" matches commands starting with "prefix"
+//   - "exact" matches the exact string
+//
+// Claude Code format:
+//   - "Bash(prefix *)" matches Bash commands starting with "prefix"
+//   - "Bash(exact)" matches exact Bash command
+func convertPatternToClaudeCode(pattern string) string {
+	if pattern == "" {
+		return ""
+	}
+
+	// Handle prefix patterns (ends with :*)
+	if len(pattern) > 2 && pattern[len(pattern)-2:] == ":*" {
+		prefix := pattern[:len(pattern)-2]
+		return fmt.Sprintf("Bash(%s *)", prefix)
+	}
+
+	// Handle catch-all pattern
+	if pattern == ":*" {
+		return "Bash(*)"
+	}
+
+	// Exact match
+	return fmt.Sprintf("Bash(%s)", pattern)
+}
+
 // Start spawns the manager Claude Code instance.
 func (m *Manager) Start() error {
 	m.mu.Lock()
@@ -173,12 +235,22 @@ func (m *Manager) Start() error {
 	// Build system prompt that makes the manager fab-aware
 	systemPrompt := buildManagerSystemPrompt(fabPath)
 
+	// Build settings with allowed tools based on configured patterns
+	settings := m.buildSettings()
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		m.state = StateStopped
+		m.mu.Unlock()
+		return fmt.Errorf("marshal settings: %w", err)
+	}
+
 	// Build claude command
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "default",
+		"--settings", string(settingsJSON),
 		"-p", systemPrompt)
 	cmd.Dir = m.workDir
 

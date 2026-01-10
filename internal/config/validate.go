@@ -292,3 +292,18 @@ func ValidateRule(tool, action, pattern string, patterns []string, script string
 
 	return nil
 }
+
+// ValidateManagerAllowedPatterns validates manager allowed patterns.
+// Patterns must be non-empty strings. Empty array is valid (uses defaults).
+func ValidateManagerAllowedPatterns(patterns []string) error {
+	for i, p := range patterns {
+		if p == "" || strings.TrimSpace(p) == "" {
+			return &ValidationError{
+				Field:   fmt.Sprintf("manager.allowed_patterns[%d]", i),
+				Message: "cannot be empty",
+				Err:     ErrEmptyPatternElement,
+			}
+		}
+	}
+	return nil
+}

@@ -62,7 +62,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		permissions:   daemon.NewPermissionManager(PermissionTimeout),
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
-		manager:       manager.New(manager.DefaultWorkDir()),
+		manager:       manager.New(manager.DefaultWorkDir(), reg.ManagerAllowedPatterns()),
 	}
 
 	// Set up callback to start agent read loops when agent starts

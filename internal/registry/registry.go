@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
-	"github.com/tessro/fab/internal/config"
+	configPkg "github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -37,9 +37,18 @@ type ProjectEntry struct {
 	Path string `toml:"path,omitempty"`
 }
 
+// ManagerConfig represents the manager agent configuration.
+type ManagerConfig struct {
+	// AllowedPatterns are Bash command patterns the manager can run without prompting.
+	// Uses the same pattern syntax as permissions.toml (e.g., "fab:*" for prefix match).
+	// Defaults to ["fab:*"] if not specified.
+	AllowedPatterns []string `toml:"allowed_patterns,omitempty"`
+}
+
 // Config represents the fab configuration file.
 type Config struct {
 	Projects []ProjectEntry `toml:"projects"`
+	Manager  *ManagerConfig `toml:"manager,omitempty"`
 }
 
 // Registry manages the persistent collection of projects.
@@ -48,7 +57,9 @@ type Registry struct {
 	projectBaseDir string // Base directory for project storage (testing only)
 	// +checklocks:mu
 	projects map[string]*project.Project
-	mu       sync.RWMutex
+	// +checklocks:mu
+	managerConfig *ManagerConfig
+	mu            sync.RWMutex
 }
 
 // New creates a new Registry with the default config path.
@@ -110,6 +121,14 @@ func (r *Registry) load() error {
 		r.projects[entry.Name] = p
 	}
 
+	// Validate and store manager config
+	if config.Manager != nil && len(config.Manager.AllowedPatterns) > 0 {
+		if err := configPkg.ValidateManagerAllowedPatterns(config.Manager.AllowedPatterns); err != nil {
+			return err
+		}
+	}
+	r.managerConfig = config.Manager
+
 	return nil
 }
 
@@ -151,7 +170,7 @@ func (r *Registry) save() error {
 // If name is empty, it defaults to the repository name from the URL.
 func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*project.Project, error) {
 	// Validate remote URL
-	if err := config.ValidateRemoteURL(remoteURL); err != nil {
+	if err := configPkg.ValidateRemoteURL(remoteURL); err != nil {
 		return nil, ErrInvalidRemoteURL
 	}
 
@@ -161,7 +180,7 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*
 	}
 
 	// Validate project name
-	if err := config.ValidateProjectName(name); err != nil {
+	if err := configPkg.ValidateProjectName(name); err != nil {
 		return nil, err
 	}
 
@@ -171,7 +190,7 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*
 	}
 
 	// Validate max agents
-	if err := config.ValidateMaxAgents(maxAgents); err != nil {
+	if err := configPkg.ValidateMaxAgents(maxAgents); err != nil {
 		return nil, err
 	}
 
@@ -252,7 +271,7 @@ func (r *Registry) List() []*project.Project {
 func (r *Registry) Update(name string, maxAgents *int, autostart *bool) error {
 	// Validate max agents if provided
 	if maxAgents != nil {
-		if err := config.ValidateMaxAgents(*maxAgents); err != nil {
+		if err := configPkg.ValidateMaxAgents(*maxAgents); err != nil {
 			return err
 		}
 	}
@@ -285,4 +304,19 @@ func (r *Registry) Count() int {
 // ConfigPath returns the path to the config file.
 func (r *Registry) ConfigPath() string {
 	return r.configPath
+}
+
+// DefaultManagerAllowedPatterns returns the default allowed patterns for the manager.
+var DefaultManagerAllowedPatterns = []string{"fab:*"}
+
+// ManagerAllowedPatterns returns the configured allowed patterns for the manager.
+// Returns default patterns (fab:*) if no manager config is specified.
+func (r *Registry) ManagerAllowedPatterns() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.managerConfig != nil && len(r.managerConfig.AllowedPatterns) > 0 {
+		return r.managerConfig.AllowedPatterns
+	}
+	return DefaultManagerAllowedPatterns
 }
