@@ -75,6 +75,10 @@ type Planner struct {
 	// +checklocks:mu
 	planFile string
 
+	// User-set description for the planner
+	// +checklocks:mu
+	description string
+
 	// Callbacks
 	// +checklocks:mu
 	onStateChange func(old, new State)
@@ -146,6 +150,13 @@ func (p *Planner) PlanFile() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.planFile
+}
+
+// SetDescription sets the planner's description.
+func (p *Planner) SetDescription(desc string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.description = desc
 }
 
 // OnStateChange sets a callback for state changes.
@@ -636,23 +647,25 @@ func (p *Planner) Info() PlannerInfo {
 	defer p.mu.RUnlock()
 
 	return PlannerInfo{
-		ID:        p.id,
-		Project:   p.project,
-		State:     p.state,
-		WorkDir:   p.workDir,
-		StartedAt: p.startedAt,
-		PlanFile:  p.planFile,
+		ID:          p.id,
+		Project:     p.project,
+		State:       p.state,
+		WorkDir:     p.workDir,
+		StartedAt:   p.startedAt,
+		PlanFile:    p.planFile,
+		Description: p.description,
 	}
 }
 
 // PlannerInfo is a read-only snapshot of planner state.
 type PlannerInfo struct {
-	ID        string
-	Project   string
-	State     State
-	WorkDir   string
-	StartedAt time.Time
-	PlanFile  string
+	ID          string
+	Project     string
+	State       State
+	WorkDir     string
+	StartedAt   time.Time
+	PlanFile    string
+	Description string
 }
 
 // buildPlanModePrompt creates the prompt for the planning agent.

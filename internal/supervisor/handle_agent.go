@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
@@ -275,7 +276,7 @@ func (s *Supervisor) handleAgentChatHistory(ctx context.Context, req *daemon.Req
 	})
 }
 
-// handleAgentDescribe sets the description for an agent.
+// handleAgentDescribe sets the description for an agent or planner.
 func (s *Supervisor) handleAgentDescribe(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var descReq daemon.AgentDescribeRequest
 	if err := unmarshalPayload(req.Payload, &descReq); err != nil {
@@ -286,6 +287,25 @@ func (s *Supervisor) handleAgentDescribe(ctx context.Context, req *daemon.Reques
 		return errorResponse(req, "agent_id is required")
 	}
 
+	// Check if this is a planner (agent ID starts with "plan:")
+	if strings.HasPrefix(descReq.AgentID, "plan:") {
+		plannerID := strings.TrimPrefix(descReq.AgentID, "plan:")
+		p, err := s.planners.Get(plannerID)
+		if err != nil {
+			return errorResponse(req, fmt.Sprintf("planner not found: %s", descReq.AgentID))
+		}
+
+		p.SetDescription(descReq.Description)
+
+		slog.Info("planner description set",
+			"planner", descReq.AgentID,
+			"description", descReq.Description,
+		)
+
+		return successResponse(req, nil)
+	}
+
+	// Regular agent lookup
 	a, err := s.agents.Get(descReq.AgentID)
 	if err != nil {
 		return errorResponse(req, fmt.Sprintf("agent not found: %s", descReq.AgentID))
