@@ -344,11 +344,12 @@ func (l AgentList) stateIcon(agentID, state string) string {
 		// Animated spinner for starting state
 		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "running":
-		// Manager and planner agents don't spin when running - they're idle waiting for input
-		if isManagerAgent(agentID) || isPlannerAgent(agentID) {
+		// Manager agents don't spin when running - they're idle waiting for input
+		// Planner agents DO spin because they actively work on their initial prompt
+		if isManagerAgent(agentID) {
 			return "○"
 		}
-		// Animated spinner for active agents
+		// Animated spinner for active agents (including planners)
 		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "idle":
 		return "○"

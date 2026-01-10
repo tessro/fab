@@ -236,15 +236,19 @@ func (p *Planner) Start() error {
 		return fmt.Errorf("marshal settings: %w", err)
 	}
 
-	// Build claude command with plan mode
-	// Use -p to pass the initial prompt with plan mode instruction
+	// Build claude command
+	// Use -p to pass the initial prompt with planning instructions
+	// Note: We use "default" permission mode, not "plan" mode, because:
+	// - Claude Code's "plan" mode blocks all non-readonly operations
+	// - The planner needs to run fab commands (issue create, agent done)
+	// - The fab hook system handles permission control
 	planPrompt := buildPlanModePrompt(p.prompt, p.id)
 
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--verbose",
-		"--permission-mode", "plan",
+		"--permission-mode", "default",
 		"--plugin-dir", plugin.DefaultInstallDir(),
 		"--settings", string(settingsJSON),
 		"-p", planPrompt)
@@ -554,7 +558,9 @@ type PlannerInfo struct {
 	PlanFile  string
 }
 
-// buildPlanModePrompt creates the prompt for plan mode with instructions.
+// buildPlanModePrompt creates the prompt for the planning agent.
+// The planner receives instructions to explore the codebase, create issues,
+// and write a plan summary before completing via 'fab agent done'.
 func buildPlanModePrompt(userPrompt, plannerID string) string {
 	return fmt.Sprintf(`You are a Product Manager planning agent. Your job is to break down high-level features into detailed, actionable engineering tasks.
 
