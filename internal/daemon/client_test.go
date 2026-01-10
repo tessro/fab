@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -297,15 +296,17 @@ func TestClient_StartStop(t *testing.T) {
 	handler := HandlerFunc(func(ctx context.Context, req *Request) *Response {
 		switch req.Type {
 		case MsgStart:
-			var payload StartRequest
-			data, _ := json.Marshal(req.Payload)
-			_ = json.Unmarshal(data, &payload)
+			payload, err := decodePayload[StartRequest](req.Payload)
+			if err != nil {
+				return &Response{Success: false, Error: err.Error()}
+			}
 			lastStart = payload.Project
 			return &Response{Success: true}
 		case MsgStop:
-			var payload StopRequest
-			data, _ := json.Marshal(req.Payload)
-			_ = json.Unmarshal(data, &payload)
+			payload, err := decodePayload[StopRequest](req.Payload)
+			if err != nil {
+				return &Response{Success: false, Error: err.Error()}
+			}
 			lastStop = payload.Project
 			return &Response{Success: true}
 		}
@@ -512,10 +513,9 @@ func TestClient_AttachDetach(t *testing.T) {
 
 		switch req.Type {
 		case MsgAttach:
-			var payload AttachRequest
-			if req.Payload != nil {
-				data, _ := json.Marshal(req.Payload)
-				_ = json.Unmarshal(data, &payload)
+			payload, err := decodePayload[AttachRequest](req.Payload)
+			if err != nil {
+				return &Response{Success: false, Error: err.Error()}
 			}
 			srv.Attach(conn, payload.Projects, encoder, writeMu)
 			return &Response{Success: true}
