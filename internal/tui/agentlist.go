@@ -157,17 +157,11 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 		taskStr = agentTaskStyle.Inherit(rowStyle).Render(agent.Task)
 	}
 
-	// Description (if any) - inherit background from row style
-	descStr := ""
-	if agent.Description != "" {
-		descStr = agentDescriptionStyle.Inherit(rowStyle).Render(agent.Description)
-	}
-
 	// Duration since started - inherit background from row style
 	duration := time.Since(agent.StartedAt).Truncate(time.Second)
 	durationStr := agentDurationStyle.Inherit(rowStyle).Render(formatDuration(duration))
 
-	// Compose the row
+	// Compose the left part (without description first)
 	left := lipgloss.JoinHorizontal(lipgloss.Center,
 		stateStr, " ",
 		idStr, " ",
@@ -176,13 +170,20 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	if taskStr != "" {
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", taskStr)
 	}
-	if descStr != "" {
+
+	// Calculate available width for description and add it if present
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(durationStr)
+	// Reserve space for: left content, space before desc, desc, min spacer (1), duration, padding (4)
+	availableForDesc := l.width - leftWidth - rightWidth - 4 - 1 - 1 // -1 for space before desc, -1 for min spacer
+	if agent.Description != "" && availableForDesc > 3 {
+		desc := truncateDescription(agent.Description, availableForDesc)
+		descStr := agentDescriptionStyle.Inherit(rowStyle).Render(desc)
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", descStr)
+		leftWidth = lipgloss.Width(left)
 	}
 
 	// Right-align duration - the spacer needs the row background too
-	leftWidth := lipgloss.Width(left)
-	rightWidth := lipgloss.Width(durationStr)
 	spacerWidth := l.width - leftWidth - rightWidth - 4 // padding
 	if spacerWidth < 1 {
 		spacerWidth = 1
@@ -249,4 +250,19 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	}
 	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// truncateDescription truncates a description to fit within maxLen characters.
+func truncateDescription(desc string, maxLen int) string {
+	// Replace newlines with spaces for single-line display
+	desc = strings.ReplaceAll(desc, "\n", " ")
+	desc = strings.TrimSpace(desc)
+
+	if maxLen < 10 {
+		maxLen = 10
+	}
+	if len(desc) > maxLen {
+		return desc[:maxLen-3] + "..."
+	}
+	return desc
 }
