@@ -40,8 +40,8 @@ func DefaultKeyBindings() KeyBindings {
 			key.WithHelp("tab", "switch pane"),
 		),
 		FocusChat: key.NewBinding(
-			key.WithKeys("i"),
-			key.WithHelp("i", "input"),
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "input"),
 		),
 		Reconnect: key.NewBinding(
 			key.WithKeys("r"),
