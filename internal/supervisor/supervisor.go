@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/issue"
 	"github.com/tessro/fab/internal/issue/gh"
 	"github.com/tessro/fab/internal/issue/tk"
+	"github.com/tessro/fab/internal/llmauth"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/planner"
@@ -60,6 +62,9 @@ type Supervisor struct {
 	// +checklocks:mu
 	server *daemon.Server // Server reference for broadcasting output events
 
+	// Global config for LLM auth settings
+	globalConfig *config.GlobalConfig
+
 	mu sync.RWMutex
 }
 
@@ -70,6 +75,12 @@ const PermissionTimeout = 5 * time.Minute
 func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 	// Load manager allowed patterns from global permissions.toml
 	managerPatterns := loadManagerPatterns()
+
+	// Load global config for LLM auth settings
+	globalCfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		slog.Warn("failed to load global config", "error", err)
+	}
 
 	s := &Supervisor{
 		registry:        reg,
@@ -83,6 +94,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		managerPatterns: managerPatterns,
 		managers:        make(map[string]*manager.Manager),
 		planners:        planner.NewManager(),
+		globalConfig:    globalCfg,
 	}
 
 	// Set up callback to start agent read loops when agent starts
@@ -537,7 +549,7 @@ func (s *Supervisor) handleProjectConfigGet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(getReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend)", getReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, llm-auth)", getReq.Key))
 	}
 
 	value, err := s.registry.GetConfigValue(getReq.Name, registry.ConfigKey(getReq.Key))
@@ -567,7 +579,7 @@ func (s *Supervisor) handleProjectConfigSet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(setReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend)", setReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, llm-auth)", setReq.Key))
 	}
 
 	if err := s.registry.SetConfigValue(setReq.Name, registry.ConfigKey(setReq.Key), setReq.Value); err != nil {
@@ -1423,8 +1435,9 @@ func (s *Supervisor) handleRejectAction(_ context.Context, req *daemon.Request) 
 }
 
 // handlePermissionRequest handles a permission request from the hook command.
-// This blocks until a TUI client responds via permission.respond.
-func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Request) *daemon.Response {
+// This blocks until a TUI client responds via permission.respond, or if LLM auth
+// is enabled for the project, uses LLM to make the decision automatically.
+func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Request) *daemon.Response {
 	var permReq daemon.PermissionRequestPayload
 	if err := unmarshalPayload(req.Payload, &permReq); err != nil {
 		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
@@ -1434,25 +1447,65 @@ func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Requ
 		return errorResponse(req, "tool_name is required")
 	}
 
-	// Find the project for this agent
-	var project string
+	// Find the project and agent for this request
+	var projectName string
+	var agentTask string
+	var conversationCtx []string
+	var proj *project.Project
+
 	if permReq.AgentID != "" {
 		if a, err := s.agents.Get(permReq.AgentID); err == nil {
-			project = a.Info().Project
+			info := a.Info()
+			projectName = info.Project
+			agentTask = info.Description
+			if agentTask == "" {
+				agentTask = info.Task
+			}
+
+			// Get recent conversation history for context
+			entries := a.History().Entries(10) // Last 10 entries
+			for _, e := range entries {
+				if e.Role == "assistant" && e.Content != "" {
+					conversationCtx = append(conversationCtx, fmt.Sprintf("Assistant: %s", truncate(e.Content, 500)))
+				} else if e.Role == "user" && e.Content != "" {
+					conversationCtx = append(conversationCtx, fmt.Sprintf("User: %s", truncate(e.Content, 500)))
+				}
+			}
+
+			// Look up project to check LLM auth setting
+			proj, _ = s.registry.Get(projectName)
 		}
 	}
 
 	slog.Info("permission request received",
 		"agent", permReq.AgentID,
-		"project", project,
+		"project", projectName,
 		"tool", permReq.ToolName,
 		"input", string(permReq.ToolInput),
 	)
 
-	// Create the permission request
+	// Check if LLM auth is enabled for this project
+	if proj != nil && proj.LLMAuth {
+		resp := s.handleLLMAuth(ctx, permReq, projectName, agentTask, conversationCtx)
+		if resp != nil {
+			return successResponse(req, resp)
+		}
+		// LLM auth failed (e.g., no API key, API error) - block instead of falling back to TUI
+		// In LLM auth mode, permission prompts should never be shown in TUI
+		slog.Warn("LLM auth failed, blocking operation",
+			"agent", permReq.AgentID,
+			"project", projectName,
+		)
+		return successResponse(req, &daemon.PermissionResponse{
+			Behavior: "deny",
+			Message:  "LLM authorization failed - operation blocked",
+		})
+	}
+
+	// Create the permission request for TUI
 	permissionReq := &daemon.PermissionRequest{
 		AgentID:     permReq.AgentID,
-		Project:     project,
+		Project:     projectName,
 		ToolName:    permReq.ToolName,
 		ToolInput:   permReq.ToolInput,
 		ToolUseID:   permReq.ToolUseID,
@@ -1488,6 +1541,99 @@ func (s *Supervisor) handlePermissionRequest(_ context.Context, req *daemon.Requ
 	)
 
 	return successResponse(req, resp)
+}
+
+// handleLLMAuth uses the LLM to authorize a permission request.
+// Returns the response if successful, nil if authorization failed and should fall back to TUI.
+func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.PermissionRequestPayload, projectName, agentTask string, conversationCtx []string) *daemon.PermissionResponse {
+	// Get the API key for the configured provider
+	provider := s.globalConfig.GetLLMAuthProvider()
+	apiKey := s.globalConfig.GetAPIKey(provider)
+
+	// Also check environment variables as fallback
+	if apiKey == "" {
+		switch provider {
+		case "anthropic":
+			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		case "openai":
+			apiKey = os.Getenv("OPENAI_API_KEY")
+		}
+	}
+
+	if apiKey == "" {
+		slog.Warn("LLM auth enabled but no API key configured",
+			"provider", provider,
+			"project", projectName,
+		)
+		return nil
+	}
+
+	// Create the authorizer
+	auth := llmauth.New(llmauth.Config{
+		Provider: llmauth.Provider(provider),
+		Model:    s.globalConfig.GetLLMAuthModel(),
+		APIKey:   apiKey,
+	})
+
+	// Build the authorization request
+	authReq := llmauth.Request{
+		ToolName:        permReq.ToolName,
+		ToolInput:       string(permReq.ToolInput),
+		AgentTask:       agentTask,
+		ConversationCtx: conversationCtx,
+	}
+
+	// Call the LLM
+	result, err := auth.Authorize(ctx, authReq)
+	if err != nil {
+		slog.Error("LLM authorization failed",
+			"error", err,
+			"project", projectName,
+			"tool", permReq.ToolName,
+		)
+		return nil
+	}
+
+	// Log the decision (excluding conversation history for brevity)
+	slog.Info("LLM permission decision",
+		"project", projectName,
+		"agent", permReq.AgentID,
+		"tool", permReq.ToolName,
+		"input", truncate(string(permReq.ToolInput), 200),
+		"decision", result.Decision,
+	)
+
+	// Convert decision to response
+	switch result.Decision {
+	case llmauth.DecisionSafe:
+		return &daemon.PermissionResponse{
+			Behavior: "allow",
+		}
+	case llmauth.DecisionUnsafe:
+		return &daemon.PermissionResponse{
+			Behavior: "deny",
+			Message:  "Blocked by LLM authorization: operation deemed unsafe",
+		}
+	case llmauth.DecisionUnsure:
+		// For unsure decisions, we block (fail-safe)
+		return &daemon.PermissionResponse{
+			Behavior: "deny",
+			Message:  "Blocked by LLM authorization: unable to determine safety",
+		}
+	default:
+		return nil
+	}
+}
+
+// truncate shortens a string to maxLen characters, adding "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 // handlePermissionRespond handles a permission response from the TUI.

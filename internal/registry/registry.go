@@ -36,6 +36,7 @@ type ProjectEntry struct {
 	IssueBackend   string   `toml:"issue_backend,omitempty"`   // "tk" (default), "linear", "github", "gh"
 	AllowedAuthors []string `toml:"allowed_authors,omitempty"` // GitHub usernames allowed to create issues
 	Autostart      bool     `toml:"autostart,omitempty"`       // Start orchestration when daemon starts
+	LLMAuth        bool     `toml:"llm_auth,omitempty"`        // Use LLM-based permission authorization
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 }
@@ -113,6 +114,7 @@ func (r *Registry) load() error {
 			p.AllowedAuthors = entry.AllowedAuthors
 		}
 		p.Autostart = entry.Autostart
+		p.LLMAuth = entry.LLMAuth
 		r.projects[entry.Name] = p
 	}
 
@@ -141,6 +143,7 @@ func (r *Registry) save() error {
 			IssueBackend:   p.IssueBackend,
 			AllowedAuthors: p.AllowedAuthors,
 			Autostart:      p.Autostart,
+			LLMAuth:        p.LLMAuth,
 		})
 	}
 
@@ -291,11 +294,12 @@ const (
 	ConfigKeyAutostart      ConfigKey = "autostart"
 	ConfigKeyIssueBackend   ConfigKey = "issue-backend"
 	ConfigKeyAllowedAuthors ConfigKey = "allowed-authors"
+	ConfigKeyLLMAuth        ConfigKey = "llm-auth"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyLLMAuth}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -331,6 +335,8 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 		return backend, nil
 	case ConfigKeyAllowedAuthors:
 		return p.AllowedAuthors, nil
+	case ConfigKeyLLMAuth:
+		return p.LLMAuth, nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -356,6 +362,7 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		string(ConfigKeyAutostart):      p.Autostart,
 		string(ConfigKeyIssueBackend):   issueBackend,
 		string(ConfigKeyAllowedAuthors): p.AllowedAuthors,
+		string(ConfigKeyLLMAuth):        p.LLMAuth,
 	}, nil
 }
 
@@ -402,6 +409,12 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			}
 			p.AllowedAuthors = authors
 		}
+	case ConfigKeyLLMAuth:
+		llmAuth, err := strconv.ParseBool(value)
+		if err != nil {
+			return errors.New("invalid value for llm-auth: must be true or false")
+		}
+		p.LLMAuth = llmAuth
 	default:
 		return errors.New("invalid configuration key")
 	}
