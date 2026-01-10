@@ -279,9 +279,10 @@ func GetCurrentBillingWindow() BillingWindow {
 
 	// No active blocks - return a window ending now with no usage
 	now := time.Now().UTC()
+	start := floorToHour(now.Add(-sessionDuration))
 	return BillingWindow{
-		Start: now.Add(-sessionDuration),
-		End:   now,
+		Start: start,
+		End:   start.Add(sessionDuration),
 	}
 }
 
