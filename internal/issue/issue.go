@@ -1,7 +1,14 @@
 // Package issue provides a pluggable backend interface for issue tracking.
 package issue
 
-import "time"
+import (
+	"io"
+	"os"
+	"time"
+)
+
+// Stderr is the writer for warning messages. Defaults to os.Stderr.
+var Stderr io.Writer = os.Stderr
 
 // Status represents the state of an issue.
 type Status string
