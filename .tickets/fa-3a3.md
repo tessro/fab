@@ -1,6 +1,6 @@
 ---
 id: fa-3a3
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-06T22:37:10.739266-08:00
