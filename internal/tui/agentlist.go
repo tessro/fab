@@ -122,26 +122,32 @@ func (l AgentList) View() string {
 func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	isSelected := index == l.selected
 
-	// State indicator with color
-	stateIcon := l.stateIcon(agent.ID, agent.State)
-	stateStyle := l.stateStyle(agent.ID, agent.State)
-	stateStr := stateStyle.Render(stateIcon)
-
-	// Agent ID
-	idStr := agentIDStyle.Render(agent.ID)
-
-	// Project name
-	projectStr := agentProjectStyle.Render(agent.Project)
-
-	// Task (if any)
-	taskStr := ""
-	if agent.Task != "" {
-		taskStr = agentTaskStyle.Render(agent.Task)
+	// Get row style based on selection
+	rowStyle := agentRowStyle
+	if isSelected {
+		rowStyle = agentRowSelectedStyle
 	}
 
-	// Duration since started
+	// State indicator with color - inherit background from row style
+	stateIcon := l.stateIcon(agent.ID, agent.State)
+	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(rowStyle)
+	stateStr := stateStyle.Render(stateIcon)
+
+	// Agent ID - inherit background from row style
+	idStr := agentIDStyle.Inherit(rowStyle).Render(agent.ID)
+
+	// Project name - inherit background from row style
+	projectStr := agentProjectStyle.Inherit(rowStyle).Render(agent.Project)
+
+	// Task (if any) - inherit background from row style
+	taskStr := ""
+	if agent.Task != "" {
+		taskStr = agentTaskStyle.Inherit(rowStyle).Render(agent.Task)
+	}
+
+	// Duration since started - inherit background from row style
 	duration := time.Since(agent.StartedAt).Truncate(time.Second)
-	durationStr := agentDurationStyle.Render(formatDuration(duration))
+	durationStr := agentDurationStyle.Inherit(rowStyle).Render(formatDuration(duration))
 
 	// Compose the row
 	left := lipgloss.JoinHorizontal(lipgloss.Center,
@@ -153,22 +159,19 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", taskStr)
 	}
 
-	// Right-align duration
+	// Right-align duration - the spacer needs the row background too
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(durationStr)
 	spacerWidth := l.width - leftWidth - rightWidth - 4 // padding
 	if spacerWidth < 1 {
 		spacerWidth = 1
 	}
-	spacer := strings.Repeat(" ", spacerWidth)
+	spacer := rowStyle.Render(strings.Repeat(" ", spacerWidth))
 
 	row := left + spacer + durationStr
 
-	// Apply selection styling
-	if isSelected {
-		return agentRowSelectedStyle.Width(l.width).Render(row)
-	}
-	return agentRowStyle.Width(l.width).Render(row)
+	// Apply row styling with full width
+	return rowStyle.Width(l.width).Render(row)
 }
 
 // stateIcon returns an icon for the agent state.
