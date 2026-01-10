@@ -459,11 +459,13 @@ func (m *Manager) runReadLoop() {
 	}
 
 	// Scanner finished - process likely exited
-	m.mu.Lock()
-	if m.state == StateRunning {
-		m.state = StateStopped
+	m.mu.RLock()
+	wasRunning := m.state == StateRunning
+	m.mu.RUnlock()
+
+	if wasRunning {
+		m.setState(StateStopped)
 	}
-	m.mu.Unlock()
 }
 
 // buildManagerSystemPrompt creates the system prompt for the manager agent.

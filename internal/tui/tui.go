@@ -1101,13 +1101,62 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		}
 
 	case "manager_state":
-		// Manager agent state changed - update in the agent list
+		// Manager agent state changed - add/remove/update in the agent list
 		agents := m.agentList.Agents()
+
+		// Find manager in the current list
+		managerIndex := -1
 		for i := range agents {
 			if agents[i].ID == ManagerAgentID {
-				agents[i].State = event.ManagerState
-				m.agentList.SetAgents(agents)
+				managerIndex = i
 				break
+			}
+		}
+
+		switch event.ManagerState {
+		case "stopped":
+			// Remove manager from the list when stopped
+			if managerIndex >= 0 {
+				wasSelected := m.chatView.AgentID() == ManagerAgentID
+				agents = append(agents[:managerIndex], agents[managerIndex+1:]...)
+				m.agentList.SetAgents(agents)
+				// If manager was selected, select the next agent
+				if wasSelected {
+					m.chatView.ClearAgent()
+					if len(agents) > 0 {
+						return m.selectCurrentAgent()
+					}
+				}
+			}
+		case "starting", "running":
+			// Add manager to the list if not present
+			if managerIndex < 0 {
+				startedAt := time.Now() // fallback
+				if event.StartedAt != "" {
+					if t, err := time.Parse(time.RFC3339, event.StartedAt); err == nil {
+						startedAt = t
+					}
+				}
+				// Prepend manager as first entry
+				managerAgent := daemon.AgentStatus{
+					ID:          ManagerAgentID,
+					Project:     "manager",
+					State:       event.ManagerState,
+					StartedAt:   startedAt,
+					Description: "Manager",
+				}
+				agents = append([]daemon.AgentStatus{managerAgent}, agents...)
+				m.agentList.SetAgents(agents)
+			} else {
+				// Update existing manager state
+				agents[managerIndex].State = event.ManagerState
+				m.agentList.SetAgents(agents)
+			}
+		default:
+			// Update state for other transitions (stopping, etc.)
+			if managerIndex >= 0 {
+				agents[managerIndex].State = event.ManagerState
+				m.agentList.SetAgents(agents)
 			}
 		}
 		m.header.SetAgentCounts(len(agents), countRunning(agents))

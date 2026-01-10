@@ -1864,16 +1864,24 @@ func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Req
 func (s *Supervisor) broadcastManagerState(state manager.State) {
 	s.mu.RLock()
 	srv := s.server
+	mgr := s.manager
 	s.mu.RUnlock()
 
 	if srv == nil {
 		return
 	}
 
-	srv.Broadcast(&daemon.StreamEvent{
+	event := &daemon.StreamEvent{
 		Type:         "manager_state",
 		ManagerState: string(state),
-	})
+	}
+
+	// Include StartedAt when manager starts so TUI can add it to the agent list
+	if state == manager.StateStarting {
+		event.StartedAt = mgr.StartedAt().Format(time.RFC3339)
+	}
+
+	srv.Broadcast(event)
 }
 
 // broadcastManagerChatEntry sends a manager chat entry to attached clients.
