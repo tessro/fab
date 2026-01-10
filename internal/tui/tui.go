@@ -1205,7 +1205,9 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 // syncFocusToComponents updates component focus states to match the ModeState focus.
 func (m *Model) syncFocusToComponents(focus Focus) {
 	m.agentList.SetFocused(focus == FocusAgentList)
-	m.chatView.SetFocused(focus == FocusChatView)
+	// Chat view should remain visually focused when input line has focus,
+	// since the input is part of the chat pane.
+	m.chatView.SetFocused(focus == FocusChatView || focus == FocusInputLine)
 	m.inputLine.SetFocused(focus == FocusInputLine)
 
 	if focus == FocusInputLine {
