@@ -842,6 +842,15 @@ func (s *Supervisor) handleAgentEvent(event agent.Event) {
 			Project: info.Project,
 			State:   string(event.NewState),
 		}
+	case agent.EventInfoChanged:
+		info := event.Agent.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:        "info",
+			AgentID:     info.ID,
+			Project:     info.Project,
+			Task:        info.Task,
+			Description: info.Description,
+		}
 	case agent.EventDeleted:
 		info := event.Agent.Info()
 		streamEvent = &daemon.StreamEvent{

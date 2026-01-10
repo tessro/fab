@@ -24,6 +24,7 @@ type EventType string
 const (
 	EventCreated      EventType = "created"
 	EventStateChanged EventType = "state_changed"
+	EventInfoChanged  EventType = "info_changed"
 	EventDeleted      EventType = "deleted"
 )
 
@@ -189,6 +190,20 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 			Agent:    agent,
 			OldState: old,
 			NewState: new,
+		})
+	})
+
+	// Register info change callback to emit events when task/description changes
+	agent.OnInfoChange(func() {
+		slog.Debug("agent info changed",
+			"agent", agent.ID,
+			"project", proj.Name,
+			"task", agent.GetTask(),
+			"description", agent.GetDescription(),
+		)
+		m.emit(Event{
+			Type:  EventInfoChanged,
+			Agent: agent,
 		})
 	})
 

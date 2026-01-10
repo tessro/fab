@@ -918,6 +918,18 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		}
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
 
+	case "info":
+		// Update agent task/description in the list
+		agents := m.agentList.Agents()
+		for i := range agents {
+			if agents[i].ID == event.AgentID {
+				agents[i].Task = event.Task
+				agents[i].Description = event.Description
+				m.agentList.SetAgents(agents)
+				break
+			}
+		}
+
 	case "created":
 		// A new agent was created - add to list with proper StartedAt
 		agents := m.agentList.Agents()

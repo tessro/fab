@@ -113,6 +113,8 @@ type Agent struct {
 	mu sync.RWMutex
 	// +checklocks:mu
 	onStateChange func(old, new State) // Optional callback for state changes
+	// +checklocks:mu
+	onInfoChange func() // Optional callback for task/description changes
 
 	// Read loop management (channels are goroutine-safe: created before goroutine, closed to signal)
 	readLoopStop chan struct{} // Signals read loop to stop
@@ -176,9 +178,15 @@ func (a *Agent) IsManualMode() bool {
 // SetTask sets the current task ID.
 func (a *Agent) SetTask(taskID string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.Task = taskID
 	a.UpdatedAt = time.Now()
+	callback := a.onInfoChange
+	a.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock
+	if callback != nil {
+		callback()
+	}
 }
 
 // GetTask returns the current task ID.
@@ -191,9 +199,15 @@ func (a *Agent) GetTask() string {
 // SetDescription sets the agent's description.
 func (a *Agent) SetDescription(desc string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.Description = desc
 	a.UpdatedAt = time.Now()
+	callback := a.onInfoChange
+	a.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock
+	if callback != nil {
+		callback()
+	}
 }
 
 // GetDescription returns the agent's description.
@@ -257,6 +271,13 @@ func (a *Agent) OnStateChange(fn func(old, new State)) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.onStateChange = fn
+}
+
+// OnInfoChange sets a callback that's invoked when task or description changes.
+func (a *Agent) OnInfoChange(fn func()) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onInfoChange = fn
 }
 
 // MarkRunning transitions to Running state.
