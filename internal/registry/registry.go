@@ -82,7 +82,18 @@ func coalesceStringSlice(values ...[]string) []string {
 }
 
 // Config represents the fab configuration file.
+// This includes all known fields to preserve them when saving.
 type Config struct {
+	// LogLevel is preserved from global config.
+	LogLevel string `toml:"log_level,omitempty"`
+
+	// Providers is preserved from global config.
+	Providers map[string]any `toml:"providers,omitempty"`
+
+	// LLMAuth is preserved from global config.
+	LLMAuth map[string]any `toml:"llm_auth,omitempty"`
+
+	// Projects is the list of registered projects.
 	Projects []ProjectEntry `toml:"projects"`
 }
 
@@ -92,7 +103,10 @@ type Registry struct {
 	projectBaseDir string // Base directory for project storage (testing only)
 	// +checklocks:mu
 	projects map[string]*project.Project
-	mu       sync.RWMutex
+	// globalConfig holds non-project config fields to preserve when saving.
+	// +checklocks:mu
+	globalConfig *Config
+	mu           sync.RWMutex
 }
 
 // New creates a new Registry with the default config path.
@@ -130,6 +144,7 @@ func (r *Registry) SetProjectBaseDir(baseDir string) {
 // load reads the config file and populates the registry.
 // It supports both hyphen-format keys (e.g., "remote-url") and legacy underscore-format
 // keys (e.g., "remote_url") for backwards compatibility. Hyphen-format takes precedence.
+// It also preserves non-project config fields (log_level, providers, llm_auth) for saving.
 func (r *Registry) load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -137,6 +152,13 @@ func (r *Registry) load() error {
 	var config Config
 	if _, err := toml.DecodeFile(r.configPath, &config); err != nil {
 		return err
+	}
+
+	// Preserve global config fields for saving
+	r.globalConfig = &Config{
+		LogLevel:  config.LogLevel,
+		Providers: config.Providers,
+		LLMAuth:   config.LLMAuth,
 	}
 
 	for _, entry := range config.Projects {
@@ -171,6 +193,8 @@ func (r *Registry) load() error {
 }
 
 // save writes the current registry state to the config file.
+// It preserves non-project config fields (log_level, providers, llm_auth) that were
+// loaded from the file, so that saving projects doesn't erase other configuration.
 //
 // +checklocks:r.mu
 func (r *Registry) save() error {
@@ -180,8 +204,14 @@ func (r *Registry) save() error {
 		return err
 	}
 
+	// Start with preserved global config fields if available
 	config := Config{
 		Projects: make([]ProjectEntry, 0, len(r.projects)),
+	}
+	if r.globalConfig != nil {
+		config.LogLevel = r.globalConfig.LogLevel
+		config.Providers = r.globalConfig.Providers
+		config.LLMAuth = r.globalConfig.LLMAuth
 	}
 
 	for _, p := range r.projects {

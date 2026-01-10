@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tessro/fab/internal/project"
@@ -420,6 +421,130 @@ permissions_checker = "manual"
 	}
 	if p.PermissionsChecker != "llm" {
 		t.Errorf("PermissionsChecker = %q, want llm (hyphen version)", p.PermissionsChecker)
+	}
+}
+
+func TestRegistry_SavePreservesGlobalConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Write a config file with global config and projects
+	initialConfig := `log_level = "debug"
+
+[providers]
+[providers.anthropic]
+api-key = "sk-secret-key"
+
+[llm_auth]
+provider = "anthropic"
+model = "claude-haiku-4-5-20250514"
+
+[[projects]]
+name = "existing-project"
+remote-url = "git@github.com:user/existing.git"
+max-agents = 2
+`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Load the registry
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Verify existing project was loaded
+	if r.Count() != 1 {
+		t.Fatalf("Count() = %d, want 1", r.Count())
+	}
+
+	// Add a new project (this triggers save)
+	_, err = r.Add("git@github.com:user/new-project.git", "new-project", 3, false)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Read back the config file
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	configStr := string(content)
+
+	// Verify global config was preserved
+	if !strings.Contains(configStr, `log_level = "debug"`) {
+		t.Errorf("Config should contain log_level = debug, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `api-key = "sk-secret-key"`) {
+		t.Errorf("Config should contain api-key = sk-secret-key, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `provider = "anthropic"`) {
+		t.Errorf("Config should contain provider = anthropic, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `model = "claude-haiku-4-5-20250514"`) {
+		t.Errorf("Config should contain model = claude-haiku, got:\n%s", configStr)
+	}
+
+	// Verify both projects are present
+	if !strings.Contains(configStr, `name = "existing-project"`) {
+		t.Errorf("Config should contain existing-project, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `name = "new-project"`) {
+		t.Errorf("Config should contain new-project, got:\n%s", configStr)
+	}
+}
+
+func TestRegistry_SavePreservesGlobalConfigOnUpdate(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Write a config file with global config and a project
+	initialConfig := `log_level = "warn"
+
+[providers]
+[providers.openai]
+api-key = "openai-key"
+
+[[projects]]
+name = "test-project"
+remote-url = "git@github.com:user/test.git"
+max-agents = 1
+`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Load the registry
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Update the project config (this triggers save)
+	err = r.SetConfigValue("test-project", ConfigKeyMaxAgents, "5")
+	if err != nil {
+		t.Fatalf("SetConfigValue() error = %v", err)
+	}
+
+	// Read back the config file
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	configStr := string(content)
+
+	// Verify global config was preserved
+	if !strings.Contains(configStr, `log_level = "warn"`) {
+		t.Errorf("Config should contain log_level = warn, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `api-key = "openai-key"`) {
+		t.Errorf("Config should contain api-key = openai-key, got:\n%s", configStr)
+	}
+
+	// Verify project update was saved
+	if !strings.Contains(configStr, `max-agents = 5`) {
+		t.Errorf("Config should contain max-agents = 5, got:\n%s", configStr)
 	}
 }
 
