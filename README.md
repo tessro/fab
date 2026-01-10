@@ -157,7 +157,7 @@ api-key = "sk-..."      # Or use OPENAI_API_KEY env var
 # LLM Authorization Settings
 [llm_auth]
 provider = "anthropic"  # or "openai"
-model = "claude-haiku-4-5-20250514"
+model = "claude-haiku-4-5"
 ```
 
 ### Project Configuration

@@ -437,7 +437,7 @@ api-key = "sk-secret-key"
 
 [llm_auth]
 provider = "anthropic"
-model = "claude-haiku-4-5-20250514"
+model = "claude-haiku-4-5"
 
 [[projects]]
 name = "existing-project"
@@ -482,7 +482,7 @@ max-agents = 2
 	if !strings.Contains(configStr, `provider = "anthropic"`) {
 		t.Errorf("Config should contain provider = anthropic, got:\n%s", configStr)
 	}
-	if !strings.Contains(configStr, `model = "claude-haiku-4-5-20250514"`) {
+	if !strings.Contains(configStr, `model = "claude-haiku-4-5"`) {
 		t.Errorf("Config should contain model = claude-haiku, got:\n%s", configStr)
 	}
 
