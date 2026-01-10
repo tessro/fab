@@ -541,9 +541,15 @@ func (v ChatView) View() string {
 		parts = append(parts, v.renderPendingAction())
 	}
 
-	// Add input line if present
+	// Add input line with divider if present
 	if v.inputView != "" {
-		parts = append(parts, v.inputView)
+		// Draw a horizontal divider line above the input
+		dividerStyle := inputDividerStyle
+		if v.focused {
+			dividerStyle = inputDividerFocusedStyle
+		}
+		divider := dividerStyle.Render(strings.Repeat("─", v.width-2))
+		parts = append(parts, divider, v.inputView)
 	}
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, parts...)

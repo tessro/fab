@@ -119,18 +119,21 @@ var (
 			Foreground(mutedColor).
 			Padding(1, 2)
 
-	// Input line styles
+	// Input line styles (no border - docked inside chat pane)
 	inputLineStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(mutedColor).
 			Background(lipgloss.Color("#1E1E1E")).
 			Padding(0, 1)
 
 	inputLineFocusedStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(primaryColor).
 				Background(lipgloss.Color("#252525")).
 				Padding(0, 1)
+
+	// Input divider style (horizontal line above input)
+	inputDividerStyle = lipgloss.NewStyle().
+				Foreground(mutedColor)
+
+	inputDividerFocusedStyle = lipgloss.NewStyle().
+					Foreground(primaryColor)
 
 	// Chat view styles
 	chatAssistantStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // blue

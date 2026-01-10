@@ -1208,9 +1208,10 @@ func (m *Model) updateLayout() {
 	m.chatView.SetSize(chatWidth, contentHeight)
 	m.helpBar.SetWidth(m.width)
 
-	// Input line sized to fit inside chat pane (accounting for chat pane border and input border)
-	inputLineHeight := 3 // 1 line content + 2 for border
-	m.inputLine.SetSize(chatWidth-4, inputLineHeight)
+	// Input line sized to fit inside chat pane (no border, just content + padding)
+	// Height: 1 line content + 1 line divider = 2 total
+	inputLineHeight := 2
+	m.inputLine.SetSize(chatWidth-2, 1) // Width accounts for chat pane border only
 	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight)
 }
 
