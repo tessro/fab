@@ -112,7 +112,7 @@ Configure the provider and model in `~/.config/fab/config.toml`:
 
 ```toml
 [providers.anthropic]
-api_key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
+api-key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
 
 [llm_auth]
 provider = "anthropic"  # or "openai"

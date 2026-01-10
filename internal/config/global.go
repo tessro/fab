@@ -25,7 +25,7 @@ type ProvidersConfig struct {
 
 // ProviderConfig contains configuration for a single API provider.
 type ProviderConfig struct {
-	APIKey string `toml:"api_key"`
+	APIKey string `toml:"api-key"`
 }
 
 // LLMAuthConfig contains LLM authorization settings.
