@@ -29,16 +29,56 @@ var (
 )
 
 // ProjectEntry represents a project in the config file.
+// Note: TOML tags use hyphens to match CLI config key names (e.g., "max-agents").
 type ProjectEntry struct {
-	Name           string   `toml:"name"`
-	RemoteURL      string   `toml:"remote_url"`
-	MaxAgents      int      `toml:"max_agents,omitempty"`
-	IssueBackend   string   `toml:"issue_backend,omitempty"`   // "tk" (default), "linear", "github", "gh"
-	AllowedAuthors []string `toml:"allowed_authors,omitempty"` // GitHub usernames allowed to create issues
-	Autostart      bool     `toml:"autostart,omitempty"`       // Start orchestration when daemon starts
-	PermissionsChecker string `toml:"permissions_checker,omitempty"` // Permission checker: "manual" (default), "llm"
+	Name               string   `toml:"name"`
+	RemoteURL          string   `toml:"remote-url"`
+	MaxAgents          int      `toml:"max-agents,omitempty"`
+	IssueBackend       string   `toml:"issue-backend,omitempty"`       // "tk" (default), "linear", "github", "gh"
+	AllowedAuthors     []string `toml:"allowed-authors,omitempty"`     // GitHub usernames allowed to create issues
+	Autostart          bool     `toml:"autostart,omitempty"`           // Start orchestration when daemon starts
+	PermissionsChecker string   `toml:"permissions-checker,omitempty"` // Permission checker: "manual" (default), "llm"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
+
+	// Legacy fields (underscore format) - for backwards compatibility during loading.
+	// These are read during load() and merged with hyphen-format fields.
+	// When saving, only the hyphen-format fields are written.
+	LegacyRemoteURL          string   `toml:"remote_url,omitempty"`
+	LegacyMaxAgents          int      `toml:"max_agents,omitempty"`
+	LegacyIssueBackend       string   `toml:"issue_backend,omitempty"`
+	LegacyAllowedAuthors     []string `toml:"allowed_authors,omitempty"`
+	LegacyPermissionsChecker string   `toml:"permissions_checker,omitempty"`
+}
+
+// coalesce returns the first non-empty string from the provided values.
+func coalesce(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// coalesceInt returns the first non-zero int from the provided values.
+func coalesceInt(values ...int) int {
+	for _, v := range values {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+// coalesceStringSlice returns the first non-empty slice from the provided values.
+func coalesceStringSlice(values ...[]string) []string {
+	for _, v := range values {
+		if len(v) > 0 {
+			return v
+		}
+	}
+	return nil
 }
 
 // Config represents the fab configuration file.
@@ -88,6 +128,8 @@ func (r *Registry) SetProjectBaseDir(baseDir string) {
 }
 
 // load reads the config file and populates the registry.
+// It supports both hyphen-format keys (e.g., "remote-url") and legacy underscore-format
+// keys (e.g., "remote_url") for backwards compatibility. Hyphen-format takes precedence.
 func (r *Registry) load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -98,23 +140,30 @@ func (r *Registry) load() error {
 	}
 
 	for _, entry := range config.Projects {
+		// Coalesce hyphen-format and underscore-format fields (hyphen takes precedence)
+		remoteURL := coalesce(entry.RemoteURL, entry.LegacyRemoteURL)
+		maxAgents := coalesceInt(entry.MaxAgents, entry.LegacyMaxAgents)
+		issueBackend := coalesce(entry.IssueBackend, entry.LegacyIssueBackend)
+		allowedAuthors := coalesceStringSlice(entry.AllowedAuthors, entry.LegacyAllowedAuthors)
+		permissionsChecker := coalesce(entry.PermissionsChecker, entry.LegacyPermissionsChecker)
+
 		// Detect old config format (has Path but no RemoteURL)
-		if entry.Path != "" && entry.RemoteURL == "" {
+		if entry.Path != "" && remoteURL == "" {
 			return ErrOldConfigFormat
 		}
 
-		p := project.NewProject(entry.Name, entry.RemoteURL)
-		if entry.MaxAgents > 0 {
-			p.MaxAgents = entry.MaxAgents
+		p := project.NewProject(entry.Name, remoteURL)
+		if maxAgents > 0 {
+			p.MaxAgents = maxAgents
 		}
-		if entry.IssueBackend != "" {
-			p.IssueBackend = entry.IssueBackend
+		if issueBackend != "" {
+			p.IssueBackend = issueBackend
 		}
-		if len(entry.AllowedAuthors) > 0 {
-			p.AllowedAuthors = entry.AllowedAuthors
+		if len(allowedAuthors) > 0 {
+			p.AllowedAuthors = allowedAuthors
 		}
 		p.Autostart = entry.Autostart
-		p.PermissionsChecker = entry.PermissionsChecker
+		p.PermissionsChecker = permissionsChecker
 		r.projects[entry.Name] = p
 	}
 
