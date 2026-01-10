@@ -22,12 +22,13 @@ var ErrWorktreeNotFound = errors.New("worktree not found")
 
 // Project represents a supervised coding project.
 type Project struct {
-	Name         string // Unique identifier (e.g., "myapp")
-	RemoteURL    string // Git remote URL (e.g., "git@github.com:user/repo.git")
-	MaxAgents    int    // Max concurrent agents (default: 3)
-	IssueBackend string // Issue backend type: "tk" (default), "linear", "github", "gh"
-	Autostart    bool   // Start orchestration when daemon starts
-	BaseDir      string // Base directory for project storage (default: ~/.fab/projects)
+	Name           string   // Unique identifier (e.g., "myapp")
+	RemoteURL      string   // Git remote URL (e.g., "git@github.com:user/repo.git")
+	MaxAgents      int      // Max concurrent agents (default: 3)
+	IssueBackend   string   // Issue backend type: "tk" (default), "linear", "github", "gh"
+	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
+	Autostart      bool     // Start orchestration when daemon starts
+	BaseDir        string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu

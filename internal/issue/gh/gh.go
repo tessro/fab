@@ -17,23 +17,44 @@ import (
 
 // Backend implements issue.Backend for GitHub Issues using the gh CLI.
 type Backend struct {
-	repoDir string // Path to a git repository with a GitHub remote
-	nwo     string // GitHub owner/repo (e.g., "owner/repo")
+	repoDir        string   // Path to a git repository with a GitHub remote
+	nwo            string   // GitHub owner/repo (e.g., "owner/repo")
+	allowedAuthors []string // GitHub usernames allowed to create issues (empty = owner only)
 }
 
 // New creates a new GitHub issues backend.
 // repoDir should be a git repository with a GitHub remote.
-func New(repoDir string) (*Backend, error) {
+// allowedAuthors is a list of GitHub usernames allowed to create issues.
+// If empty, defaults to the repository owner inferred from the remote URL.
+func New(repoDir string, allowedAuthors []string) (*Backend, error) {
 	// Extract owner/repo from the git remote
 	nwo, err := detectNWO(repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("detect github repo: %w", err)
 	}
 
+	// Default to repo owner if no allowed authors specified
+	if len(allowedAuthors) == 0 {
+		owner := ownerFromNWO(nwo)
+		if owner != "" {
+			allowedAuthors = []string{owner}
+		}
+	}
+
 	return &Backend{
-		repoDir: repoDir,
-		nwo:     nwo,
+		repoDir:        repoDir,
+		nwo:            nwo,
+		allowedAuthors: allowedAuthors,
 	}, nil
+}
+
+// ownerFromNWO extracts the owner from an owner/repo string.
+func ownerFromNWO(nwo string) string {
+	parts := strings.Split(nwo, "/")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
 }
 
 // Name returns the backend identifier.
@@ -48,12 +69,17 @@ type ghIssue struct {
 	Body      string    `json:"body"`
 	State     string    `json:"state"` // OPEN, CLOSED
 	Labels    []ghLabel `json:"labels"`
+	Author    ghAuthor  `json:"author"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type ghLabel struct {
 	Name string `json:"name"`
+}
+
+type ghAuthor struct {
+	Login string `json:"login"`
 }
 
 // Create creates a new issue on GitHub.
@@ -79,7 +105,7 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 // Get retrieves an issue by ID (issue number as string).
 func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 	out, err := b.runGH(ctx, "issue", "view", id, "--repo", b.nwo, "--json",
-		"number,title,body,state,labels,createdAt,updatedAt")
+		"number,title,body,state,labels,author,createdAt,updatedAt")
 	if err != nil {
 		return nil, fmt.Errorf("get issue %s: %w", id, err)
 	}
@@ -95,7 +121,7 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 // List returns issues matching the filter.
 func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.Issue, error) {
 	args := []string{"issue", "list", "--repo", b.nwo, "--json",
-		"number,title,body,state,labels,createdAt,updatedAt", "--limit", "100"}
+		"number,title,body,state,labels,author,createdAt,updatedAt", "--limit", "100"}
 
 	// Apply status filter
 	if len(filter.Status) > 0 {
@@ -247,22 +273,44 @@ func (b *Backend) Close(ctx context.Context, id string) error {
 	return err
 }
 
-// Ready returns open issues that are not blocked (no "blocked" label).
+// Ready returns open issues that are not blocked and authored by allowed users.
 func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
-	// Get all open issues
-	issues, err := b.List(ctx, issue.ListFilter{
-		Status: []issue.Status{issue.StatusOpen},
-	})
+	// Fetch raw issues to access author info for filtering
+	args := []string{"issue", "list", "--repo", b.nwo, "--json",
+		"number,title,body,state,labels,author,createdAt,updatedAt", "--limit", "100", "--state", "open"}
+
+	out, err := b.runGH(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter out blocked issues
-	ready := make([]*issue.Issue, 0, len(issues))
-	for _, iss := range issues {
-		if iss.Status != issue.StatusBlocked {
-			ready = append(ready, iss)
+	var ghIssues []ghIssue
+	if err := json.Unmarshal([]byte(out), &ghIssues); err != nil {
+		return nil, fmt.Errorf("parse issues: %w", err)
+	}
+
+	// Build allowed authors set for quick lookup
+	allowedSet := make(map[string]bool, len(b.allowedAuthors))
+	for _, author := range b.allowedAuthors {
+		allowedSet[strings.ToLower(author)] = true
+	}
+
+	// Filter: not blocked + authored by allowed user
+	ready := make([]*issue.Issue, 0, len(ghIssues))
+	for _, gh := range ghIssues {
+		iss := b.toIssue(&gh)
+
+		// Skip blocked issues
+		if iss.Status == issue.StatusBlocked {
+			continue
 		}
+
+		// Skip issues not authored by allowed users
+		if len(allowedSet) > 0 && !allowedSet[strings.ToLower(gh.Author.Login)] {
+			continue
+		}
+
+		ready = append(ready, iss)
 	}
 
 	return ready, nil

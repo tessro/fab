@@ -30,11 +30,12 @@ var (
 
 // ProjectEntry represents a project in the config file.
 type ProjectEntry struct {
-	Name         string `toml:"name"`
-	RemoteURL    string `toml:"remote_url"`
-	MaxAgents    int    `toml:"max_agents,omitempty"`
-	IssueBackend string `toml:"issue_backend,omitempty"` // "tk" (default), "linear", "github", "gh"
-	Autostart    bool   `toml:"autostart,omitempty"`     // Start orchestration when daemon starts
+	Name           string   `toml:"name"`
+	RemoteURL      string   `toml:"remote_url"`
+	MaxAgents      int      `toml:"max_agents,omitempty"`
+	IssueBackend   string   `toml:"issue_backend,omitempty"`   // "tk" (default), "linear", "github", "gh"
+	AllowedAuthors []string `toml:"allowed_authors,omitempty"` // GitHub usernames allowed to create issues
+	Autostart      bool     `toml:"autostart,omitempty"`       // Start orchestration when daemon starts
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 }
@@ -108,6 +109,9 @@ func (r *Registry) load() error {
 		if entry.IssueBackend != "" {
 			p.IssueBackend = entry.IssueBackend
 		}
+		if len(entry.AllowedAuthors) > 0 {
+			p.AllowedAuthors = entry.AllowedAuthors
+		}
 		p.Autostart = entry.Autostart
 		r.projects[entry.Name] = p
 	}
@@ -131,11 +135,12 @@ func (r *Registry) save() error {
 
 	for _, p := range r.projects {
 		config.Projects = append(config.Projects, ProjectEntry{
-			Name:         p.Name,
-			RemoteURL:    p.RemoteURL,
-			MaxAgents:    p.MaxAgents,
-			IssueBackend: p.IssueBackend,
-			Autostart:    p.Autostart,
+			Name:           p.Name,
+			RemoteURL:      p.RemoteURL,
+			MaxAgents:      p.MaxAgents,
+			IssueBackend:   p.IssueBackend,
+			AllowedAuthors: p.AllowedAuthors,
+			Autostart:      p.Autostart,
 		})
 	}
 
@@ -282,14 +287,15 @@ type ConfigKey string
 
 // Valid configuration keys.
 const (
-	ConfigKeyMaxAgents    ConfigKey = "max-agents"
-	ConfigKeyAutostart    ConfigKey = "autostart"
-	ConfigKeyIssueBackend ConfigKey = "issue-backend"
+	ConfigKeyMaxAgents      ConfigKey = "max-agents"
+	ConfigKeyAutostart      ConfigKey = "autostart"
+	ConfigKeyIssueBackend   ConfigKey = "issue-backend"
+	ConfigKeyAllowedAuthors ConfigKey = "allowed-authors"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -323,6 +329,8 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 			backend = "tk"
 		}
 		return backend, nil
+	case ConfigKeyAllowedAuthors:
+		return p.AllowedAuthors, nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -344,9 +352,10 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		string(ConfigKeyMaxAgents):    p.MaxAgents,
-		string(ConfigKeyAutostart):    p.Autostart,
-		string(ConfigKeyIssueBackend): issueBackend,
+		string(ConfigKeyMaxAgents):      p.MaxAgents,
+		string(ConfigKeyAutostart):      p.Autostart,
+		string(ConfigKeyIssueBackend):   issueBackend,
+		string(ConfigKeyAllowedAuthors): p.AllowedAuthors,
 	}, nil
 }
 
@@ -382,6 +391,17 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			return errors.New("invalid value for issue-backend: must be 'tk', 'linear', 'github', or 'gh'")
 		}
 		p.IssueBackend = v
+	case ConfigKeyAllowedAuthors:
+		// Parse comma-separated list of GitHub usernames
+		if value == "" {
+			p.AllowedAuthors = nil
+		} else {
+			authors := strings.Split(value, ",")
+			for i, a := range authors {
+				authors[i] = strings.TrimSpace(a)
+			}
+			p.AllowedAuthors = authors
+		}
 	default:
 		return errors.New("invalid configuration key")
 	}

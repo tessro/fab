@@ -324,7 +324,7 @@ func getIssueBackend() (issue.Backend, error) {
 	case "tk":
 		return tk.New(project.RepoDir())
 	case "github", "gh":
-		return gh.New(project.RepoDir())
+		return gh.New(project.RepoDir(), project.AllowedAuthors)
 	default:
 		return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 	}

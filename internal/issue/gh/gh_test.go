@@ -87,3 +87,36 @@ func TestParseIssueNumberFromURL(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnerFromNWO(t *testing.T) {
+	tests := []struct {
+		name string
+		nwo  string
+		want string
+	}{
+		{
+			name: "standard format",
+			nwo:  "owner/repo",
+			want: "owner",
+		},
+		{
+			name: "org with hyphen",
+			nwo:  "my-org/my-repo",
+			want: "my-org",
+		},
+		{
+			name: "empty string",
+			nwo:  "",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ownerFromNWO(tt.nwo)
+			if got != tt.want {
+				t.Errorf("ownerFromNWO() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
