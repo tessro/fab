@@ -195,6 +195,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleManagerSendMessage(ctx, req)
 	case daemon.MsgManagerChatHistory:
 		return s.handleManagerChatHistory(ctx, req)
+	case daemon.MsgManagerClearHistory:
+		return s.handleManagerClearHistory(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
@@ -1858,6 +1860,18 @@ func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Req
 	return successResponse(req, daemon.ManagerChatHistoryResponse{
 		Entries: dtos,
 	})
+}
+
+// handleManagerClearHistory clears the manager chat history.
+func (s *Supervisor) handleManagerClearHistory(_ context.Context, req *daemon.Request) *daemon.Response {
+	s.mu.Lock()
+	mgr := s.manager
+	s.mu.Unlock()
+
+	mgr.History().Clear()
+
+	slog.Info("manager chat history cleared")
+	return successResponse(req, nil)
 }
 
 // broadcastManagerState sends a manager state change to attached clients.

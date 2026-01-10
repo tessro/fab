@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -39,6 +40,11 @@ type ManagerChatHistoryMsg struct {
 
 // ManagerInputMsg is the result of sending input to the manager.
 type ManagerInputMsg struct {
+	Err error
+}
+
+// ManagerClearHistoryMsg is the result of clearing the manager chat history.
+type ManagerClearHistoryMsg struct {
 	Err error
 }
 
@@ -121,6 +127,17 @@ func (m ManagerModel) sendManagerMessage(content string) tea.Cmd {
 	}
 }
 
+// clearManagerHistory clears the manager chat history.
+func (m ManagerModel) clearManagerHistory() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.ManagerClearHistory()
+		return ManagerClearHistoryMsg{Err: err}
+	}
+}
+
 // Update implements tea.Model.
 func (m ManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -143,14 +160,20 @@ func (m ManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.client != nil {
 				input := m.inputLine.Value()
 				if input != "" {
-					// Show user message immediately
-					m.chatView.AppendEntry(daemon.ChatEntryDTO{
-						Role:      "user",
-						Content:   input,
-						Timestamp: time.Now().Format(time.RFC3339),
-					})
-					cmds = append(cmds, m.sendManagerMessage(input))
-					m.inputLine.Clear()
+					// Check for slash commands
+					if strings.TrimSpace(input) == "/clear" {
+						cmds = append(cmds, m.clearManagerHistory())
+						m.inputLine.Clear()
+					} else {
+						// Show user message immediately
+						m.chatView.AppendEntry(daemon.ChatEntryDTO{
+							Role:      "user",
+							Content:   input,
+							Timestamp: time.Now().Format(time.RFC3339),
+						})
+						cmds = append(cmds, m.sendManagerMessage(input))
+						m.inputLine.Clear()
+					}
 				}
 			}
 
@@ -189,6 +212,14 @@ func (m ManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ManagerInputMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
+		}
+
+	case ManagerClearHistoryMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			// Clear the chat view
+			m.chatView.SetEntries(nil)
 		}
 	}
 
@@ -237,7 +268,7 @@ func (m ManagerModel) View() string {
 	statusStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240"))
 
-	status := statusStyle.Render("Enter: send | Esc: clear | Ctrl+C: quit")
+	status := statusStyle.Render("Enter: send | /clear: reset context | Esc: clear input | Ctrl+C: quit")
 	if m.err != nil {
 		status = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(m.err.Error())
 	}

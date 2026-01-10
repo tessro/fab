@@ -976,3 +976,15 @@ func (c *Client) ManagerChatHistory(limit int) (*ManagerChatHistoryResponse, err
 	}
 	return &result, nil
 }
+
+// ManagerClearHistory clears the manager agent's chat history.
+func (c *Client) ManagerClearHistory() error {
+	resp, err := c.Send(&Request{Type: MsgManagerClearHistory})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("manager clear history failed: %s", resp.Error)
+	}
+	return nil
+}

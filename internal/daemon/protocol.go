@@ -70,7 +70,8 @@ const (
 	MsgManagerStop        MessageType = "manager.stop"         // Stop the manager agent
 	MsgManagerStatus      MessageType = "manager.status"       // Get manager status
 	MsgManagerSendMessage MessageType = "manager.send_message" // Send message to manager
-	MsgManagerChatHistory MessageType = "manager.chat_history" // Get manager chat history
+	MsgManagerChatHistory      MessageType = "manager.chat_history"       // Get manager chat history
+	MsgManagerClearHistory     MessageType = "manager.clear_history"      // Clear manager chat history
 )
 
 // Request is the envelope for all IPC requests.

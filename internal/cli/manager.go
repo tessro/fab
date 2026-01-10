@@ -66,6 +66,23 @@ var managerStatusCmd = &cobra.Command{
 	},
 }
 
+var managerClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Clear the manager agent's context window",
+	Long:  "Clears the manager agent's chat history. The manager will lose all conversation context but remain running.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := MustConnect()
+		defer client.Close()
+
+		if err := client.ManagerClearHistory(); err != nil {
+			return fmt.Errorf("clear history: %w", err)
+		}
+
+		fmt.Println("🚌 Manager context cleared")
+		return nil
+	},
+}
+
 var managerChatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Open interactive chat with the manager agent",
@@ -98,5 +115,6 @@ func init() {
 	managerCmd.AddCommand(managerStartCmd)
 	managerCmd.AddCommand(managerStopCmd)
 	managerCmd.AddCommand(managerStatusCmd)
+	managerCmd.AddCommand(managerClearCmd)
 	managerCmd.AddCommand(managerChatCmd)
 }
