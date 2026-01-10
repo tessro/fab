@@ -1,6 +1,6 @@
 ---
 id: fa-cf3
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T22:12:16.657693-08:00
