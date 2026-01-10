@@ -1,6 +1,6 @@
 ---
 id: fa-87f
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T22:56:43.352704-08:00
