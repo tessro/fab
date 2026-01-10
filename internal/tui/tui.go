@@ -529,6 +529,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							"answer", input,
 						)
 						cmds = append(cmds, m.answerUserQuestion(question.ID, map[string]string{header: input}))
+						m.inputLine.AddToHistory(input)
 						m.inputLine.Clear()
 						m.inputLine.SetPlaceholder("Type a message...")
 						// Exit input mode, return to chat view
@@ -548,6 +549,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 						// Send to agent
 						cmds = append(cmds, m.sendAgentMessage(m.chatView.AgentID(), input))
+						m.inputLine.AddToHistory(input)
 						m.inputLine.Clear()
 						// Exit input mode, return to chat view
 						_ = m.modeState.ExitInputMode()
@@ -559,6 +561,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Exit input mode, return to chat view
 				_ = m.modeState.ExitInputMode()
 				m.syncFocusToComponents(FocusChatView)
+				m.chatView.SetInputView(m.inputLine.View(), 1)
+			case key.Matches(msg, m.keys.HistoryUp):
+				// Navigate to previous (older) history entry
+				m.inputLine.HistoryUp()
+				m.chatView.SetInputView(m.inputLine.View(), 1)
+			case key.Matches(msg, m.keys.HistoryDown):
+				// Navigate to next (newer) history entry
+				m.inputLine.HistoryDown()
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			default:
 				// Pass all other keys to input

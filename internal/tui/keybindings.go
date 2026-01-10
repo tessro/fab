@@ -24,8 +24,10 @@ type KeyBindings struct {
 	Abort   key.Binding
 
 	// Input keys
-	Submit key.Binding
-	Cancel key.Binding
+	Submit      key.Binding
+	Cancel      key.Binding
+	HistoryUp   key.Binding
+	HistoryDown key.Binding
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -93,6 +95,14 @@ func DefaultKeyBindings() KeyBindings {
 		Cancel: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "cancel"),
+		),
+		HistoryUp: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "history prev"),
+		),
+		HistoryDown: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "history next"),
 		),
 	}
 }
