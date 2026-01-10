@@ -81,6 +81,10 @@ var (
 	agentTaskStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#A0A0A0"))
 
+	agentDescriptionStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				Italic(true)
+
 	agentDurationStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
 

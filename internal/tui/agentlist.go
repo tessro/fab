@@ -145,6 +145,12 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 		taskStr = agentTaskStyle.Inherit(rowStyle).Render(agent.Task)
 	}
 
+	// Description (if any) - inherit background from row style
+	descStr := ""
+	if agent.Description != "" {
+		descStr = agentDescriptionStyle.Inherit(rowStyle).Render(agent.Description)
+	}
+
 	// Duration since started - inherit background from row style
 	duration := time.Since(agent.StartedAt).Truncate(time.Second)
 	durationStr := agentDurationStyle.Inherit(rowStyle).Render(formatDuration(duration))
@@ -157,6 +163,9 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	)
 	if taskStr != "" {
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", taskStr)
+	}
+	if descStr != "" {
+		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", descStr)
 	}
 
 	// Right-align duration - the spacer needs the row background too
