@@ -578,7 +578,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Tab):
-			// Cycle focus: agent list -> chat view -> input line -> agent list
+			// Cycle focus: agent list -> chat view -> agent list
 			newFocus, _ := m.modeState.CycleFocus()
 			m.syncFocusToComponents(newFocus)
 
