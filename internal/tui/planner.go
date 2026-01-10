@@ -38,14 +38,14 @@ type PlannerModel struct {
 	keys KeyBindings
 }
 
-// PlannerChatHistoryMsg contains chat history for the planner.
-type PlannerChatHistoryMsg struct {
+// plannerChatHistoryMsg contains chat history for the planner.
+type plannerChatHistoryMsg struct {
 	Entries []daemon.ChatEntryDTO
 	Err     error
 }
 
-// PlannerInputMsg is the result of sending input to the planner.
-type PlannerInputMsg struct {
+// plannerInputMsg is the result of sending input to the planner.
+type plannerInputMsg struct {
 	Err error
 }
 
@@ -89,13 +89,13 @@ func (m PlannerModel) waitForEvent() tea.Cmd {
 func (m PlannerModel) fetchPlannerChatHistory() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
-			return PlannerChatHistoryMsg{Entries: nil}
+			return plannerChatHistoryMsg{Entries: nil}
 		}
 		resp, err := m.client.PlanChatHistory(m.plannerID, 0)
 		if err != nil {
-			return PlannerChatHistoryMsg{Err: err}
+			return plannerChatHistoryMsg{Err: err}
 		}
-		return PlannerChatHistoryMsg{Entries: resp.Entries}
+		return plannerChatHistoryMsg{Entries: resp.Entries}
 	}
 }
 
@@ -106,7 +106,7 @@ func (m PlannerModel) sendPlannerMessage(content string) tea.Cmd {
 			return nil
 		}
 		err := m.client.PlanSendMessage(m.plannerID, content)
-		return PlannerInputMsg{Err: err}
+		return plannerInputMsg{Err: err}
 	}
 }
 
@@ -155,12 +155,12 @@ func (m PlannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateLayout()
 		m.ready = true
 
-	case StreamStartMsg:
+	case streamStartMsg:
 		m.eventChan = msg.EventChan
 		m.attached = true
 		cmds = append(cmds, m.waitForEvent())
 
-	case StreamEventMsg:
+	case streamEventMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else if msg.Event != nil {
@@ -168,14 +168,14 @@ func (m PlannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.waitForEvent())
 		}
 
-	case PlannerChatHistoryMsg:
+	case plannerChatHistoryMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {
 			m.chatView.SetEntries(msg.Entries)
 		}
 
-	case PlannerInputMsg:
+	case plannerInputMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		}

@@ -21,16 +21,16 @@ const (
 	FocusInputLine
 )
 
-// ConnectionState represents the current IPC connection status.
-type ConnectionState int
+// connectionState represents the current IPC connection status.
+type connectionState int
 
 const (
-	// ConnectionConnected means the TUI is connected to the daemon.
-	ConnectionConnected ConnectionState = iota
-	// ConnectionDisconnected means the connection was lost.
-	ConnectionDisconnected
-	// ConnectionReconnecting means a reconnection attempt is in progress.
-	ConnectionReconnecting
+	// connectionConnected means the TUI is connected to the daemon.
+	connectionConnected connectionState = iota
+	// connectionDisconnected means the connection was lost.
+	connectionDisconnected
+	// connectionReconnecting means a reconnection attempt is in progress.
+	connectionReconnecting
 )
 
 // Model is the main Bubbletea model for the fab TUI.
@@ -61,7 +61,7 @@ type Model struct {
 	eventChan <-chan daemon.EventResult
 
 	// Connection state tracking
-	connState      ConnectionState
+	connState      connectionState
 	reconnectDelay time.Duration
 	reconnectCount int
 	maxReconnects  int
@@ -109,7 +109,7 @@ func New() Model {
 		helpBar:        NewHelpBar(),
 		modeState:      NewModeState(),
 		keys:           DefaultKeyBindings(),
-		connState:      ConnectionConnected,
+		connState:      connectionConnected,
 		reconnectDelay: 500 * time.Millisecond,
 		maxReconnects:  10,
 		usageLimits:    usage.DefaultProLimits(),

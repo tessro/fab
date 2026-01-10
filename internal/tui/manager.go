@@ -35,19 +35,19 @@ type ManagerModel struct {
 	keys KeyBindings
 }
 
-// ManagerChatHistoryMsg contains chat history for the manager.
-type ManagerChatHistoryMsg struct {
+// managerChatHistoryMsg contains chat history for the manager.
+type managerChatHistoryMsg struct {
 	Entries []daemon.ChatEntryDTO
 	Err     error
 }
 
-// ManagerInputMsg is the result of sending input to the manager.
-type ManagerInputMsg struct {
+// managerInputMsg is the result of sending input to the manager.
+type managerInputMsg struct {
 	Err error
 }
 
-// ManagerClearHistoryMsg is the result of clearing the manager chat history.
-type ManagerClearHistoryMsg struct {
+// managerClearHistoryMsg is the result of clearing the manager chat history.
+type managerClearHistoryMsg struct {
 	Err error
 }
 
@@ -92,13 +92,13 @@ func (m ManagerModel) fetchManagerChatHistory() tea.Cmd {
 	project := m.project
 	return func() tea.Msg {
 		if m.client == nil {
-			return ManagerChatHistoryMsg{Entries: nil}
+			return managerChatHistoryMsg{Entries: nil}
 		}
 		resp, err := m.client.ManagerChatHistory(project, 0)
 		if err != nil {
-			return ManagerChatHistoryMsg{Err: err}
+			return managerChatHistoryMsg{Err: err}
 		}
-		return ManagerChatHistoryMsg{Entries: resp.Entries}
+		return managerChatHistoryMsg{Entries: resp.Entries}
 	}
 }
 
@@ -110,7 +110,7 @@ func (m ManagerModel) sendManagerMessage(content string) tea.Cmd {
 			return nil
 		}
 		err := m.client.ManagerSendMessage(project, content)
-		return ManagerInputMsg{Err: err}
+		return managerInputMsg{Err: err}
 	}
 }
 
@@ -122,7 +122,7 @@ func (m ManagerModel) clearManagerHistory() tea.Cmd {
 			return nil
 		}
 		err := m.client.ManagerClearHistory(project)
-		return ManagerClearHistoryMsg{Err: err}
+		return managerClearHistoryMsg{Err: err}
 	}
 }
 
@@ -177,12 +177,12 @@ func (m ManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateLayout()
 		m.ready = true
 
-	case StreamStartMsg:
+	case streamStartMsg:
 		m.eventChan = msg.EventChan
 		m.attached = true
 		cmds = append(cmds, m.waitForEvent())
 
-	case StreamEventMsg:
+	case streamEventMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else if msg.Event != nil {
@@ -190,19 +190,19 @@ func (m ManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.waitForEvent())
 		}
 
-	case ManagerChatHistoryMsg:
+	case managerChatHistoryMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {
 			m.chatView.SetEntries(msg.Entries)
 		}
 
-	case ManagerInputMsg:
+	case managerInputMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		}
 
-	case ManagerClearHistoryMsg:
+	case managerClearHistoryMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {

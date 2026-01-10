@@ -250,9 +250,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Reconnect):
 			// Manual reconnection when disconnected
-			if m.connState == ConnectionDisconnected && m.client != nil {
+			if m.connState == connectionDisconnected && m.client != nil {
 				slog.Debug("manual reconnection triggered")
-				m.connState = ConnectionReconnecting
+				m.connState = connectionReconnecting
 				m.reconnectCount = 0
 				m.reconnectDelay = 500 * time.Millisecond
 				m.header.SetConnectionState(m.connState)
@@ -337,25 +337,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateLayout()
 		m.ready = true
 
-	case StreamStartMsg:
+	case streamStartMsg:
 		// Event stream connected successfully
 		m.eventChan = msg.EventChan
 		m.attached = true
-		m.connState = ConnectionConnected
+		m.connState = connectionConnected
 		m.reconnectCount = 0
 		m.reconnectDelay = 500 * time.Millisecond
 		m.header.SetConnectionState(m.connState)
 		cmds = append(cmds, m.waitForEvent())
 
-	case StreamEventMsg:
+	case streamEventMsg:
 		if msg.Err != nil {
 			slog.Debug("stream error, attempting reconnection", "err", msg.Err)
-			m.connState = ConnectionDisconnected
+			m.connState = connectionDisconnected
 			m.header.SetConnectionState(m.connState)
 			m.eventChan = nil
 			// Attempt automatic reconnection if under limit
 			if m.reconnectCount < m.maxReconnects {
-				m.connState = ConnectionReconnecting
+				m.connState = connectionReconnecting
 				m.header.SetConnectionState(m.connState)
 				cmds = append(cmds, m.attemptReconnect())
 			} else {
@@ -375,7 +375,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			slog.Debug("reconnection successful")
 			m.eventChan = msg.EventChan
 			m.attached = true
-			m.connState = ConnectionConnected
+			m.connState = connectionConnected
 			m.reconnectCount = 0
 			m.reconnectDelay = 500 * time.Millisecond
 			m.header.SetConnectionState(m.connState)
@@ -390,18 +390,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.reconnectCount < m.maxReconnects {
 				cmds = append(cmds, m.attemptReconnect())
 			} else {
-				m.connState = ConnectionDisconnected
+				m.connState = connectionDisconnected
 				m.header.SetConnectionState(m.connState)
 				cmds = append(cmds, m.setError(fmt.Errorf("connection lost after %d attempts (press 'r' to reconnect)", m.reconnectCount)))
 			}
 		}
 
-	case AgentListMsg:
+	case agentListMsg:
 		if msg.Err != nil {
-			slog.Error("tui.Update: AgentListMsg error", "error", msg.Err)
+			slog.Error("tui.Update: agentListMsg error", "error", msg.Err)
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
-			slog.Debug("tui.Update: AgentListMsg received", "count", len(msg.Agents), "initial_agent_id", m.initialAgentID, "pending_planner_id", m.pendingPlannerID)
+			slog.Debug("tui.Update: agentListMsg received", "count", len(msg.Agents), "initial_agent_id", m.initialAgentID, "pending_planner_id", m.pendingPlannerID)
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
 			// Prune state for agents that no longer exist (e.g., after reconnecting)
@@ -465,12 +465,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchStats())
 		}
 
-	case AgentInputMsg:
+	case agentInputMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		}
 
-	case AgentChatHistoryMsg:
+	case agentChatHistoryMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else if msg.AgentID == m.chatView.AgentID() {
@@ -478,7 +478,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatView.SetEntries(msg.Entries)
 		}
 
-	case StagedActionsMsg:
+	case stagedActionsMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
@@ -490,13 +490,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateNeedsAttention()
 		}
 
-	case StatsMsg:
+	case statsMsg:
 		if msg.Err == nil && msg.Stats != nil {
-			// Only use stats for commit count - usage comes from UsageUpdateMsg
+			// Only use stats for commit count - usage comes from usageUpdateMsg
 			m.header.SetCommitCount(msg.Stats.CommitCount)
 		}
 
-	case ActionResultMsg:
+	case actionResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
@@ -504,13 +504,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchStagedActions())
 		}
 
-	case PermissionResultMsg:
+	case permissionResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 			// Check if connection was lost and trigger reconnection
 			if m.client != nil && !m.client.IsConnected() {
 				slog.Debug("connection lost during permission response, triggering reconnection")
-				m.connState = ConnectionReconnecting
+				m.connState = connectionReconnecting
 				m.header.SetConnectionState(m.connState)
 				cmds = append(cmds, m.attemptReconnect())
 			}
@@ -531,7 +531,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update attention indicators
 		m.updateNeedsAttention()
 
-	case UserQuestionResultMsg:
+	case userQuestionResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
@@ -548,7 +548,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update attention indicators
 		m.updateNeedsAttention()
 
-	case ProjectListMsg:
+	case projectListMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else if len(msg.Projects) == 0 {
@@ -563,7 +563,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case PlanStartResultMsg:
+	case planStartResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
@@ -579,7 +579,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchAgentList())
 		}
 
-	case AbortResultMsg:
+	case abortResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
 		}
@@ -603,12 +603,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Refresh daemon stats every 30 seconds for commit count
 		m.statsRefreshTick++
-		if m.statsRefreshTick >= 300 && m.connState == ConnectionConnected {
+		if m.statsRefreshTick >= 300 && m.connState == connectionConnected {
 			m.statsRefreshTick = 0
 			cmds = append(cmds, m.fetchStats())
 		}
 
-	case UsageUpdateMsg:
+	case usageUpdateMsg:
 		if msg.Err != nil {
 			// Silently ignore usage fetch errors - not critical
 			slog.Debug("usage fetch error", "err", msg.Err)

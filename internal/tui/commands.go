@@ -26,9 +26,9 @@ func attachToStreamCmd(client *daemon.Client) tea.Cmd {
 		}
 		eventChan, err := client.StreamEvents(nil)
 		if err != nil {
-			return StreamEventMsg{Err: err}
+			return streamEventMsg{Err: err}
 		}
-		return StreamStartMsg{EventChan: eventChan}
+		return streamStartMsg{EventChan: eventChan}
 	}
 }
 
@@ -41,9 +41,9 @@ func waitForEventCmd(eventChan <-chan daemon.EventResult) tea.Cmd {
 	return func() tea.Msg {
 		result, ok := <-eventChan
 		if !ok {
-			return StreamEventMsg{Err: fmt.Errorf("event stream closed")}
+			return streamEventMsg{Err: fmt.Errorf("event stream closed")}
 		}
-		return StreamEventMsg{Event: result.Event, Err: result.Err}
+		return streamEventMsg{Event: result.Event, Err: result.Err}
 	}
 }
 
@@ -106,7 +106,7 @@ func (m Model) fetchAgentList() tea.Cmd {
 		resp, err := m.client.AgentList("")
 		if err != nil {
 			slog.Error("tui.fetchAgentList: AgentList failed", "error", err)
-			return AgentListMsg{Err: err}
+			return agentListMsg{Err: err}
 		}
 		slog.Debug("tui.fetchAgentList: got agents", "count", len(resp.Agents))
 
@@ -138,7 +138,7 @@ func (m Model) fetchAgentList() tea.Cmd {
 		}
 
 		slog.Debug("tui.fetchAgentList: returning", "total_agents", len(agents))
-		return AgentListMsg{Agents: agents}
+		return agentListMsg{Agents: agents}
 	}
 }
 
@@ -157,7 +157,7 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 		} else {
 			err = m.client.AgentSendMessage(agentID, content)
 		}
-		return AgentInputMsg{Err: err}
+		return agentInputMsg{Err: err}
 	}
 }
 
@@ -166,7 +166,7 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
-			return AgentChatHistoryMsg{AgentID: agentID, Entries: nil}
+			return agentChatHistoryMsg{AgentID: agentID, Entries: nil}
 		}
 		var entries []daemon.ChatEntryDTO
 		var err error
@@ -190,9 +190,9 @@ func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 			}
 		}
 		if err != nil {
-			return AgentChatHistoryMsg{AgentID: agentID, Err: err}
+			return agentChatHistoryMsg{AgentID: agentID, Err: err}
 		}
-		return AgentChatHistoryMsg{AgentID: agentID, Entries: entries}
+		return agentChatHistoryMsg{AgentID: agentID, Entries: entries}
 	}
 }
 
@@ -204,9 +204,9 @@ func (m Model) fetchStagedActions() tea.Cmd {
 		}
 		resp, err := m.client.ListStagedActions("")
 		if err != nil {
-			return StagedActionsMsg{Err: err}
+			return stagedActionsMsg{Err: err}
 		}
-		return StagedActionsMsg{Actions: resp.Actions}
+		return stagedActionsMsg{Actions: resp.Actions}
 	}
 }
 
@@ -218,9 +218,9 @@ func (m Model) fetchStats() tea.Cmd {
 		}
 		resp, err := m.client.Stats("")
 		if err != nil {
-			return StatsMsg{Err: err}
+			return statsMsg{Err: err}
 		}
-		return StatsMsg{Stats: resp}
+		return statsMsg{Stats: resp}
 	}
 }
 
@@ -228,17 +228,17 @@ func (m Model) fetchStats() tea.Cmd {
 func (m Model) fetchProjectsForPlan() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
-			return ProjectListMsg{Err: fmt.Errorf("not connected")}
+			return projectListMsg{Err: fmt.Errorf("not connected")}
 		}
 		resp, err := m.client.ProjectList()
 		if err != nil {
-			return ProjectListMsg{Err: err}
+			return projectListMsg{Err: err}
 		}
 		var projects []string
 		for _, p := range resp.Projects {
 			projects = append(projects, p.Name)
 		}
-		return ProjectListMsg{Projects: projects}
+		return projectListMsg{Projects: projects}
 	}
 }
 
@@ -246,13 +246,13 @@ func (m Model) fetchProjectsForPlan() tea.Cmd {
 func (m Model) startPlanner(project, prompt string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
-			return PlanStartResultMsg{Err: fmt.Errorf("not connected")}
+			return planStartResultMsg{Err: fmt.Errorf("not connected")}
 		}
 		resp, err := m.client.PlanStart(project, prompt)
 		if err != nil {
-			return PlanStartResultMsg{Err: err}
+			return planStartResultMsg{Err: err}
 		}
-		return PlanStartResultMsg{PlannerID: resp.ID, Project: resp.Project}
+		return planStartResultMsg{PlannerID: resp.ID, Project: resp.Project}
 	}
 }
 
@@ -263,7 +263,7 @@ func (m Model) approveAction(actionID string) tea.Cmd {
 			return nil
 		}
 		err := m.client.ApproveAction(actionID)
-		return ActionResultMsg{Err: err}
+		return actionResultMsg{Err: err}
 	}
 }
 
@@ -274,7 +274,7 @@ func (m Model) rejectAction(actionID string) tea.Cmd {
 			return nil
 		}
 		err := m.client.RejectAction(actionID, "")
-		return ActionResultMsg{Err: err}
+		return actionResultMsg{Err: err}
 	}
 }
 
@@ -285,7 +285,7 @@ func (m Model) allowPermission(requestID string) tea.Cmd {
 			return nil
 		}
 		err := m.client.RespondPermission(requestID, "allow", "", false)
-		return PermissionResultMsg{Err: err}
+		return permissionResultMsg{Err: err}
 	}
 }
 
@@ -296,7 +296,7 @@ func (m Model) denyPermission(requestID string) tea.Cmd {
 			return nil
 		}
 		err := m.client.RespondPermission(requestID, "deny", "denied by user", false)
-		return PermissionResultMsg{Err: err}
+		return permissionResultMsg{Err: err}
 	}
 }
 
@@ -307,7 +307,7 @@ func (m Model) answerUserQuestion(questionID string, answers map[string]string) 
 			return nil
 		}
 		err := m.client.RespondUserQuestion(questionID, answers)
-		return UserQuestionResultMsg{QuestionID: questionID, Err: err}
+		return userQuestionResultMsg{QuestionID: questionID, Err: err}
 	}
 }
 
@@ -318,7 +318,7 @@ func (m Model) abortAgent(agentID string, force bool) tea.Cmd {
 			return nil
 		}
 		err := m.client.AgentAbort(agentID, force)
-		return AbortResultMsg{Err: err}
+		return abortResultMsg{Err: err}
 	}
 }
 
@@ -328,9 +328,9 @@ func (m Model) fetchUsage() tea.Cmd {
 	return func() tea.Msg {
 		window, err := usage.GetCurrentBillingWindowWithUsage()
 		if err != nil {
-			return UsageUpdateMsg{Err: err}
+			return usageUpdateMsg{Err: err}
 		}
-		return UsageUpdateMsg{
+		return usageUpdateMsg{
 			Percent:   window.Usage.PercentInt(limits),
 			Remaining: window.TimeRemaining(),
 		}

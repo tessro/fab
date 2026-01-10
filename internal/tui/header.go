@@ -25,13 +25,13 @@ type Header struct {
 	hasUsage      bool
 
 	// Connection state
-	connState ConnectionState
+	connState connectionState
 }
 
 // NewHeader creates a new header component.
 func NewHeader() Header {
 	return Header{
-		connState: ConnectionConnected,
+		connState: connectionConnected,
 	}
 }
 
@@ -47,7 +47,7 @@ func (h *Header) SetAgentCounts(total, running int) {
 }
 
 // SetConnectionState updates the connection state display.
-func (h *Header) SetConnectionState(state ConnectionState) {
+func (h *Header) SetConnectionState(state connectionState) {
 	h.connState = state
 }
 
@@ -71,15 +71,15 @@ func (h Header) View() string {
 	// Connection status indicator (shown when not connected)
 	var connStatus string
 	switch h.connState {
-	case ConnectionDisconnected:
+	case connectionDisconnected:
 		connStatus = headerConnDisconnectedStyle.Render(" ● disconnected")
-	case ConnectionReconnecting:
+	case connectionReconnecting:
 		connStatus = headerConnReconnectingStyle.Render(" ◌ reconnecting...")
 	}
 
 	// Agent stats section (only show if we have agents and connected)
 	var agentStats string
-	if h.agentCount > 0 && h.connState == ConnectionConnected {
+	if h.agentCount > 0 && h.connState == connectionConnected {
 		agentStats = headerStatsStyle.Render(
 			fmt.Sprintf("%d/%d running", h.runningCount, h.agentCount),
 		)
@@ -87,7 +87,7 @@ func (h Header) View() string {
 
 	// Session stats section (commits)
 	var sessionStats string
-	if h.commitCount > 0 && h.connState == ConnectionConnected {
+	if h.commitCount > 0 && h.connState == connectionConnected {
 		sessionStats = headerStatsStyle.Render(
 			fmt.Sprintf("%d commits", h.commitCount),
 		)
@@ -95,7 +95,7 @@ func (h Header) View() string {
 
 	// Usage meter section (only show if we have usage data)
 	var usageMeter string
-	if h.hasUsage && h.connState == ConnectionConnected {
+	if h.hasUsage && h.connState == connectionConnected {
 		usageMeter = h.renderUsageMeter()
 	}
 

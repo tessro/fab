@@ -6,71 +6,71 @@ import (
 	"github.com/tessro/fab/internal/daemon"
 )
 
-// StreamEventMsg wraps a daemon stream event for Bubble Tea.
-type StreamEventMsg struct {
+// streamEventMsg wraps a daemon stream event for Bubble Tea.
+type streamEventMsg struct {
 	Event *daemon.StreamEvent
 	Err   error
 }
 
-// AgentListMsg contains updated agent list from daemon.
-type AgentListMsg struct {
+// agentListMsg contains updated agent list from daemon.
+type agentListMsg struct {
 	Agents []daemon.AgentStatus
 	Err    error
 }
 
-// AgentInputMsg is the result of sending input to an agent.
-type AgentInputMsg struct {
+// agentInputMsg is the result of sending input to an agent.
+type agentInputMsg struct {
 	Err error
 }
 
-// AgentChatHistoryMsg contains chat history fetched for an agent.
-type AgentChatHistoryMsg struct {
+// agentChatHistoryMsg contains chat history fetched for an agent.
+type agentChatHistoryMsg struct {
 	AgentID string
 	Entries []daemon.ChatEntryDTO
 	Err     error
 }
 
-// StagedActionsMsg contains pending actions that need user approval.
-type StagedActionsMsg struct {
+// stagedActionsMsg contains pending actions that need user approval.
+type stagedActionsMsg struct {
 	Actions []daemon.StagedAction
 	Err     error
 }
 
-// StatsMsg contains aggregated session statistics.
-type StatsMsg struct {
+// statsMsg contains aggregated session statistics.
+type statsMsg struct {
 	Stats *daemon.StatsResponse
 	Err   error
 }
 
-// ActionResultMsg is the result of approving/rejecting an action.
-type ActionResultMsg struct {
+// actionResultMsg is the result of approving/rejecting an action.
+type actionResultMsg struct {
 	Err error
 }
 
-// PermissionResultMsg is the result of responding to a permission request.
-type PermissionResultMsg struct {
+// permissionResultMsg is the result of responding to a permission request.
+type permissionResultMsg struct {
 	Err error
 }
 
-// UserQuestionResultMsg is the result of responding to a user question.
-type UserQuestionResultMsg struct {
+// userQuestionResultMsg is the result of responding to a user question.
+type userQuestionResultMsg struct {
 	QuestionID string
 	Err        error
 }
 
-// AbortResultMsg is the result of aborting an agent.
-type AbortResultMsg struct {
+// abortResultMsg is the result of aborting an agent.
+type abortResultMsg struct {
 	Err error
 }
 
-// ProjectListMsg contains the list of projects for plan mode.
-type ProjectListMsg struct {
+// projectListMsg contains the list of projects for plan mode.
+type projectListMsg struct {
 	Projects []string
 	Err      error
 }
 
-// PlanStartResultMsg is the result of starting a planner.
-type PlanStartResultMsg struct {
+// planStartResultMsg is the result of starting a planner.
+type planStartResultMsg struct {
 	PlannerID string
 	Project   string
 	Err       error
@@ -82,8 +82,8 @@ type tickMsg time.Time
 // clearErrorMsg is sent to clear the error display after a timeout.
 type clearErrorMsg struct{}
 
-// StreamStartMsg is sent when the event stream is started successfully.
-type StreamStartMsg struct {
+// streamStartMsg is sent when the event stream is started successfully.
+type streamStartMsg struct {
 	EventChan <-chan daemon.EventResult
 }
 
@@ -94,8 +94,8 @@ type reconnectMsg struct {
 	EventChan <-chan daemon.EventResult
 }
 
-// UsageUpdateMsg contains updated usage statistics.
-type UsageUpdateMsg struct {
+// usageUpdateMsg contains updated usage statistics.
+type usageUpdateMsg struct {
 	Percent   int
 	Remaining time.Duration
 	Err       error
