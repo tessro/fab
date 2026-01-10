@@ -1,6 +1,6 @@
 ---
 id: fa-8b9
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T22:20:56.869557-08:00
