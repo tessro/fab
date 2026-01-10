@@ -25,12 +25,12 @@ func (b *Backend) commitAndPush(message string) error {
 		return fmt.Errorf("git add: %w\n%s", err, output)
 	}
 
-	// Check if there are changes to commit
+	// Check if there are staged changes to commit.
+	// git diff --quiet exits 0 when no changes exist, exits 1 when changes exist.
 	diffCmd := exec.Command("git", "diff", "--cached", "--quiet")
 	diffCmd.Dir = b.repoDir
 	if err := diffCmd.Run(); err == nil {
-		// No changes to commit
-		return nil
+		return nil // exit 0: no staged changes
 	}
 
 	// Commit
