@@ -512,7 +512,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modeState.IsInputting() {
 			switch {
 			case key.Matches(msg, m.keys.Cancel):
-				// Exit input mode, return to chat view
+				// Clear input and exit input mode, return to chat view
+				m.inputLine.Clear()
 				_ = m.modeState.ExitInputMode()
 				m.syncFocusToComponents(FocusChatView)
 				m.chatView.SetInputView(m.inputLine.View(), 1)
