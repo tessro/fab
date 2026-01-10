@@ -838,6 +838,9 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 	defer logging.LogPanic("agent-read-loop", nil)
 	defer close(a.readLoopDone)
 
+	// Create a scoped logger with agent ID for all logging in this loop
+	log := slog.With("agent", a.ID)
+
 	// Get stdout reference
 	a.mu.RLock()
 	stdout := a.stdout
@@ -870,7 +873,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		// Parse the JSONL line as a StreamMessage
 		msg, err := ParseStreamMessage(line)
 		if err != nil {
-			slog.Warn("readloop: parse error", "agent", a.ID, "error", err, "line", string(line))
+			log.Warn("readloop: parse error", "error", err, "line", string(line))
 			if cfg.OnError != nil {
 				cfg.OnError(err)
 			}
@@ -883,10 +886,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 
 		// Log system messages (init, hook_response) that don't produce chat entries
 		if msg.Type == "system" {
-			slog.Info("readloop: system message",
-				"agent", a.ID,
-				"subtype", msg.Subtype,
-			)
+			log.Info("readloop: system message", "subtype", msg.Subtype)
 		}
 
 		// Log result messages including error status
@@ -895,8 +895,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			if msg.IsError {
 				logLevel = slog.LevelWarn
 			}
-			slog.Log(context.Background(), logLevel, "readloop: result message",
-				"agent", a.ID,
+			log.Log(context.Background(), logLevel, "readloop: result message",
 				"is_error", msg.IsError,
 				"result", truncateForLog(msg.Result, 200),
 			)
@@ -905,8 +904,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 		// Log token usage when present (debug level to reduce noise)
 		if msg.Message != nil && msg.Message.Usage != nil {
 			u := msg.Message.Usage
-			slog.Debug("readloop: token usage",
-				"agent", a.ID,
+			log.Debug("readloop: token usage",
 				"input_tokens", u.InputTokens,
 				"output_tokens", u.OutputTokens,
 				"cache_creation", u.CacheCreationInputTokens,
@@ -916,10 +914,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 
 		// Log stop reason when present (debug level to reduce noise)
 		if msg.Message != nil && msg.Message.StopReason != "" {
-			slog.Debug("readloop: stop reason",
-				"agent", a.ID,
-				"stop_reason", msg.Message.StopReason,
-			)
+			log.Debug("readloop: stop reason", "stop_reason", msg.Message.StopReason)
 		}
 
 		// Convert to chat entries and add to history
@@ -936,15 +931,11 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 				case "text", "tool_use", "tool_result", "thinking":
 					// Known types - no warning needed
 				default:
-					slog.Warn("readloop: unknown content block type",
-						"agent", a.ID,
-						"type", block.Type,
-					)
+					log.Warn("readloop: unknown content block type", "type", block.Type)
 				}
 			}
 		}
-		slog.Debug("readloop: parsed message",
-			"agent", a.ID,
+		log.Debug("readloop: parsed message",
 			"type", msg.Type,
 			"role", role,
 			"content_blocks", contentBlocks,

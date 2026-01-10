@@ -79,25 +79,23 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 		}
 	}
 
-	slog.Info("permission request received",
-		"agent", permReq.AgentID,
-		"project", projectName,
+	// Create a scoped logger with agent and project context
+	log := slog.With("agent", permReq.AgentID, "project", projectName)
+
+	log.Info("permission request received",
 		"tool", permReq.ToolName,
 		"input", string(permReq.ToolInput),
 	)
 
 	// Check if LLM permissions checker is enabled for this project
 	if proj != nil && proj.PermissionsChecker == "llm" {
-		resp := s.handleLLMAuth(ctx, permReq, projectName, agentTask, conversationCtx)
+		resp := s.handleLLMAuth(ctx, permReq, projectName, agentTask, conversationCtx, log)
 		if resp != nil {
 			return successResponse(req, resp)
 		}
 		// LLM auth failed (e.g., no API key, API error) - block instead of falling back to TUI
 		// In LLM auth mode, permission prompts should never be shown in TUI
-		slog.Warn("LLM auth failed, blocking operation",
-			"agent", permReq.AgentID,
-			"project", projectName,
-		)
+		log.Warn("LLM auth failed, blocking operation")
 		return successResponse(req, &daemon.PermissionResponse{
 			Behavior: "deny",
 			Message:  "LLM authorization failed - operation blocked",
@@ -124,18 +122,16 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 	// Block waiting for a response from the TUI
 	resp := <-respCh
 	if resp == nil {
-		slog.Warn("permission request timed out",
+		log.Warn("permission request timed out",
 			"id", id,
-			"agent", permReq.AgentID,
 			"tool", permReq.ToolName,
 		)
 		// Channel was closed without a response (timeout or cancellation)
 		return errorResponse(req, "permission request cancelled or timed out")
 	}
 
-	slog.Info("permission response sent",
+	log.Info("permission response sent",
 		"id", id,
-		"agent", permReq.AgentID,
 		"tool", permReq.ToolName,
 		"input", string(permReq.ToolInput),
 		"behavior", resp.Behavior,
@@ -147,7 +143,7 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 
 // handleLLMAuth uses the LLM to authorize a permission request.
 // Returns the response if successful, nil if authorization failed and should fall back to TUI.
-func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.PermissionRequestPayload, projectName, agentTask string, conversationCtx []string) *daemon.PermissionResponse {
+func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.PermissionRequestPayload, projectName, agentTask string, conversationCtx []string, log *slog.Logger) *daemon.PermissionResponse {
 	// Get the API key for the configured provider
 	provider := s.globalConfig.GetLLMAuthProvider()
 	apiKey := s.globalConfig.GetAPIKey(provider)
@@ -163,10 +159,7 @@ func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.Permissio
 	}
 
 	if apiKey == "" {
-		slog.Warn("LLM auth enabled but no API key configured",
-			"provider", provider,
-			"project", projectName,
-		)
+		log.Warn("LLM auth enabled but no API key configured", "provider", provider)
 		return nil
 	}
 
@@ -188,18 +181,15 @@ func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.Permissio
 	// Call the LLM
 	result, err := auth.Authorize(ctx, authReq)
 	if err != nil {
-		slog.Error("LLM authorization failed",
+		log.Error("LLM authorization failed",
 			"error", err,
-			"project", projectName,
 			"tool", permReq.ToolName,
 		)
 		return nil
 	}
 
 	// Log the decision (excluding conversation history for brevity)
-	slog.Info("LLM permission decision",
-		"project", projectName,
-		"agent", permReq.AgentID,
+	log.Info("LLM permission decision",
 		"tool", permReq.ToolName,
 		"input", truncate(string(permReq.ToolInput), 200),
 		"decision", result.Decision,

@@ -184,12 +184,15 @@ func (p *Planner) setState(new State) {
 
 // Start spawns the planner Claude Code instance in plan mode.
 func (p *Planner) Start() error {
-	slog.Debug("planner.Start: beginning", "id", p.id, "workdir", p.workDir)
+	// Create a scoped logger with planner ID and project for all logging in this method
+	log := slog.With("planner", p.id, "project", p.project)
+
+	log.Debug("planner.Start: beginning", "workdir", p.workDir)
 	p.mu.Lock()
 
 	if p.state != StateStopped {
 		p.mu.Unlock()
-		slog.Debug("planner.Start: already running", "id", p.id, "state", p.state)
+		log.Debug("planner.Start: already running", "state", p.state)
 		return ErrAlreadyRunning
 	}
 
@@ -200,11 +203,11 @@ func (p *Planner) Start() error {
 	p.history = agent.NewChatHistory(agent.DefaultChatHistorySize)
 
 	// Ensure work directory exists
-	slog.Debug("planner.Start: creating work dir", "id", p.id, "workdir", p.workDir)
+	log.Debug("planner.Start: creating work dir", "workdir", p.workDir)
 	if err := os.MkdirAll(p.workDir, 0755); err != nil {
 		p.state = StateStopped
 		p.mu.Unlock()
-		slog.Error("planner.Start: failed to create work dir", "id", p.id, "error", err)
+		log.Error("planner.Start: failed to create work dir", "error", err)
 		return fmt.Errorf("create work dir: %w", err)
 	}
 
@@ -248,7 +251,7 @@ func (p *Planner) Start() error {
 	// - The fab hook system handles permission control
 	planPrompt := buildPlanModePrompt(p.prompt, p.id)
 
-	slog.Debug("planner.Start: building command", "id", p.id, "prompt_len", len(planPrompt))
+	log.Debug("planner.Start: building command", "prompt_len", len(planPrompt))
 
 	// NOTE: Do not use -p flag with --input-format stream-json.
 	// The prompt must be sent via stdin as a JSON message after starting.
@@ -268,14 +271,14 @@ func (p *Planner) Start() error {
 		"FAB_AGENT_ID=plan:"+p.id,
 	)
 
-	slog.Debug("planner.Start: setting up pipes", "id", p.id)
+	log.Debug("planner.Start: setting up pipes")
 
 	// Set up pipes
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		p.state = StateStopped
 		p.mu.Unlock()
-		slog.Error("planner.Start: stdin pipe failed", "id", p.id, "error", err)
+		log.Error("planner.Start: stdin pipe failed", "error", err)
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
@@ -284,7 +287,7 @@ func (p *Planner) Start() error {
 		stdin.Close()
 		p.state = StateStopped
 		p.mu.Unlock()
-		slog.Error("planner.Start: stdout pipe failed", "id", p.id, "error", err)
+		log.Error("planner.Start: stdout pipe failed", "error", err)
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
@@ -294,31 +297,33 @@ func (p *Planner) Start() error {
 		stdout.Close()
 		p.state = StateStopped
 		p.mu.Unlock()
-		slog.Error("planner.Start: stderr pipe failed", "id", p.id, "error", err)
+		log.Error("planner.Start: stderr pipe failed", "error", err)
 		return fmt.Errorf("stderr pipe: %w", err)
 	}
 
 	// Start the process
-	slog.Debug("planner.Start: starting claude process", "id", p.id, "cmd", cmd.Path, "dir", cmd.Dir)
+	log.Debug("planner.Start: starting claude process", "cmd", cmd.Path, "dir", cmd.Dir)
 	if err := cmd.Start(); err != nil {
 		stdin.Close()
 		stdout.Close()
 		stderr.Close()
 		p.state = StateStopped
 		p.mu.Unlock()
-		slog.Error("planner.Start: process start failed", "id", p.id, "error", err)
+		log.Error("planner.Start: process start failed", "error", err)
 		return fmt.Errorf("start process: %w", err)
 	}
 
 	// Start stderr reader goroutine to log any errors from Claude
+	// Capture log variable for use in goroutine
+	stderrLog := log
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
-			slog.Warn("planner.stderr", "id", p.id, "line", line)
+			stderrLog.Warn("planner.stderr", "line", line)
 		}
 	}()
-	slog.Debug("planner.Start: claude process started", "id", p.id, "pid", cmd.Process.Pid)
+	log.Debug("planner.Start: claude process started", "pid", cmd.Process.Pid)
 
 	p.cmd = cmd
 	p.stdin = stdin
@@ -331,18 +336,18 @@ func (p *Planner) Start() error {
 	p.mu.Unlock()
 
 	// Send initial prompt via stdin (required for --input-format stream-json)
-	slog.Debug("planner.Start: sending initial prompt via stdin", "id", p.id)
+	log.Debug("planner.Start: sending initial prompt via stdin")
 	if err := p.sendInitialPrompt(planPrompt); err != nil {
-		slog.Error("planner.Start: failed to send initial prompt", "id", p.id, "error", err)
+		log.Error("planner.Start: failed to send initial prompt", "error", err)
 		// Don't fail - process is running, just log the error
 	}
 
 	// Start read loop
-	slog.Debug("planner.Start: starting read loop goroutine", "id", p.id)
+	log.Debug("planner.Start: starting read loop goroutine")
 	go p.runReadLoop()
 
 	p.setState(StateRunning)
-	slog.Info("planner.Start: complete", "id", p.id, "pid", cmd.Process.Pid)
+	log.Info("planner.Start: complete", "pid", cmd.Process.Pid)
 	return nil
 }
 
@@ -485,25 +490,28 @@ func (p *Planner) runReadLoop() {
 	defer logging.LogPanic("planner-read-loop", nil)
 	defer close(p.readLoopDone)
 
-	slog.Debug("planner.runReadLoop: starting", "id", p.id)
+	// Create a scoped logger with planner ID for all logging in this loop
+	log := slog.With("planner", p.id)
+
+	log.Debug("planner.runReadLoop: starting")
 
 	p.mu.RLock()
 	stdout := p.stdout
 	p.mu.RUnlock()
 
 	if stdout == nil {
-		slog.Warn("planner.runReadLoop: stdout is nil, exiting", "id", p.id)
+		log.Warn("planner.runReadLoop: stdout is nil, exiting")
 		return
 	}
 
 	scanner := bufio.NewScanner(stdout)
 	lineCount := 0
-	slog.Debug("planner.runReadLoop: waiting for first line from claude", "id", p.id)
+	log.Debug("planner.runReadLoop: waiting for first line from claude")
 
 	for scanner.Scan() {
 		select {
 		case <-p.readLoopStop:
-			slog.Debug("planner.runReadLoop: stop signal received", "id", p.id, "lines_read", lineCount)
+			log.Debug("planner.runReadLoop: stop signal received", "lines_read", lineCount)
 			return
 		default:
 		}
@@ -512,7 +520,7 @@ func (p *Planner) runReadLoop() {
 		lineCount++
 
 		if lineCount == 1 {
-			slog.Debug("planner.runReadLoop: received first line", "id", p.id, "len", len(line))
+			log.Debug("planner.runReadLoop: received first line", "len", len(line))
 		}
 
 		if len(line) == 0 {
@@ -522,7 +530,7 @@ func (p *Planner) runReadLoop() {
 		// Parse stream message
 		msg, err := agent.ParseStreamMessage(line)
 		if err != nil {
-			slog.Warn("planner.runReadLoop: parse error", "id", p.id, "error", err, "line_num", lineCount)
+			log.Warn("planner.runReadLoop: parse error", "error", err, "line_num", lineCount)
 			continue
 		}
 
@@ -534,7 +542,7 @@ func (p *Planner) runReadLoop() {
 		if msg.Message != nil {
 			for _, block := range msg.Message.Content {
 				if block.Type == "tool_use" && block.Name == "ExitPlanMode" {
-					slog.Info("planner detected ExitPlanMode", "id", p.id)
+					log.Info("planner detected ExitPlanMode")
 					p.handleExitPlanMode()
 				}
 			}
@@ -558,12 +566,12 @@ func (p *Planner) runReadLoop() {
 
 	// Scanner finished - process likely exited
 	scanErr := scanner.Err()
-	slog.Debug("planner.runReadLoop: scanner finished", "id", p.id, "lines_read", lineCount, "error", scanErr)
+	log.Debug("planner.runReadLoop: scanner finished", "lines_read", lineCount, "error", scanErr)
 
 	p.mu.Lock()
 	if p.state == StateRunning {
 		p.state = StateStopped
-		slog.Debug("planner.runReadLoop: state set to stopped", "id", p.id)
+		log.Debug("planner.runReadLoop: state set to stopped")
 	}
 	p.mu.Unlock()
 }

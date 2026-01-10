@@ -23,10 +23,13 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
 	}
 
-	slog.Debug("handlePlanStart: parsed request", "project", startReq.Project, "prompt_len", len(startReq.Prompt))
+	// Create a scoped logger with project context
+	log := slog.With("project", startReq.Project)
+
+	log.Debug("handlePlanStart: parsed request", "prompt_len", len(startReq.Prompt))
 
 	if startReq.Prompt == "" {
-		slog.Error("handlePlanStart: empty prompt")
+		log.Error("handlePlanStart: empty prompt")
 		return errorResponse(req, "prompt is required")
 	}
 
@@ -35,12 +38,12 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 	var projectName string
 
 	if startReq.Project != "" {
-		slog.Debug("handlePlanStart: using project worktree", "project", startReq.Project)
+		log.Debug("handlePlanStart: using project worktree")
 
 		// Use project worktree
 		proj, err := s.registry.Get(startReq.Project)
 		if err != nil {
-			slog.Error("handlePlanStart: project not found", "project", startReq.Project, "error", err)
+			log.Error("handlePlanStart: project not found", "error", err)
 			return errorResponse(req, fmt.Sprintf("project not found: %s", startReq.Project))
 		}
 
@@ -48,23 +51,25 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 
 		// Generate a planner ID first so we can create the worktree
 		plannerID := s.planners.GenerateID()
-		slog.Debug("handlePlanStart: generated planner ID", "id", plannerID)
+		// Add planner ID to scoped logger
+		log = log.With("planner", plannerID)
+		log.Debug("handlePlanStart: generated planner ID")
 
 		// Create a dedicated worktree for the planner (not subject to MaxAgents)
-		slog.Debug("handlePlanStart: creating planner worktree", "id", plannerID)
+		log.Debug("handlePlanStart: creating planner worktree")
 		wtPath, err := proj.CreatePlannerWorktree(plannerID)
 		if err != nil {
-			slog.Error("handlePlanStart: failed to create worktree", "id", plannerID, "error", err)
+			log.Error("handlePlanStart: failed to create worktree", "error", err)
 			return errorResponse(req, fmt.Sprintf("failed to create planner worktree: %v", err))
 		}
 		workDir = wtPath
-		slog.Debug("handlePlanStart: worktree created", "id", plannerID, "path", workDir)
+		log.Debug("handlePlanStart: worktree created", "path", workDir)
 
 		// Create the planner with the specific ID
-		slog.Debug("handlePlanStart: creating planner instance", "id", plannerID)
+		log.Debug("handlePlanStart: creating planner instance")
 		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt)
 		if err != nil {
-			slog.Error("handlePlanStart: failed to create planner", "id", plannerID, "error", err)
+			log.Error("handlePlanStart: failed to create planner", "error", err)
 			_ = proj.DeletePlannerWorktree(plannerID)
 			return errorResponse(req, fmt.Sprintf("failed to create planner: %v", err))
 		}
@@ -75,19 +80,15 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 		})
 
 		// Start the planner
-		slog.Debug("handlePlanStart: starting planner", "id", plannerID)
+		log.Debug("handlePlanStart: starting planner")
 		if err := p.Start(); err != nil {
-			slog.Error("handlePlanStart: failed to start planner", "id", plannerID, "error", err)
+			log.Error("handlePlanStart: failed to start planner", "error", err)
 			_ = s.planners.Delete(p.ID())
 			_ = proj.DeletePlannerWorktree(plannerID)
 			return errorResponse(req, fmt.Sprintf("failed to start planner: %v", err))
 		}
 
-		slog.Info("planner started",
-			"planner", p.ID(),
-			"project", projectName,
-			"workdir", workDir,
-		)
+		log.Info("planner started", "workdir", workDir)
 
 		return successResponse(req, daemon.PlanStartResponse{
 			ID:      p.ID(),
@@ -97,18 +98,20 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 	}
 
 	// Use default planner directory (no project)
-	slog.Debug("handlePlanStart: using default planner directory (no project)")
+	log.Debug("handlePlanStart: using default planner directory (no project)")
 	home, _ := os.UserHomeDir()
 	workDir = filepath.Join(home, ".fab", "planners")
 
 	// Create the planner
-	slog.Debug("handlePlanStart: creating planner instance", "workdir", workDir)
+	log.Debug("handlePlanStart: creating planner instance", "workdir", workDir)
 	p, err := s.planners.Create(projectName, workDir, startReq.Prompt)
 	if err != nil {
-		slog.Error("handlePlanStart: failed to create planner", "error", err)
+		log.Error("handlePlanStart: failed to create planner", "error", err)
 		return errorResponse(req, fmt.Sprintf("failed to create planner: %v", err))
 	}
-	slog.Debug("handlePlanStart: planner created", "id", p.ID())
+	// Add planner ID to scoped logger for remaining logs
+	log = log.With("planner", p.ID())
+	log.Debug("handlePlanStart: planner created")
 
 	// Set up entry callback for broadcasting
 	p.OnEntry(func(entry agent.ChatEntry) {
@@ -116,18 +119,14 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 	})
 
 	// Start the planner
-	slog.Debug("handlePlanStart: starting planner", "id", p.ID())
+	log.Debug("handlePlanStart: starting planner")
 	if err := p.Start(); err != nil {
-		slog.Error("handlePlanStart: failed to start planner", "id", p.ID(), "error", err)
+		log.Error("handlePlanStart: failed to start planner", "error", err)
 		_ = s.planners.Delete(p.ID())
 		return errorResponse(req, fmt.Sprintf("failed to start planner: %v", err))
 	}
 
-	slog.Info("planner started",
-		"planner", p.ID(),
-		"project", projectName,
-		"workdir", workDir,
-	)
+	log.Info("planner started", "workdir", workDir)
 
 	return successResponse(req, daemon.PlanStartResponse{
 		ID:      p.ID(),
