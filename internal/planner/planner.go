@@ -184,10 +184,12 @@ func (p *Planner) setState(new State) {
 
 // Start spawns the planner Claude Code instance in plan mode.
 func (p *Planner) Start() error {
+	slog.Debug("planner.Start: beginning", "id", p.id, "workdir", p.workDir)
 	p.mu.Lock()
 
 	if p.state != StateStopped {
 		p.mu.Unlock()
+		slog.Debug("planner.Start: already running", "id", p.id, "state", p.state)
 		return ErrAlreadyRunning
 	}
 
@@ -198,9 +200,11 @@ func (p *Planner) Start() error {
 	p.history = agent.NewChatHistory(agent.DefaultChatHistorySize)
 
 	// Ensure work directory exists
+	slog.Debug("planner.Start: creating work dir", "id", p.id, "workdir", p.workDir)
 	if err := os.MkdirAll(p.workDir, 0755); err != nil {
 		p.state = StateStopped
 		p.mu.Unlock()
+		slog.Error("planner.Start: failed to create work dir", "id", p.id, "error", err)
 		return fmt.Errorf("create work dir: %w", err)
 	}
 
@@ -244,14 +248,17 @@ func (p *Planner) Start() error {
 	// - The fab hook system handles permission control
 	planPrompt := buildPlanModePrompt(p.prompt, p.id)
 
+	slog.Debug("planner.Start: building command", "id", p.id, "prompt_len", len(planPrompt))
+
+	// NOTE: Do not use -p flag with --input-format stream-json.
+	// The prompt must be sent via stdin as a JSON message after starting.
 	cmd := exec.Command("claude",
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "default",
 		"--plugin-dir", plugin.DefaultInstallDir(),
-		"--settings", string(settingsJSON),
-		"-p", planPrompt)
+		"--settings", string(settingsJSON))
 	cmd.Dir = p.workDir
 
 	// Set environment
@@ -261,11 +268,14 @@ func (p *Planner) Start() error {
 		"FAB_AGENT_ID=plan:"+p.id,
 	)
 
+	slog.Debug("planner.Start: setting up pipes", "id", p.id)
+
 	// Set up pipes
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		p.state = StateStopped
 		p.mu.Unlock()
+		slog.Error("planner.Start: stdin pipe failed", "id", p.id, "error", err)
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
@@ -274,17 +284,41 @@ func (p *Planner) Start() error {
 		stdin.Close()
 		p.state = StateStopped
 		p.mu.Unlock()
+		slog.Error("planner.Start: stdout pipe failed", "id", p.id, "error", err)
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	// Start the process
-	if err := cmd.Start(); err != nil {
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
 		stdin.Close()
 		stdout.Close()
 		p.state = StateStopped
 		p.mu.Unlock()
+		slog.Error("planner.Start: stderr pipe failed", "id", p.id, "error", err)
+		return fmt.Errorf("stderr pipe: %w", err)
+	}
+
+	// Start the process
+	slog.Debug("planner.Start: starting claude process", "id", p.id, "cmd", cmd.Path, "dir", cmd.Dir)
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		stderr.Close()
+		p.state = StateStopped
+		p.mu.Unlock()
+		slog.Error("planner.Start: process start failed", "id", p.id, "error", err)
 		return fmt.Errorf("start process: %w", err)
 	}
+
+	// Start stderr reader goroutine to log any errors from Claude
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			slog.Warn("planner.stderr", "id", p.id, "line", line)
+		}
+	}()
+	slog.Debug("planner.Start: claude process started", "id", p.id, "pid", cmd.Process.Pid)
 
 	p.cmd = cmd
 	p.stdin = stdin
@@ -296,11 +330,49 @@ func (p *Planner) Start() error {
 
 	p.mu.Unlock()
 
+	// Send initial prompt via stdin (required for --input-format stream-json)
+	slog.Debug("planner.Start: sending initial prompt via stdin", "id", p.id)
+	if err := p.sendInitialPrompt(planPrompt); err != nil {
+		slog.Error("planner.Start: failed to send initial prompt", "id", p.id, "error", err)
+		// Don't fail - process is running, just log the error
+	}
+
 	// Start read loop
+	slog.Debug("planner.Start: starting read loop goroutine", "id", p.id)
 	go p.runReadLoop()
 
 	p.setState(StateRunning)
+	slog.Info("planner.Start: complete", "id", p.id, "pid", cmd.Process.Pid)
 	return nil
+}
+
+// sendInitialPrompt sends the initial prompt to Claude via stdin.
+func (p *Planner) sendInitialPrompt(prompt string) error {
+	p.mu.RLock()
+	stdin := p.stdin
+	p.mu.RUnlock()
+
+	if stdin == nil {
+		return fmt.Errorf("stdin not available")
+	}
+
+	msg := agent.InputMessage{
+		Type: "user",
+		Message: agent.MessageBody{
+			Role:    "user",
+			Content: prompt,
+		},
+		SessionID: "default",
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	data = append(data, '\n')
+	_, err = stdin.Write(data)
+	return err
 }
 
 // Stop gracefully stops the planner.
@@ -413,24 +485,36 @@ func (p *Planner) runReadLoop() {
 	defer logging.LogPanic("planner-read-loop", nil)
 	defer close(p.readLoopDone)
 
+	slog.Debug("planner.runReadLoop: starting", "id", p.id)
+
 	p.mu.RLock()
 	stdout := p.stdout
 	p.mu.RUnlock()
 
 	if stdout == nil {
+		slog.Warn("planner.runReadLoop: stdout is nil, exiting", "id", p.id)
 		return
 	}
 
 	scanner := bufio.NewScanner(stdout)
+	lineCount := 0
+	slog.Debug("planner.runReadLoop: waiting for first line from claude", "id", p.id)
 
 	for scanner.Scan() {
 		select {
 		case <-p.readLoopStop:
+			slog.Debug("planner.runReadLoop: stop signal received", "id", p.id, "lines_read", lineCount)
 			return
 		default:
 		}
 
 		line := scanner.Bytes()
+		lineCount++
+
+		if lineCount == 1 {
+			slog.Debug("planner.runReadLoop: received first line", "id", p.id, "len", len(line))
+		}
+
 		if len(line) == 0 {
 			continue
 		}
@@ -438,7 +522,7 @@ func (p *Planner) runReadLoop() {
 		// Parse stream message
 		msg, err := agent.ParseStreamMessage(line)
 		if err != nil {
-			slog.Warn("planner readloop: parse error", "error", err)
+			slog.Warn("planner.runReadLoop: parse error", "id", p.id, "error", err, "line_num", lineCount)
 			continue
 		}
 
@@ -473,9 +557,13 @@ func (p *Planner) runReadLoop() {
 	}
 
 	// Scanner finished - process likely exited
+	scanErr := scanner.Err()
+	slog.Debug("planner.runReadLoop: scanner finished", "id", p.id, "lines_read", lineCount, "error", scanErr)
+
 	p.mu.Lock()
 	if p.state == StateRunning {
 		p.state = StateStopped
+		slog.Debug("planner.runReadLoop: state set to stopped", "id", p.id)
 	}
 	p.mu.Unlock()
 }

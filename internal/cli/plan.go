@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -43,14 +44,19 @@ func runPlan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("prompt is required: fab plan \"your planning task\"")
 	}
 
+	slog.Debug("plan: connecting to daemon")
 	client := MustConnect()
+	slog.Debug("plan: connected to daemon")
 
 	// Start the planning agent
+	slog.Debug("plan: sending PlanStart request", "project", planProject, "prompt_len", len(prompt))
 	resp, err := client.PlanStart(planProject, prompt)
 	if err != nil {
+		slog.Error("plan: PlanStart failed", "error", err)
 		client.Close()
 		return fmt.Errorf("start planner: %w", err)
 	}
+	slog.Debug("plan: PlanStart succeeded", "id", resp.ID, "project", resp.Project, "workdir", resp.WorkDir)
 
 	fmt.Printf("🚌 Planning agent started (ID: %s)\n", resp.ID)
 	if resp.Project != "" {
@@ -59,9 +65,13 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Working directory: %s\n", resp.WorkDir)
 
 	// Launch main TUI with the planner selected
-	return tui.RunWithClient(client, &tui.TUIOptions{
-		InitialAgentID: tui.PlannerAgentIDPrefix + resp.ID,
+	initialAgentID := tui.PlannerAgentIDPrefix + resp.ID
+	slog.Debug("plan: launching TUI", "initial_agent_id", initialAgentID)
+	err = tui.RunWithClient(client, &tui.TUIOptions{
+		InitialAgentID: initialAgentID,
 	})
+	slog.Debug("plan: TUI exited", "error", err)
+	return err
 }
 
 var planListCmd = &cobra.Command{

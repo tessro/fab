@@ -226,6 +226,7 @@ func NewWithClient(client *daemon.Client, opts *TUIOptions) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
+	slog.Debug("tui.Init: starting", "has_client", m.client != nil, "initial_agent_id", m.initialAgentID)
 	cmds := []tea.Cmd{
 		m.inputLine.input.Cursor.BlinkCmd(),
 		m.tickCmd(), // Start spinner animation
@@ -234,6 +235,7 @@ func (m Model) Init() tea.Cmd {
 	if m.client != nil {
 		// Fetch agent list first, then attach to stream
 		// (must be sequential to avoid concurrent decoder access)
+		slog.Debug("tui.Init: scheduling fetchAgentList")
 		cmds = append(cmds, m.fetchAgentList())
 	}
 	return tea.Batch(cmds...)
@@ -323,17 +325,22 @@ func (m Model) waitForEvent() tea.Cmd {
 func (m Model) fetchAgentList() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
+			slog.Debug("tui.fetchAgentList: client is nil")
 			return nil
 		}
+		slog.Debug("tui.fetchAgentList: fetching agents")
 		resp, err := m.client.AgentList("")
 		if err != nil {
+			slog.Error("tui.fetchAgentList: AgentList failed", "error", err)
 			return AgentListMsg{Err: err}
 		}
+		slog.Debug("tui.fetchAgentList: got agents", "count", len(resp.Agents))
 
 		// Also fetch planners and merge them into the list
 		agents := resp.Agents
 		plannerResp, err := m.client.PlanList("")
 		if err == nil && plannerResp != nil {
+			slog.Debug("tui.fetchAgentList: got planners", "count", len(plannerResp.Planners))
 			for _, p := range plannerResp.Planners {
 				startedAt := time.Now()
 				if p.StartedAt != "" {
@@ -341,8 +348,10 @@ func (m Model) fetchAgentList() tea.Cmd {
 						startedAt = t
 					}
 				}
+				agentID := plannerAgentID(p.ID)
+				slog.Debug("tui.fetchAgentList: adding planner to list", "planner_id", p.ID, "agent_id", agentID)
 				agents = append(agents, daemon.AgentStatus{
-					ID:          plannerAgentID(p.ID),
+					ID:          agentID,
 					Project:     p.Project,
 					State:       p.State,
 					Worktree:    p.WorkDir,
@@ -350,8 +359,11 @@ func (m Model) fetchAgentList() tea.Cmd {
 					Description: "Planner",
 				})
 			}
+		} else if err != nil {
+			slog.Warn("tui.fetchAgentList: PlanList failed", "error", err)
 		}
 
+		slog.Debug("tui.fetchAgentList: returning", "total_agents", len(agents))
 		return AgentListMsg{Agents: agents}
 	}
 }
@@ -1031,8 +1043,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentListMsg:
 		if msg.Err != nil {
+			slog.Error("tui.Update: AgentListMsg error", "error", msg.Err)
 			cmds = append(cmds, m.setError(msg.Err))
 		} else {
+			slog.Debug("tui.Update: AgentListMsg received", "count", len(msg.Agents), "initial_agent_id", m.initialAgentID, "pending_planner_id", m.pendingPlannerID)
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
 			// Prune state for agents that no longer exist (e.g., after reconnecting)
@@ -1043,25 +1057,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Check if we have a pending planner to select (from starting plan in TUI)
 			if m.pendingPlannerID != "" {
 				tuiPlannerID := plannerAgentID(m.pendingPlannerID)
+				slog.Debug("tui.Update: looking for pending planner", "pending_planner_id", m.pendingPlannerID, "tui_planner_id", tuiPlannerID)
+				found := false
 				for i, agent := range msg.Agents {
 					if agent.ID == tuiPlannerID {
+						slog.Debug("tui.Update: found pending planner, selecting", "index", i, "agent_id", agent.ID)
 						m.pendingPlannerID = "" // Clear pending
 						m.agentList.SetSelected(i)
 						if cmd := m.selectCurrentAgent(); cmd != nil {
 							cmds = append(cmds, cmd)
 						}
+						found = true
 						break
 					}
+				}
+				if !found {
+					slog.Debug("tui.Update: pending planner not found in agent list", "tui_planner_id", tuiPlannerID)
 				}
 			} else if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
 				// Auto-select agent if none is currently selected
 				// If an initial agent was specified, find and select it
 				if m.initialAgentID != "" {
+					slog.Debug("tui.Update: looking for initial agent", "initial_agent_id", m.initialAgentID)
+					found := false
 					for i, agent := range msg.Agents {
+						slog.Debug("tui.Update: checking agent", "index", i, "agent_id", agent.ID)
 						if agent.ID == m.initialAgentID {
+							slog.Debug("tui.Update: found initial agent, selecting", "index", i)
 							m.agentList.SetSelected(i)
+							found = true
 							break
 						}
+					}
+					if !found {
+						slog.Warn("tui.Update: initial agent not found in agent list", "initial_agent_id", m.initialAgentID, "agent_count", len(msg.Agents))
 					}
 					// Clear the initial agent ID so we don't keep trying to select it
 					m.initialAgentID = ""
@@ -1072,6 +1101,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Attach to event stream after initial agent list fetch
 			if !m.attached {
+				slog.Debug("tui.Update: attaching to event stream")
 				cmds = append(cmds, m.attachToStream())
 			}
 			// Fetch staged actions for approval display
@@ -1653,11 +1683,14 @@ func Run() error {
 
 // RunWithClient starts the TUI with a pre-connected daemon client.
 func RunWithClient(client *daemon.Client, opts *TUIOptions) error {
+	slog.Debug("tui.RunWithClient: starting", "initial_agent_id", opts.InitialAgentID)
 	p := tea.NewProgram(
 		NewWithClient(client, opts),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
+	slog.Debug("tui.RunWithClient: running program")
 	_, err := p.Run()
+	slog.Debug("tui.RunWithClient: program exited", "error", err)
 	return err
 }
