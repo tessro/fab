@@ -54,7 +54,7 @@ type Model struct {
 	helpBar   HelpBar
 
 	// Daemon client for IPC
-	client   *daemon.Client
+	client   daemon.TUIClient
 	attached bool
 
 	// Event channel from dedicated streaming connection
@@ -124,7 +124,7 @@ type TUIOptions struct {
 }
 
 // NewWithClient creates a new TUI model with a pre-connected daemon client.
-func NewWithClient(client *daemon.Client, opts *TUIOptions) Model {
+func NewWithClient(client daemon.TUIClient, opts *TUIOptions) Model {
 	m := New()
 	m.client = client
 	if opts != nil {
@@ -189,7 +189,7 @@ func Run() error {
 }
 
 // RunWithClient starts the TUI with a pre-connected daemon client.
-func RunWithClient(client *daemon.Client, opts *TUIOptions) error {
+func RunWithClient(client daemon.TUIClient, opts *TUIOptions) error {
 	var initialAgentID string
 	if opts != nil {
 		initialAgentID = opts.InitialAgentID

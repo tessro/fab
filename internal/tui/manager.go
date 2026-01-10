@@ -24,7 +24,7 @@ type ManagerModel struct {
 	inputLine InputLine
 
 	// Daemon client
-	client    *daemon.Client
+	client    daemon.ManagerModeClient
 	attached  bool
 	eventChan <-chan daemon.EventResult
 
@@ -52,7 +52,7 @@ type managerClearHistoryMsg struct {
 }
 
 // NewManagerModel creates a new manager TUI model.
-func NewManagerModel(client *daemon.Client, project string) ManagerModel {
+func NewManagerModel(client daemon.ManagerModeClient, project string) ManagerModel {
 	chatView := NewChatView()
 	chatView.SetAgent("manager", project)
 
@@ -285,7 +285,7 @@ func (m *ManagerModel) updateLayout() {
 }
 
 // RunManagerMode starts the TUI in manager mode for a project.
-func RunManagerMode(client *daemon.Client, project string) error {
+func RunManagerMode(client daemon.ManagerModeClient, project string) error {
 	p := tea.NewProgram(
 		NewManagerModel(client, project),
 		tea.WithAltScreen(),

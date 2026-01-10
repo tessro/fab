@@ -17,9 +17,14 @@ func (m Model) tickCmd() tea.Cmd {
 	})
 }
 
+// EventStreamer is the interface for streaming events from the daemon.
+type EventStreamer interface {
+	StreamEvents(projects []string) (<-chan daemon.EventResult, error)
+}
+
 // attachToStreamCmd returns a command that connects to the daemon event stream.
 // This is a shared helper used by multiple TUI models.
-func attachToStreamCmd(client *daemon.Client) tea.Cmd {
+func attachToStreamCmd(client EventStreamer) tea.Cmd {
 	return func() tea.Msg {
 		if client == nil {
 			return nil

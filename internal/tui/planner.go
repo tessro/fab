@@ -26,7 +26,7 @@ type PlannerModel struct {
 	inputLine InputLine
 
 	// Daemon client
-	client    *daemon.Client
+	client    daemon.PlannerModeClient
 	attached  bool
 	eventChan <-chan daemon.EventResult
 
@@ -50,7 +50,7 @@ type plannerInputMsg struct {
 }
 
 // NewPlannerModel creates a new planner TUI model.
-func NewPlannerModel(client *daemon.Client, plannerID string) PlannerModel {
+func NewPlannerModel(client daemon.PlannerModeClient, plannerID string) PlannerModel {
 	chatView := NewChatView()
 	chatView.SetAgent(plannerID, "plan")
 
@@ -277,7 +277,7 @@ func (m *PlannerModel) updateLayout() {
 }
 
 // RunPlannerMode starts the TUI in planner mode.
-func RunPlannerMode(client *daemon.Client, plannerID string) error {
+func RunPlannerMode(client daemon.PlannerModeClient, plannerID string) error {
 	p := tea.NewProgram(
 		NewPlannerModel(client, plannerID),
 		tea.WithAltScreen(),
