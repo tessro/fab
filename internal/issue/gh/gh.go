@@ -73,28 +73,7 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 		return nil, fmt.Errorf("parse created issue: %w", err)
 	}
 
-	issueID := strconv.Itoa(num)
-
-	// Try to add labels for type and priority (best-effort)
-	var labels []string
-	if params.Type != "" {
-		labels = append(labels, "type:"+params.Type)
-	}
-	labels = append(labels, fmt.Sprintf("priority:%d", params.Priority))
-	labels = append(labels, params.Labels...)
-
-	if len(labels) > 0 {
-		labelArgs := []string{"issue", "edit", issueID, "--repo", b.nwo}
-		for _, label := range labels {
-			labelArgs = append(labelArgs, "--add-label", label)
-		}
-		if _, err := b.runGH(ctx, labelArgs...); err != nil {
-			// Labels failed - likely don't exist in repo, continue without them
-			fmt.Fprintf(issue.Stderr, "warning: could not add labels (labels may not exist in repo): %v\n", err)
-		}
-	}
-
-	return b.Get(ctx, issueID)
+	return b.Get(ctx, strconv.Itoa(num))
 }
 
 // Get retrieves an issue by ID (issue number as string).
