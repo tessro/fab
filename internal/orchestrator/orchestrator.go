@@ -61,7 +61,7 @@ After claiming a task, run 'fab agent describe "<brief description>"' to set you
 When done:
 1. Run all quality gates
 2. Run /review to perform a thorough code review of your changes
-3. Commit all your changes with a descriptive message
+3. Commit all your changes with a descriptive message (include "Closes #<id>" in the commit body to link the commit to the task)
 4. Run 'fab issue close <id>' to close the task
 5. Run 'fab agent done'
 IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.`,
