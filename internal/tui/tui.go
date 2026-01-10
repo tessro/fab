@@ -181,6 +181,10 @@ type Model struct {
 
 	// Initial agent to select on startup (empty = first agent)
 	initialAgentID string
+
+	// Pending planner ID to select when it appears in the list
+	// Set when user starts a plan from TUI, cleared when selected
+	pendingPlannerID string
 }
 
 // New creates a new TUI model.
@@ -1035,8 +1039,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.pruneStaleAgentState(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-			// Auto-select agent if none is currently selected
-			if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
+
+			// Check if we have a pending planner to select (from starting plan in TUI)
+			if m.pendingPlannerID != "" {
+				tuiPlannerID := plannerAgentID(m.pendingPlannerID)
+				for i, agent := range msg.Agents {
+					if agent.ID == tuiPlannerID {
+						m.pendingPlannerID = "" // Clear pending
+						m.agentList.SetSelected(i)
+						if cmd := m.selectCurrentAgent(); cmd != nil {
+							cmds = append(cmds, cmd)
+						}
+						break
+					}
+				}
+			} else if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
+				// Auto-select agent if none is currently selected
 				// If an initial agent was specified, find and select it
 				if m.initialAgentID != "" {
 					for i, agent := range msg.Agents {
@@ -1168,6 +1186,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				"planner", msg.PlannerID,
 				"project", msg.Project,
 			)
+			// Store the planner ID so we can auto-select it when the
+			// planner_created event arrives
+			m.pendingPlannerID = msg.PlannerID
 			// The planner_created event will add it to the agent list
 			// We just need to refresh the list to ensure we see it
 			cmds = append(cmds, m.fetchAgentList())
@@ -1444,6 +1465,21 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		})
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
+
+		// Check if this is the planner we just started from TUI
+		shouldSelect := m.pendingPlannerID == event.AgentID
+		if shouldSelect {
+			m.pendingPlannerID = "" // Clear pending
+			// Select the new planner in the list
+			for i, agent := range agents {
+				if agent.ID == tuiAgentID {
+					m.agentList.SetSelected(i)
+					break
+				}
+			}
+			return m.selectCurrentAgent()
+		}
+
 		// Auto-select the new planner if no agent is currently selected
 		if m.chatView.AgentID() == "" {
 			return m.selectCurrentAgent()
