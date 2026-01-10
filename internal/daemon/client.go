@@ -137,7 +137,7 @@ func (c *Client) Send(req *Request) (*Response, error) {
 	c.mu.Lock()
 	if c.conn == nil {
 		c.mu.Unlock()
-		return nil, fmt.Errorf("not connected")
+		return nil, ErrNotConnected
 	}
 	conn := c.conn
 	encoder := c.encoder
@@ -195,7 +195,7 @@ func (c *Client) Ping() (*PingResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("ping failed: %s", resp.Error)
+		return nil, NewServerError("ping", resp.Error)
 	}
 	return decodePayload[PingResponse](resp.Payload)
 }
@@ -207,7 +207,7 @@ func (c *Client) Shutdown() error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("shutdown failed: %s", resp.Error)
+		return NewServerError("shutdown", resp.Error)
 	}
 	return nil
 }
@@ -219,7 +219,7 @@ func (c *Client) Status() (*StatusResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("status failed: %s", resp.Error)
+		return nil, NewServerError("status", resp.Error)
 	}
 	return decodePayload[StatusResponse](resp.Payload)
 }
@@ -234,7 +234,7 @@ func (c *Client) Start(project string, all bool) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("start failed: %s", resp.Error)
+		return NewServerError("start", resp.Error)
 	}
 	return nil
 }
@@ -249,7 +249,7 @@ func (c *Client) Stop(project string, all bool) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("stop failed: %s", resp.Error)
+		return NewServerError("stop", resp.Error)
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (c *Client) ProjectAdd(remoteURL, name string, maxAgents int, autostart boo
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("project add failed: %s", resp.Error)
+		return nil, NewServerError("project add", resp.Error)
 	}
 	return decodePayload[ProjectAddResponse](resp.Payload)
 }
@@ -279,7 +279,7 @@ func (c *Client) ProjectRemove(name string, deleteWorktrees bool) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("project remove failed: %s", resp.Error)
+		return NewServerError("project remove", resp.Error)
 	}
 	return nil
 }
@@ -291,7 +291,7 @@ func (c *Client) ProjectList() (*ProjectListResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("project list failed: %s", resp.Error)
+		return nil, NewServerError("project list", resp.Error)
 	}
 	return decodePayload[ProjectListResponse](resp.Payload)
 }
@@ -307,7 +307,7 @@ func (c *Client) ProjectSet(name string, maxAgents *int, autostart *bool) error 
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("project set failed: %s", resp.Error)
+		return NewServerError("project set", resp.Error)
 	}
 	return nil
 }
@@ -322,7 +322,7 @@ func (c *Client) ProjectConfigShow(name string) (*ProjectConfigShowResponse, err
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("project config show failed: %s", resp.Error)
+		return nil, NewServerError("project config show", resp.Error)
 	}
 	return decodePayload[ProjectConfigShowResponse](resp.Payload)
 }
@@ -337,7 +337,7 @@ func (c *Client) ProjectConfigGet(name, key string) (*ProjectConfigGetResponse, 
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("project config get failed: %s", resp.Error)
+		return nil, NewServerError("project config get", resp.Error)
 	}
 	return decodePayload[ProjectConfigGetResponse](resp.Payload)
 }
@@ -352,7 +352,7 @@ func (c *Client) ProjectConfigSet(name, key, value string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("project config set failed: %s", resp.Error)
+		return NewServerError("project config set", resp.Error)
 	}
 	return nil
 }
@@ -367,7 +367,7 @@ func (c *Client) AgentList(project string) (*AgentListResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("agent list failed: %s", resp.Error)
+		return nil, NewServerError("agent list", resp.Error)
 	}
 	return decodePayload[AgentListResponse](resp.Payload)
 }
@@ -382,7 +382,7 @@ func (c *Client) AgentCreate(project, task string) (*AgentCreateResponse, error)
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("agent create failed: %s", resp.Error)
+		return nil, NewServerError("agent create", resp.Error)
 	}
 	return decodePayload[AgentCreateResponse](resp.Payload)
 }
@@ -397,7 +397,7 @@ func (c *Client) AgentDelete(id string, force bool) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent delete failed: %s", resp.Error)
+		return NewServerError("agent delete", resp.Error)
 	}
 	return nil
 }
@@ -413,7 +413,7 @@ func (c *Client) AgentAbort(id string, force bool) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent abort failed: %s", resp.Error)
+		return NewServerError("agent abort", resp.Error)
 	}
 	return nil
 }
@@ -428,7 +428,7 @@ func (c *Client) AgentInput(id, input string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent input failed: %s", resp.Error)
+		return NewServerError("agent input", resp.Error)
 	}
 	return nil
 }
@@ -443,7 +443,7 @@ func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("agent output failed: %s", resp.Error)
+		return nil, NewServerError("agent output", resp.Error)
 	}
 	return decodePayload[AgentOutputResponse](resp.Payload)
 }
@@ -463,7 +463,7 @@ func (c *Client) AgentDone(agentID, taskID, errorMsg string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent done failed: %s", resp.Error)
+		return NewServerError("agent done", resp.Error)
 	}
 	return nil
 }
@@ -482,7 +482,7 @@ func (c *Client) AgentClaim(agentID, ticketID string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("%s", resp.Error)
+		return NewServerError("claim", resp.Error)
 	}
 	return nil
 }
@@ -497,7 +497,7 @@ func (c *Client) ClaimList(project string) (*ClaimListResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("claim list failed: %s", resp.Error)
+		return nil, NewServerError("claim list", resp.Error)
 	}
 	return decodePayload[ClaimListResponse](resp.Payload)
 }
@@ -512,7 +512,7 @@ func (c *Client) AgentSendMessage(id, content string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent send message failed: %s", resp.Error)
+		return NewServerError("agent send message", resp.Error)
 	}
 	return nil
 }
@@ -527,7 +527,7 @@ func (c *Client) AgentDescribe(agentID, description string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("agent describe failed: %s", resp.Error)
+		return NewServerError("agent describe", resp.Error)
 	}
 	return nil
 }
@@ -542,7 +542,7 @@ func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryRespon
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("agent chat history failed: %s", resp.Error)
+		return nil, NewServerError("agent chat history", resp.Error)
 	}
 	return decodePayload[AgentChatHistoryResponse](resp.Payload)
 }
@@ -557,7 +557,7 @@ func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, erro
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("list actions failed: %s", resp.Error)
+		return nil, NewServerError("list actions", resp.Error)
 	}
 	return decodePayload[StagedActionsResponse](resp.Payload)
 }
@@ -572,7 +572,7 @@ func (c *Client) ApproveAction(actionID string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("approve action failed: %s", resp.Error)
+		return NewServerError("approve action", resp.Error)
 	}
 	return nil
 }
@@ -587,7 +587,7 @@ func (c *Client) RejectAction(actionID, reason string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("reject action failed: %s", resp.Error)
+		return NewServerError("reject action", resp.Error)
 	}
 	return nil
 }
@@ -604,7 +604,7 @@ func (c *Client) RequestPermission(req *PermissionRequestPayload) (*PermissionRe
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("permission request failed: %s", resp.Error)
+		return nil, NewServerError("permission request", resp.Error)
 	}
 	return decodePayload[PermissionResponse](resp.Payload)
 }
@@ -625,7 +625,7 @@ func (c *Client) RespondPermission(id, behavior, message string, interrupt bool)
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("respond permission failed: %s", resp.Error)
+		return NewServerError("respond permission", resp.Error)
 	}
 	return nil
 }
@@ -642,7 +642,7 @@ func (c *Client) RequestUserQuestion(req *UserQuestionRequestPayload) (*UserQues
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("user question request failed: %s", resp.Error)
+		return nil, NewServerError("user question request", resp.Error)
 	}
 	return decodePayload[UserQuestionResponse](resp.Payload)
 }
@@ -661,7 +661,7 @@ func (c *Client) RespondUserQuestion(id string, answers map[string]string) error
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("respond user question failed: %s", resp.Error)
+		return NewServerError("respond user question", resp.Error)
 	}
 	return nil
 }
@@ -676,7 +676,7 @@ func (c *Client) Stats(project string) (*StatsResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("stats failed: %s", resp.Error)
+		return nil, NewServerError("stats", resp.Error)
 	}
 	return decodePayload[StatsResponse](resp.Payload)
 }
@@ -691,7 +691,7 @@ func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("list permissions failed: %s", resp.Error)
+		return nil, NewServerError("list permissions", resp.Error)
 	}
 	return decodePayload[PermissionListResponse](resp.Payload)
 }
@@ -707,7 +707,7 @@ func (c *Client) Attach(projects []string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("attach failed: %s", resp.Error)
+		return NewServerError("attach", resp.Error)
 	}
 
 	c.mu.Lock()
@@ -723,7 +723,7 @@ func (c *Client) Detach() error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("detach failed: %s", resp.Error)
+		return NewServerError("detach", resp.Error)
 	}
 
 	c.mu.Lock()
@@ -752,7 +752,7 @@ func (c *Client) RecvEvent() (*StreamEvent, error) {
 	c.mu.Lock()
 	if c.conn == nil {
 		c.mu.Unlock()
-		return nil, fmt.Errorf("not connected")
+		return nil, ErrNotConnected
 	}
 	conn := c.conn
 	decoder := c.decoder
@@ -827,7 +827,7 @@ func (c *Client) StreamEvents(projects []string) (<-chan EventResult, error) {
 	}
 	if !resp.Success {
 		conn.Close()
-		return nil, fmt.Errorf("attach failed: %s", resp.Error)
+		return nil, NewServerError("attach", resp.Error)
 	}
 
 	// Store connection and done channel
@@ -896,7 +896,7 @@ func (c *Client) ManagerStart(project string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("manager start failed: %s", resp.Error)
+		return NewServerError("manager start", resp.Error)
 	}
 	return nil
 }
@@ -911,7 +911,7 @@ func (c *Client) ManagerStop(project string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("manager stop failed: %s", resp.Error)
+		return NewServerError("manager stop", resp.Error)
 	}
 	return nil
 }
@@ -926,7 +926,7 @@ func (c *Client) ManagerStatus(project string) (*ManagerStatusResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("manager status failed: %s", resp.Error)
+		return nil, NewServerError("manager status", resp.Error)
 	}
 	return decodePayload[ManagerStatusResponse](resp.Payload)
 }
@@ -941,7 +941,7 @@ func (c *Client) ManagerSendMessage(project, content string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("manager send message failed: %s", resp.Error)
+		return NewServerError("manager send message", resp.Error)
 	}
 	return nil
 }
@@ -956,7 +956,7 @@ func (c *Client) ManagerChatHistory(project string, limit int) (*ManagerChatHist
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("manager chat history failed: %s", resp.Error)
+		return nil, NewServerError("manager chat history", resp.Error)
 	}
 	return decodePayload[ManagerChatHistoryResponse](resp.Payload)
 }
@@ -971,7 +971,7 @@ func (c *Client) ManagerClearHistory(project string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("manager clear history failed: %s", resp.Error)
+		return NewServerError("manager clear history", resp.Error)
 	}
 	return nil
 }
@@ -986,7 +986,7 @@ func (c *Client) PlanStart(project, prompt string) (*PlanStartResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("plan start failed: %s", resp.Error)
+		return nil, NewServerError("plan start", resp.Error)
 	}
 	return decodePayload[PlanStartResponse](resp.Payload)
 }
@@ -1001,7 +1001,7 @@ func (c *Client) PlanStop(id string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("plan stop failed: %s", resp.Error)
+		return NewServerError("plan stop", resp.Error)
 	}
 	return nil
 }
@@ -1016,7 +1016,7 @@ func (c *Client) PlanList(project string) (*PlanListResponse, error) {
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("plan list failed: %s", resp.Error)
+		return nil, NewServerError("plan list", resp.Error)
 	}
 	return decodePayload[PlanListResponse](resp.Payload)
 }
@@ -1031,7 +1031,7 @@ func (c *Client) PlanSendMessage(id, content string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf("plan send message failed: %s", resp.Error)
+		return NewServerError("plan send message", resp.Error)
 	}
 	return nil
 }
@@ -1046,7 +1046,7 @@ func (c *Client) PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("plan chat history failed: %s", resp.Error)
+		return nil, NewServerError("plan chat history", resp.Error)
 	}
 	return decodePayload[PlanChatHistoryResponse](resp.Payload)
 }
