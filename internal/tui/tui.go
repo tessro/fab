@@ -502,6 +502,47 @@ func (m *Model) updateNeedsAttention() {
 	m.agentList.SetNeedsAttention(attention)
 }
 
+// pruneStaleAgentState removes state for agents that no longer exist.
+// This is called after fetching a fresh agent list (e.g., after reconnecting)
+// to clean up any stale state from agents that were removed while disconnected.
+func (m *Model) pruneStaleAgentState() tea.Cmd {
+	// Build set of valid agent IDs
+	validAgents := make(map[string]bool)
+	for _, agent := range m.agentList.Agents() {
+		validAgents[agent.ID] = true
+	}
+
+	// Prune pending permissions for dead agents
+	var validPermissions []daemon.PermissionRequest
+	for _, perm := range m.pendingPermissions {
+		if validAgents[perm.AgentID] {
+			validPermissions = append(validPermissions, perm)
+		}
+	}
+	m.pendingPermissions = validPermissions
+
+	// Prune pending user questions for dead agents
+	var validQuestions []daemon.UserQuestion
+	for _, q := range m.pendingUserQuestions {
+		if validAgents[q.AgentID] {
+			validQuestions = append(validQuestions, q)
+		}
+	}
+	m.pendingUserQuestions = validQuestions
+
+	// Check if currently viewed agent still exists
+	currentAgentID := m.chatView.AgentID()
+	if currentAgentID != "" && !validAgents[currentAgentID] {
+		// Current agent no longer exists - clear and re-select
+		m.chatView.ClearAgent()
+		if len(m.agentList.Agents()) > 0 {
+			return m.selectCurrentAgent()
+		}
+	}
+
+	return nil
+}
+
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -828,6 +869,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
+			// Prune state for agents that no longer exist (e.g., after reconnecting)
+			if cmd := m.pruneStaleAgentState(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			// Auto-select first agent if none is currently selected
 			if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
 				if cmd := m.selectCurrentAgent(); cmd != nil {
