@@ -1601,6 +1601,7 @@ func (s *Supervisor) handleLLMAuth(ctx context.Context, permReq daemon.Permissio
 		"tool", permReq.ToolName,
 		"input", truncate(string(permReq.ToolInput), 200),
 		"decision", result.Decision,
+		"rationale", result.Rationale,
 	)
 
 	// Convert decision to response
