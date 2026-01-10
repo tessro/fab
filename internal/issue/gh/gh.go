@@ -58,11 +58,7 @@ type ghLabel struct {
 
 // Create creates a new issue on GitHub.
 func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue.Issue, error) {
-	args := []string{"issue", "create", "--repo", b.nwo, "--title", params.Title}
-
-	if params.Description != "" {
-		args = append(args, "--body", params.Description)
-	}
+	args := []string{"issue", "create", "--repo", b.nwo, "--title", params.Title, "--body", params.Description}
 
 	// Add labels for type and priority
 	labels := params.Labels
