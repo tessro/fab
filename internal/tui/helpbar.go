@@ -72,9 +72,9 @@ func (h HelpBar) View() string {
 	switch h.modeState.Focus {
 	case FocusAgentList:
 		if h.modeState.NeedsApproval() {
-			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.Select, h.keys.Quit}
+			bindings = []key.Binding{h.keys.Approve, h.keys.Reject, h.keys.Down, h.keys.FocusChat, h.keys.Quit}
 		} else {
-			bindings = []key.Binding{h.keys.Down, h.keys.Select, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
+			bindings = []key.Binding{h.keys.Down, h.keys.FocusChat, h.keys.Abort, h.keys.Quit}
 		}
 	case FocusChatView:
 		if h.modeState.NeedsApproval() {

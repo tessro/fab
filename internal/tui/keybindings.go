@@ -19,8 +19,7 @@ type KeyBindings struct {
 	PageUp   key.Binding
 	PageDown key.Binding
 
-	// Selection/action keys
-	Select  key.Binding
+	// Action keys
 	Approve key.Binding
 	Reject  key.Binding
 	Abort   key.Binding
@@ -79,10 +78,6 @@ func DefaultKeyBindings() KeyBindings {
 			key.WithHelp("pgdn", "page down"),
 		),
 
-		Select: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
-		),
 		Approve: key.NewBinding(
 			key.WithKeys("y"),
 			key.WithHelp("y", "approve"),

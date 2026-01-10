@@ -603,19 +603,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.attemptReconnect())
 			}
 
-		case key.Matches(msg, m.keys.Select):
-			// Select current agent for chat view
-			if m.modeState.Focus == FocusAgentList && m.modeState.IsNormal() {
-				if agent := m.agentList.Selected(); agent != nil {
-					m.chatView.SetAgent(agent.ID, agent.Project)
-					// Update pending permission/action for newly selected agent
-					m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
-					m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
-					// Fetch existing chat history for this agent
-					cmds = append(cmds, m.fetchAgentChatHistory(agent.ID))
-				}
-			}
-
 		case key.Matches(msg, m.keys.Down):
 			switch m.modeState.Focus {
 			case FocusAgentList:
@@ -712,7 +699,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else if msg.Event != nil {
 			slog.Debug("stream event received", "type", msg.Event.Type)
-			m.handleStreamEvent(msg.Event)
+			if cmd := m.handleStreamEvent(msg.Event); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			// Continue listening for events
 			cmds = append(cmds, m.waitForEvent())
 		}
@@ -749,6 +738,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.agentList.SetAgents(msg.Agents)
 			m.header.SetAgentCounts(len(msg.Agents), countRunning(msg.Agents))
+			// Auto-select first agent if none is currently selected
+			if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
+				if cmd := m.selectCurrentAgent(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
 			// Attach to event stream after initial agent list fetch
 			if !m.attached {
 				cmds = append(cmds, m.attachToStream())
@@ -868,7 +863,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleStreamEvent processes a stream event from the daemon.
-func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
+// Returns a command to execute if needed (e.g., fetching chat history for newly selected agent).
+func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 	switch event.Type {
 	case "chat_entry":
 		// Handle chat entry events from stream-json parsing
@@ -915,9 +911,14 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		})
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
+		// Auto-select the new agent if no agent is currently selected
+		if m.chatView.AgentID() == "" {
+			return m.selectCurrentAgent()
+		}
 
 	case "deleted":
 		// An agent was deleted - remove from list
+		wasSelected := event.AgentID == m.chatView.AgentID()
 		agents := m.agentList.Agents()
 		for i := range agents {
 			if agents[i].ID == event.AgentID {
@@ -927,9 +928,12 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 		}
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
-		// Clear chat view if viewing deleted agent
-		if event.AgentID == m.chatView.AgentID() {
+		// If the deleted agent was selected, auto-select the next agent
+		if wasSelected {
 			m.chatView.ClearAgent()
+			if len(agents) > 0 {
+				return m.selectCurrentAgent()
+			}
 		}
 
 	case "permission_request":
@@ -969,6 +973,7 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) {
 			m.updateNeedsAttention()
 		}
 	}
+	return nil
 }
 
 // countRunning counts agents in running or starting state.
