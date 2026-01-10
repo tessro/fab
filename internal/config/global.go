@@ -32,7 +32,7 @@ type ProviderConfig struct {
 type LLMAuthConfig struct {
 	// Provider is which provider to use for authorization ("anthropic" or "openai").
 	Provider string `toml:"provider"`
-	// Model is the model to use for authorization (e.g., "claude-3-5-haiku-20241022").
+	// Model is the model to use for authorization (e.g., "claude-haiku-4-5-20250514").
 	Model string `toml:"model"`
 }
 
@@ -40,7 +40,7 @@ type LLMAuthConfig struct {
 const DefaultLLMAuthProvider = "anthropic"
 
 // DefaultLLMAuthModel is the default model for LLM authorization.
-const DefaultLLMAuthModel = "claude-3-5-haiku-20241022"
+const DefaultLLMAuthModel = "claude-haiku-4-5-20250514"
 
 // GlobalConfigPath returns the path to the global fab config.
 func GlobalConfigPath() (string, error) {

@@ -116,7 +116,7 @@ api_key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
 
 [llm_auth]
 provider = "anthropic"  # or "openai"
-model = "claude-3-5-haiku-20241022"  # default
+model = "claude-haiku-4-5-20250514"  # default
 ```
 
 ### Supported Providers
@@ -124,7 +124,7 @@ model = "claude-3-5-haiku-20241022"  # default
 - **Anthropic** (default): Uses Claude models via the Anthropic API
 - **OpenAI**: Uses GPT models via the OpenAI API
 
-The authorizer uses a fast, inexpensive model by default (Claude 3.5 Haiku) to minimize latency and cost while maintaining security.
+The authorizer uses a fast, inexpensive model by default (Claude Haiku 4.5) to minimize latency and cost while maintaining security.
 
 ## Documentation
 
