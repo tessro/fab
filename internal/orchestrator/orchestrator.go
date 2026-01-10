@@ -2,6 +2,7 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -9,9 +10,13 @@ import (
 	"log/slog"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/issue"
 	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
 )
+
+// Default polling interval for checking ready issues.
+const DefaultPollInterval = 10 * time.Second
 
 // Config configures orchestrator behavior.
 type Config struct {
@@ -31,6 +36,14 @@ type Config struct {
 	// OnAgentStarted is called after an agent's process is started.
 	// Use this to set up output reading/broadcasting.
 	OnAgentStarted func(*agent.Agent)
+
+	// IssueBackendFactory creates an issue backend for checking ready issues.
+	// If nil, auto-spawning of agents is disabled.
+	IssueBackendFactory issue.NewBackendFunc
+
+	// PollInterval is how often to check for ready issues.
+	// Defaults to DefaultPollInterval.
+	PollInterval time.Duration
 }
 
 // DefaultConfig returns the default orchestrator configuration.
@@ -185,11 +198,17 @@ func (o *Orchestrator) run() {
 	defer logging.LogPanic("orchestrator-loop", nil)
 	defer close(o.doneCh)
 
-	// Initial spawn of agents up to capacity
-	o.spawnAgentsToCapacity()
+	// Determine poll interval
+	pollInterval := o.config.PollInterval
+	if pollInterval == 0 {
+		pollInterval = DefaultPollInterval
+	}
 
-	// Main loop - handle events
-	ticker := time.NewTicker(5 * time.Second)
+	// Initial check for ready issues and spawn agents
+	o.checkAndSpawnAgents()
+
+	// Main loop - poll for ready issues
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -197,42 +216,117 @@ func (o *Orchestrator) run() {
 		case <-o.stopCh:
 			return
 		case <-ticker.C:
-			// Periodically check if we need to spawn more agents
-			o.spawnAgentsToCapacity()
+			// Check for ready issues and spawn agents as needed
+			o.checkAndSpawnAgents()
 		}
 	}
 }
 
-// spawnAgentsToCapacity creates agents up to the project's MaxAgents limit.
-func (o *Orchestrator) spawnAgentsToCapacity() {
+// checkAndSpawnAgents checks for ready issues and spawns agents for them.
+// Only spawns agents when there are unclaimed ready issues available.
+func (o *Orchestrator) checkAndSpawnAgents() {
 	proj := o.project
+
+	// Check how many agent slots are available
 	current := o.agents.CountByProject(proj.Name)
 	available := proj.MaxAgents - current
+	if available <= 0 {
+		return
+	}
 
-	for i := 0; i < available; i++ {
-		a, err := o.agents.Create(proj)
-		if err != nil {
-			// No more worktrees available or other error
+	// Check for ready issues (issues with no open dependencies)
+	readyCount, err := o.countUnclaimedReadyIssues()
+	if err != nil {
+		slog.Debug("failed to check ready issues",
+			"project", proj.Name,
+			"error", err,
+		)
+		return
+	}
+
+	// Don't spawn more agents than ready issues
+	toSpawn := available
+	if readyCount < toSpawn {
+		toSpawn = readyCount
+	}
+
+	if toSpawn <= 0 {
+		return
+	}
+
+	slog.Info("spawning agents for ready issues",
+		"project", proj.Name,
+		"ready_issues", readyCount,
+		"spawning", toSpawn,
+		"current_agents", current,
+		"max_agents", proj.MaxAgents,
+	)
+
+	// Spawn the agents
+	for i := 0; i < toSpawn; i++ {
+		if err := o.spawnAgent(); err != nil {
+			slog.Debug("failed to spawn agent",
+				"project", proj.Name,
+				"error", err,
+			)
 			break
 		}
-
-		// Set the agent mode from config
-		a.SetMode(o.config.DefaultAgentMode)
-
-		// Start the agent process immediately (without prompt)
-		if err := a.Start(""); err != nil {
-			// Failed to start process, skip this agent
-			continue
-		}
-
-		// Notify that the agent has started (for read loop setup)
-		if o.config.OnAgentStarted != nil {
-			o.config.OnAgentStarted(a)
-		}
-
-		// Queue kickstart action (will write to stdin)
-		o.queueKickstart(a)
 	}
+}
+
+// countUnclaimedReadyIssues returns the count of ready issues that aren't already claimed.
+func (o *Orchestrator) countUnclaimedReadyIssues() (int, error) {
+	if o.config.IssueBackendFactory == nil {
+		// No issue backend configured, return 0 (no auto-spawning)
+		return 0, nil
+	}
+
+	backend, err := o.config.IssueBackendFactory(o.project.RepoDir())
+	if err != nil {
+		return 0, fmt.Errorf("create issue backend: %w", err)
+	}
+
+	ctx := context.Background()
+	readyIssues, err := backend.Ready(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get ready issues: %w", err)
+	}
+
+	// Count issues that aren't already claimed
+	unclaimed := 0
+	for _, iss := range readyIssues {
+		if !o.claims.IsClaimed(iss.ID) {
+			unclaimed++
+		}
+	}
+
+	return unclaimed, nil
+}
+
+// spawnAgent creates and starts a single agent.
+func (o *Orchestrator) spawnAgent() error {
+	a, err := o.agents.Create(o.project)
+	if err != nil {
+		return err
+	}
+
+	// Set the agent mode from config
+	a.SetMode(o.config.DefaultAgentMode)
+
+	// Start the agent process immediately (without prompt)
+	if err := a.Start(""); err != nil {
+		return fmt.Errorf("start agent process: %w", err)
+	}
+
+	// Notify that the agent has started (for read loop setup)
+	if o.config.OnAgentStarted != nil {
+		o.config.OnAgentStarted(a)
+	}
+
+	// Execute kickstart immediately (no approval needed)
+	o.executeKickstart(a, o.config.KickstartPrompt)
+
+	return nil
 }
 
 // queueKickstart queues or executes the kickstart action based on mode.
@@ -326,8 +420,8 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 			slog.Debug("released ticket claims after merge", "agent", agentID, "count", released)
 		}
 
-		// Spawn a replacement agent
-		o.spawnAgentsToCapacity()
+		// Check for new issues and spawn agents as needed
+		o.checkAndSpawnAgents()
 	} else {
 		// Merge conflict - rebase worktree onto latest main
 		// Do NOT release claims - agent must fix conflicts

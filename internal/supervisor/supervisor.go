@@ -14,6 +14,9 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/issue"
+	"github.com/tessro/fab/internal/issue/gh"
+	"github.com/tessro/fab/internal/issue/tk"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/planner"
@@ -1134,8 +1137,12 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 	// Register project with agent manager
 	s.agents.RegisterProject(proj)
 
+	// Configure orchestrator with issue backend factory for auto-spawning
+	cfg := s.orchConfig
+	cfg.IssueBackendFactory = issueBackendFactoryForProject(proj)
+
 	// Create orchestrator
-	orch := orchestrator.New(proj, s.agents, s.orchConfig)
+	orch := orchestrator.New(proj, s.agents, cfg)
 	s.orchestrators[proj.Name] = orch
 
 	// Register callback for action queue events
@@ -1148,6 +1155,25 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 
 	// Start the orchestrator
 	return orch.Start()
+}
+
+// issueBackendFactoryForProject creates an issue backend factory based on project config.
+func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
+	backendType := proj.IssueBackend
+	if backendType == "" {
+		backendType = "tk" // Default to tk backend
+	}
+
+	return func(repoDir string) (issue.Backend, error) {
+		switch backendType {
+		case "tk":
+			return tk.New(repoDir)
+		case "github", "gh":
+			return gh.New(repoDir)
+		default:
+			return nil, fmt.Errorf("unknown issue backend: %s", backendType)
+		}
+	}
 }
 
 // stopOrchestrator stops the orchestrator for the given project.

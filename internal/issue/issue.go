@@ -61,3 +61,6 @@ type ListFilter struct {
 	Status []Status // Match any of these statuses (empty = all)
 	Labels []string // Match issues with ALL these labels
 }
+
+// NewBackendFunc creates an issue backend given a repo directory.
+type NewBackendFunc func(repoDir string) (Backend, error)
