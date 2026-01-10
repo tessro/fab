@@ -326,6 +326,7 @@ func runProjectConfigShow(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(w, "  max-agents:\t%v\n", result.Config["max-agents"])
 	_, _ = fmt.Fprintf(w, "  autostart:\t%v\n", result.Config["autostart"])
 	_, _ = fmt.Fprintf(w, "  issue-backend:\t%v\n", result.Config["issue-backend"])
+	_, _ = fmt.Fprintf(w, "  permissions-checker:\t%v\n", result.Config["permissions-checker"])
 	_ = w.Flush()
 
 	return nil
