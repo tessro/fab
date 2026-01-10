@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -138,7 +139,7 @@ func (e *Evaluator) loadCached(path string) (*Config, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("stat rules file %s: %w", path, err)
 	}
 
 	e.mu.RLock()
@@ -190,7 +191,7 @@ type projectEntry struct {
 func FindProjectName(cwd string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get home directory: %w", err)
 	}
 
 	configPath := filepath.Join(home, ".config", "fab", "config.toml")
@@ -200,13 +201,13 @@ func FindProjectName(cwd string) (string, error) {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-		return "", err
+		return "", fmt.Errorf("decode config file %s: %w", configPath, err)
 	}
 
 	// Normalize cwd
 	cwd, err = filepath.Abs(cwd)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get absolute path for %s: %w", cwd, err)
 	}
 
 	// Find project that contains cwd

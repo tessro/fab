@@ -56,7 +56,7 @@ func LoadConfig(path string) (*Config, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode rules file %s: %w", path, err)
 	}
 
 	// Validate each rule
@@ -89,7 +89,7 @@ func (c *Config) ManagerAllowedPatterns() []string {
 func GlobalConfigPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get home directory: %w", err)
 	}
 	return filepath.Join(home, ".config", "fab", "permissions.toml"), nil
 }
@@ -98,7 +98,7 @@ func GlobalConfigPath() (string, error) {
 func ProjectConfigPath(projectName string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get home directory: %w", err)
 	}
 	return filepath.Join(home, ".fab", "projects", projectName, "permissions.toml"), nil
 }
