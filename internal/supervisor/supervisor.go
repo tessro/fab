@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/orchestrator"
+	"github.com/tessro/fab/internal/planner"
 	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
 	"github.com/tessro/fab/internal/rules"
@@ -41,6 +43,10 @@ type Supervisor struct {
 	// Manager agent for interactive user conversation
 	// +checklocks:mu
 	manager *manager.Manager
+
+	// Planner agents for implementation planning
+	// +checklocks:mu
+	planners *planner.Manager
 
 	shutdownCh chan struct{} // Created at init, closed to signal shutdown
 	shutdownMu sync.Mutex    // Protects closing shutdownCh exactly once
@@ -69,6 +75,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
 		manager:       manager.New(manager.DefaultWorkDir(), managerPatterns),
+		planners:      planner.NewManager(),
 	}
 
 	// Set up callback to start agent read loops when agent starts
@@ -87,6 +94,9 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 	s.manager.OnEntry(func(entry agent.ChatEntry) {
 		s.broadcastManagerChatEntry(entry)
 	})
+
+	// Set up planner event handlers
+	s.planners.OnEvent(s.handlePlannerEvent)
 
 	return s
 }
@@ -197,6 +207,18 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleManagerChatHistory(ctx, req)
 	case daemon.MsgManagerClearHistory:
 		return s.handleManagerClearHistory(ctx, req)
+
+	// Planning agents
+	case daemon.MsgPlanStart:
+		return s.handlePlanStart(ctx, req)
+	case daemon.MsgPlanStop:
+		return s.handlePlanStop(ctx, req)
+	case daemon.MsgPlanList:
+		return s.handlePlanList(ctx, req)
+	case daemon.MsgPlanSendMessage:
+		return s.handlePlanSendMessage(ctx, req)
+	case daemon.MsgPlanChatHistory:
+		return s.handlePlanChatHistory(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))
@@ -1938,4 +1960,259 @@ func loadManagerPatterns() []string {
 	}
 
 	return cfg.ManagerAllowedPatterns()
+}
+
+// handlePlanStart starts a planning agent.
+func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *daemon.Response {
+	var startReq daemon.PlanStartRequest
+	if err := unmarshalPayload(req.Payload, &startReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if startReq.Prompt == "" {
+		return errorResponse(req, "prompt is required")
+	}
+
+	// Determine working directory
+	var workDir string
+	var projectName string
+
+	if startReq.Project != "" {
+		// Use project worktree
+		proj, err := s.registry.Get(startReq.Project)
+		if err != nil {
+			return errorResponse(req, fmt.Sprintf("project not found: %s", startReq.Project))
+		}
+
+		// Planners use the main repo directory (not a worktree)
+		// since they're just reading code, not making changes
+		workDir = proj.RepoDir()
+		projectName = proj.Name
+	} else {
+		// Use default planner directory
+		home, _ := os.UserHomeDir()
+		workDir = filepath.Join(home, ".fab", "planners")
+	}
+
+	// Create the planner
+	p, err := s.planners.Create(projectName, workDir, startReq.Prompt)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to create planner: %v", err))
+	}
+
+	// Set up entry callback for broadcasting
+	p.OnEntry(func(entry agent.ChatEntry) {
+		s.broadcastPlannerChatEntry(p.ID(), projectName, entry)
+	})
+
+	// Start the planner
+	if err := p.Start(); err != nil {
+		_ = s.planners.Delete(p.ID())
+		return errorResponse(req, fmt.Sprintf("failed to start planner: %v", err))
+	}
+
+	slog.Info("planner started",
+		"planner", p.ID(),
+		"project", projectName,
+		"workdir", workDir,
+	)
+
+	return successResponse(req, daemon.PlanStartResponse{
+		ID:      p.ID(),
+		Project: projectName,
+		WorkDir: workDir,
+	})
+}
+
+// handlePlanStop stops a planning agent.
+func (s *Supervisor) handlePlanStop(_ context.Context, req *daemon.Request) *daemon.Response {
+	var stopReq daemon.PlanStopRequest
+	if err := unmarshalPayload(req.Payload, &stopReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if stopReq.ID == "" {
+		return errorResponse(req, "planner ID required")
+	}
+
+	if err := s.planners.Stop(stopReq.ID); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to stop planner: %v", err))
+	}
+
+	slog.Info("planner stopped", "planner", stopReq.ID)
+	return successResponse(req, nil)
+}
+
+// handlePlanList lists planning agents.
+func (s *Supervisor) handlePlanList(_ context.Context, req *daemon.Request) *daemon.Response {
+	var listReq daemon.PlanListRequest
+	if req.Payload != nil {
+		if err := unmarshalPayload(req.Payload, &listReq); err != nil {
+			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+		}
+	}
+
+	var planners []*planner.Planner
+	if listReq.Project != "" {
+		planners = s.planners.ListByProject(listReq.Project)
+	} else {
+		planners = s.planners.List()
+	}
+
+	statuses := make([]daemon.PlannerStatus, 0, len(planners))
+	for _, p := range planners {
+		info := p.Info()
+		startedAt := ""
+		if !info.StartedAt.IsZero() {
+			startedAt = info.StartedAt.Format(time.RFC3339)
+		}
+		statuses = append(statuses, daemon.PlannerStatus{
+			ID:        info.ID,
+			Project:   info.Project,
+			State:     string(info.State),
+			WorkDir:   info.WorkDir,
+			StartedAt: startedAt,
+			PlanFile:  info.PlanFile,
+		})
+	}
+
+	return successResponse(req, daemon.PlanListResponse{
+		Planners: statuses,
+	})
+}
+
+// handlePlanSendMessage sends a message to a planning agent.
+func (s *Supervisor) handlePlanSendMessage(_ context.Context, req *daemon.Request) *daemon.Response {
+	var sendReq daemon.PlanSendMessageRequest
+	if err := unmarshalPayload(req.Payload, &sendReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if sendReq.ID == "" {
+		return errorResponse(req, "planner ID required")
+	}
+
+	p, err := s.planners.Get(sendReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("planner not found: %s", sendReq.ID))
+	}
+
+	if err := p.SendMessage(sendReq.Content); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// handlePlanChatHistory returns the chat history for a planning agent.
+func (s *Supervisor) handlePlanChatHistory(_ context.Context, req *daemon.Request) *daemon.Response {
+	var histReq daemon.PlanChatHistoryRequest
+	if err := unmarshalPayload(req.Payload, &histReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if histReq.ID == "" {
+		return errorResponse(req, "planner ID required")
+	}
+
+	p, err := s.planners.Get(histReq.ID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("planner not found: %s", histReq.ID))
+	}
+
+	entries := p.History().Entries(histReq.Limit)
+
+	dtos := make([]daemon.ChatEntryDTO, len(entries))
+	for i, e := range entries {
+		dtos[i] = daemon.ChatEntryDTO{
+			Role:       e.Role,
+			Content:    e.Content,
+			ToolName:   e.ToolName,
+			ToolInput:  e.ToolInput,
+			ToolResult: e.ToolResult,
+			Timestamp:  e.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	return successResponse(req, daemon.PlanChatHistoryResponse{
+		PlannerID: histReq.ID,
+		Entries:   dtos,
+	})
+}
+
+// handlePlannerEvent broadcasts planner events to attached clients.
+func (s *Supervisor) handlePlannerEvent(event planner.Event) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	var streamEvent *daemon.StreamEvent
+
+	switch event.Type {
+	case planner.EventCreated:
+		info := event.Planner.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:      "planner_created",
+			AgentID:   info.ID,
+			Project:   info.Project,
+			StartedAt: info.StartedAt.Format(time.RFC3339),
+		}
+	case planner.EventStateChanged:
+		info := event.Planner.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "planner_state",
+			AgentID: info.ID,
+			Project: info.Project,
+			State:   string(event.NewState),
+		}
+	case planner.EventPlanComplete:
+		info := event.Planner.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "plan_complete",
+			AgentID: info.ID,
+			Project: info.Project,
+			Data:    event.PlanFile,
+		}
+	case planner.EventDeleted:
+		info := event.Planner.Info()
+		streamEvent = &daemon.StreamEvent{
+			Type:    "planner_deleted",
+			AgentID: info.ID,
+			Project: info.Project,
+		}
+	}
+
+	if streamEvent != nil {
+		srv.Broadcast(streamEvent)
+	}
+}
+
+// broadcastPlannerChatEntry sends a planner chat entry to attached clients.
+func (s *Supervisor) broadcastPlannerChatEntry(plannerID, project string, entry agent.ChatEntry) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	dto := &daemon.ChatEntryDTO{
+		Role:       entry.Role,
+		Content:    entry.Content,
+		ToolName:   entry.ToolName,
+		ToolInput:  entry.ToolInput,
+		ToolResult: entry.ToolResult,
+		Timestamp:  entry.Timestamp.Format(time.RFC3339),
+	}
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:      "planner_chat_entry",
+		AgentID:   plannerID,
+		Project:   project,
+		ChatEntry: dto,
+	})
 }

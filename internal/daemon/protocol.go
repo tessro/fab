@@ -69,9 +69,16 @@ const (
 	MsgManagerStart       MessageType = "manager.start"        // Start the manager agent
 	MsgManagerStop        MessageType = "manager.stop"         // Stop the manager agent
 	MsgManagerStatus      MessageType = "manager.status"       // Get manager status
-	MsgManagerSendMessage MessageType = "manager.send_message" // Send message to manager
-	MsgManagerChatHistory      MessageType = "manager.chat_history"       // Get manager chat history
-	MsgManagerClearHistory     MessageType = "manager.clear_history"      // Clear manager chat history
+	MsgManagerSendMessage  MessageType = "manager.send_message"  // Send message to manager
+	MsgManagerChatHistory  MessageType = "manager.chat_history"  // Get manager chat history
+	MsgManagerClearHistory MessageType = "manager.clear_history" // Clear manager chat history
+
+	// Planning agents (implementation planning mode)
+	MsgPlanStart       MessageType = "plan.start"        // Start a planning agent
+	MsgPlanStop        MessageType = "plan.stop"         // Stop a planning agent
+	MsgPlanList        MessageType = "plan.list"         // List planning agents
+	MsgPlanSendMessage MessageType = "plan.send_message" // Send message to planner
+	MsgPlanChatHistory MessageType = "plan.chat_history" // Get planner chat history
 )
 
 // Request is the envelope for all IPC requests.
@@ -539,4 +546,60 @@ type ManagerChatHistoryRequest struct {
 // ManagerChatHistoryResponse is the payload for manager.chat_history responses.
 type ManagerChatHistoryResponse struct {
 	Entries []ChatEntryDTO `json:"entries"`
+}
+
+// PlanStartRequest is the payload for plan.start requests.
+type PlanStartRequest struct {
+	Project string `json:"project,omitempty"` // Optional project name (uses project's worktree)
+	Prompt  string `json:"prompt"`            // Planning task description
+}
+
+// PlanStartResponse is the payload for plan.start responses.
+type PlanStartResponse struct {
+	ID      string `json:"id"`      // Planner ID
+	Project string `json:"project"` // Project name (empty if no project)
+	WorkDir string `json:"workdir"` // Working directory
+}
+
+// PlanStopRequest is the payload for plan.stop requests.
+type PlanStopRequest struct {
+	ID string `json:"id"` // Planner ID
+}
+
+// PlanListRequest is the payload for plan.list requests.
+type PlanListRequest struct {
+	Project string `json:"project,omitempty"` // Filter by project
+}
+
+// PlanListResponse is the payload for plan.list responses.
+type PlanListResponse struct {
+	Planners []PlannerStatus `json:"planners"`
+}
+
+// PlannerStatus contains planner agent status info.
+type PlannerStatus struct {
+	ID        string `json:"id"`
+	Project   string `json:"project"`
+	State     string `json:"state"` // "stopped", "starting", "running", "stopping"
+	WorkDir   string `json:"workdir"`
+	StartedAt string `json:"started_at"` // RFC3339 format
+	PlanFile  string `json:"plan_file,omitempty"` // Path to generated plan (if complete)
+}
+
+// PlanSendMessageRequest is the payload for plan.send_message requests.
+type PlanSendMessageRequest struct {
+	ID      string `json:"id"`      // Planner ID
+	Content string `json:"content"` // Message text
+}
+
+// PlanChatHistoryRequest is the payload for plan.chat_history requests.
+type PlanChatHistoryRequest struct {
+	ID    string `json:"id"`              // Planner ID
+	Limit int    `json:"limit,omitempty"` // Max entries to return (0 = all)
+}
+
+// PlanChatHistoryResponse is the payload for plan.chat_history responses.
+type PlanChatHistoryResponse struct {
+	PlannerID string         `json:"planner_id"`
+	Entries   []ChatEntryDTO `json:"entries"`
 }

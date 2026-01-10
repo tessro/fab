@@ -988,3 +988,96 @@ func (c *Client) ManagerClearHistory() error {
 	}
 	return nil
 }
+
+// PlanStart starts a planning agent.
+func (c *Client) PlanStart(project, prompt string) (*PlanStartResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgPlanStart,
+		Payload: PlanStartRequest{Project: project, Prompt: prompt},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("plan start failed: %s", resp.Error)
+	}
+
+	var result PlanStartResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// PlanStop stops a planning agent.
+func (c *Client) PlanStop(id string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgPlanStop,
+		Payload: PlanStopRequest{ID: id},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("plan stop failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// PlanList lists planning agents.
+func (c *Client) PlanList(project string) (*PlanListResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgPlanList,
+		Payload: PlanListRequest{Project: project},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("plan list failed: %s", resp.Error)
+	}
+
+	var result PlanListResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// PlanSendMessage sends a message to a planning agent.
+func (c *Client) PlanSendMessage(id, content string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgPlanSendMessage,
+		Payload: PlanSendMessageRequest{ID: id, Content: content},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("plan send message failed: %s", resp.Error)
+	}
+	return nil
+}
+
+// PlanChatHistory retrieves the chat history for a planning agent.
+func (c *Client) PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgPlanChatHistory,
+		Payload: PlanChatHistoryRequest{ID: id, Limit: limit},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("plan chat history failed: %s", resp.Error)
+	}
+
+	var result PlanChatHistoryResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
