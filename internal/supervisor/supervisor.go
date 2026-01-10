@@ -31,6 +31,7 @@ type Supervisor struct {
 	agents      *agent.Manager
 	orchConfig  orchestrator.Config
 	permissions *daemon.PermissionManager
+	questions   *daemon.UserQuestionManager
 	startedAt   time.Time
 
 	// +checklocks:mu
@@ -60,6 +61,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		orchestrators: make(map[string]*orchestrator.Orchestrator),
 		orchConfig:    orchestrator.DefaultConfig(),
 		permissions:   daemon.NewPermissionManager(PermissionTimeout),
+		questions:     daemon.NewUserQuestionManager(PermissionTimeout),
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
 		manager:       manager.New(manager.DefaultWorkDir(), reg.ManagerAllowedPatterns()),
@@ -157,6 +159,12 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handlePermissionRespond(ctx, req)
 	case daemon.MsgPermissionList:
 		return s.handlePermissionList(ctx, req)
+
+	// User question handling (AskUserQuestion tool)
+	case daemon.MsgUserQuestionRequest:
+		return s.handleUserQuestionRequest(ctx, req)
+	case daemon.MsgUserQuestionRespond:
+		return s.handleUserQuestionRespond(ctx, req)
 
 	// Ticket claims
 	case daemon.MsgAgentClaim:
@@ -1451,6 +1459,123 @@ func (s *Supervisor) broadcastPermissionRequest(req *daemon.PermissionRequest) {
 		AgentID:           req.AgentID,
 		Project:           req.Project,
 		PermissionRequest: req,
+	})
+}
+
+// handleUserQuestionRequest handles a user question request from the hook command.
+// This blocks until a TUI client responds via question.respond.
+func (s *Supervisor) handleUserQuestionRequest(_ context.Context, req *daemon.Request) *daemon.Response {
+	var questionReq daemon.UserQuestionRequestPayload
+	if err := unmarshalPayload(req.Payload, &questionReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if len(questionReq.Questions) == 0 {
+		return errorResponse(req, "questions are required")
+	}
+
+	// Find the project for this agent
+	var project string
+	if questionReq.AgentID != "" {
+		if a, err := s.agents.Get(questionReq.AgentID); err == nil {
+			project = a.Info().Project
+		}
+	}
+
+	slog.Info("user question request received",
+		"agent", questionReq.AgentID,
+		"project", project,
+		"question_count", len(questionReq.Questions),
+	)
+
+	// Create the user question
+	userQuestion := &daemon.UserQuestion{
+		AgentID:     questionReq.AgentID,
+		Project:     project,
+		Questions:   questionReq.Questions,
+		RequestedAt: time.Now(),
+	}
+
+	// Add to the question manager and get the response channel
+	id, respCh := s.questions.Add(userQuestion)
+	userQuestion.ID = id
+
+	// Broadcast the user question to attached TUI clients
+	s.broadcastUserQuestion(userQuestion)
+
+	// Block waiting for a response from the TUI
+	resp := <-respCh
+	if resp == nil {
+		slog.Warn("user question request timed out",
+			"id", id,
+			"agent", questionReq.AgentID,
+		)
+		// Channel was closed without a response (timeout or cancellation)
+		return errorResponse(req, "user question cancelled or timed out")
+	}
+
+	slog.Info("user question response sent",
+		"id", id,
+		"agent", questionReq.AgentID,
+		"answers", resp.Answers,
+	)
+
+	return successResponse(req, resp)
+}
+
+// handleUserQuestionRespond handles a user question response from the TUI.
+func (s *Supervisor) handleUserQuestionRespond(_ context.Context, req *daemon.Request) *daemon.Response {
+	var respPayload daemon.UserQuestionRespondPayload
+	if err := unmarshalPayload(req.Payload, &respPayload); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if respPayload.ID == "" {
+		return errorResponse(req, "question request ID required")
+	}
+
+	// Get the original question for logging
+	origQuestion := s.questions.Get(respPayload.ID)
+	if origQuestion != nil {
+		slog.Info("user question response from TUI",
+			"id", respPayload.ID,
+			"agent", origQuestion.AgentID,
+			"answers", respPayload.Answers,
+		)
+	} else {
+		slog.Info("user question response from TUI",
+			"id", respPayload.ID,
+			"answers", respPayload.Answers,
+		)
+	}
+
+	resp := &daemon.UserQuestionResponse{
+		ID:      respPayload.ID,
+		Answers: respPayload.Answers,
+	}
+
+	if err := s.questions.Respond(respPayload.ID, resp); err != nil {
+		return errorResponse(req, fmt.Sprintf("failed to respond: %v", err))
+	}
+
+	return successResponse(req, nil)
+}
+
+// broadcastUserQuestion sends a user question to attached TUI clients.
+func (s *Supervisor) broadcastUserQuestion(question *daemon.UserQuestion) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:         "user_question",
+		AgentID:      question.AgentID,
+		Project:      question.Project,
+		UserQuestion: question,
 	})
 }
 

@@ -69,6 +69,12 @@ type PermissionResultMsg struct {
 	Err error
 }
 
+// UserQuestionResultMsg is the result of responding to a user question.
+type UserQuestionResultMsg struct {
+	QuestionID string
+	Err        error
+}
+
 // AbortResultMsg is the result of aborting an agent.
 type AbortResultMsg struct {
 	Err error
@@ -145,6 +151,9 @@ type Model struct {
 
 	// Pending permission requests (for selected agent)
 	pendingPermissions []daemon.PermissionRequest
+
+	// Pending user questions (for selected agent)
+	pendingUserQuestions []daemon.UserQuestion
 
 	// Spinner animation frame counter
 	spinnerFrame int
@@ -415,6 +424,17 @@ func (m Model) denyPermission(requestID string) tea.Cmd {
 	}
 }
 
+// answerUserQuestion responds to a user question with the selected answers.
+func (m Model) answerUserQuestion(questionID string, answers map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		err := m.client.RespondUserQuestion(questionID, answers)
+		return UserQuestionResultMsg{QuestionID: questionID, Err: err}
+	}
+}
+
 // abortAgent aborts a running agent.
 func (m Model) abortAgent(agentID string, force bool) tea.Cmd {
 	return func() tea.Msg {
@@ -454,6 +474,19 @@ func (m *Model) pendingPermissionForAgent(agentID string) *daemon.PermissionRequ
 	return nil
 }
 
+// pendingUserQuestionForAgent returns the first pending user question for the given agent.
+func (m *Model) pendingUserQuestionForAgent(agentID string) *daemon.UserQuestion {
+	if agentID == "" {
+		return nil
+	}
+	for i := range m.pendingUserQuestions {
+		if m.pendingUserQuestions[i].AgentID == agentID {
+			return &m.pendingUserQuestions[i]
+		}
+	}
+	return nil
+}
+
 // updateNeedsAttention rebuilds the map of agents that need user attention.
 func (m *Model) updateNeedsAttention() {
 	attention := make(map[string]bool)
@@ -462,6 +495,9 @@ func (m *Model) updateNeedsAttention() {
 	}
 	for _, action := range m.stagedActions {
 		attention[action.AgentID] = true
+	}
+	for _, question := range m.pendingUserQuestions {
+		attention[question.AgentID] = true
 	}
 	m.agentList.SetNeedsAttention(attention)
 }
@@ -481,8 +517,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.inputLine.SetFocused(false)
 				m.chatView.SetInputView(m.inputLine.View(), 1)
 			case key.Matches(msg, m.keys.Submit):
-				// Submit input to agent
-				if m.client != nil && m.chatView.AgentID() != "" {
+				// Check if we're answering a user question with freeform "Other" input
+				if question := m.pendingUserQuestionForAgent(m.chatView.AgentID()); question != nil {
+					input := m.inputLine.Value()
+					if input != "" {
+						// Get the current question header for the answer
+						header, _, _ := m.chatView.GetSelectedAnswer()
+						slog.Debug("user question 'Other' answered",
+							"question_id", question.ID,
+							"header", header,
+							"answer", input,
+						)
+						cmds = append(cmds, m.answerUserQuestion(question.ID, map[string]string{header: input}))
+						m.inputLine.Clear()
+						m.inputLine.SetPlaceholder("Type a message...")
+						// Exit input mode, return to agent list
+						_ = m.modeState.ExitInputMode()
+						m.inputLine.SetFocused(false)
+						m.chatView.SetInputView(m.inputLine.View(), 1)
+					}
+				} else if m.client != nil && m.chatView.AgentID() != "" {
+					// Submit input to agent (normal message flow)
 					input := m.inputLine.Value()
 					if input != "" {
 						// Show user message immediately in chat
@@ -560,10 +615,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, m.approveAction(action.ID))
 				}
 			} else {
-				// Approve pending permission or action for selected agent
+				// Handle pending items for selected agent
 				agentID := m.chatView.AgentID()
-				// Permissions take priority over actions
-				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
+				// User questions take priority, then permissions, then actions
+				if question := m.pendingUserQuestionForAgent(agentID); question != nil {
+					header, label, isOther := m.chatView.GetSelectedAnswer()
+					if isOther {
+						// "Other" selected - enter input mode for freeform answer
+						slog.Debug("user question 'Other' selected, entering input mode",
+							"question_id", question.ID,
+							"header", header,
+						)
+						if err := m.modeState.EnterInputMode(); err == nil {
+							m.syncFocusToComponents(FocusInputLine)
+							m.inputLine.SetPlaceholder("Enter your response...")
+							m.inputLine.Focus()
+							// Store the question info for when input is submitted
+							// We'll handle this in the input submission flow
+						}
+					} else {
+						// Regular option selected - submit answer
+						slog.Debug("user question answered",
+							"question_id", question.ID,
+							"header", header,
+							"answer", label,
+						)
+						cmds = append(cmds, m.answerUserQuestion(question.ID, map[string]string{header: label}))
+					}
+				} else if perm := m.pendingPermissionForAgent(agentID); perm != nil {
 					slog.Debug("approving permission",
 						"permission_id", perm.ID,
 						"tool", perm.ToolName,
@@ -635,7 +714,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, cmd)
 				}
 			case FocusChatView:
-				m.chatView.ScrollDown(1)
+				// If there's a pending user question, navigate options instead of scrolling
+				if m.chatView.HasPendingUserQuestion() {
+					m.chatView.QuestionMoveDown()
+				} else {
+					m.chatView.ScrollDown(1)
+				}
 			case FocusActionQueue:
 				m.actionQueue.MoveDown()
 			}
@@ -648,7 +732,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, cmd)
 				}
 			case FocusChatView:
-				m.chatView.ScrollUp(1)
+				// If there's a pending user question, navigate options instead of scrolling
+				if m.chatView.HasPendingUserQuestion() {
+					m.chatView.QuestionMoveUp()
+				} else {
+					m.chatView.ScrollUp(1)
+				}
 			case FocusActionQueue:
 				m.actionQueue.MoveUp()
 			}
@@ -839,6 +928,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update attention indicators
 		m.updateNeedsAttention()
 
+	case UserQuestionResultMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else {
+			// Remove the question from our pending list
+			for i := range m.pendingUserQuestions {
+				if m.pendingUserQuestions[i].ID == msg.QuestionID {
+					m.pendingUserQuestions = append(m.pendingUserQuestions[:i], m.pendingUserQuestions[i+1:]...)
+					break
+				}
+			}
+		}
+		// Clear the chat view's pending question
+		m.chatView.SetPendingUserQuestion(nil)
+		// Update attention indicators
+		m.updateNeedsAttention()
+
 	case AbortResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
@@ -989,6 +1095,23 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 			m.updateNeedsAttention()
 		}
 
+	case "user_question":
+		// A new user question arrived (from AskUserQuestion tool)
+		if event.UserQuestion != nil {
+			slog.Debug("user_question event",
+				"agent", event.AgentID,
+				"question_count", len(event.UserQuestion.Questions),
+			)
+			// Add to our list of pending user questions
+			m.pendingUserQuestions = append(m.pendingUserQuestions, *event.UserQuestion)
+			// Update chat view if this is for the current agent
+			if event.AgentID == m.chatView.AgentID() {
+				m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(event.AgentID))
+			}
+			// Update attention indicators
+			m.updateNeedsAttention()
+		}
+
 	case "action_queued":
 		// A new staged action was queued
 		if event.StagedAction != nil {
@@ -1064,6 +1187,7 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 	m.chatView.SetAgent(agent.ID, agent.Project)
 	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
 	m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
+	m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(agent.ID))
 	return m.fetchAgentChatHistory(agent.ID)
 }
 
@@ -1099,6 +1223,7 @@ func (m Model) View() string {
 	m.modeState.SetPendingApprovals(
 		m.pendingPermissionForAgent(m.chatView.AgentID()) != nil,
 		m.pendingActionForAgent(m.chatView.AgentID()) != nil,
+		m.pendingUserQuestionForAgent(m.chatView.AgentID()) != nil,
 	)
 	m.helpBar.SetModeState(m.modeState)
 	status := m.helpBar.View()

@@ -625,6 +625,48 @@ func (c *Client) RespondPermission(id, behavior, message string, interrupt bool)
 	return nil
 }
 
+// RequestUserQuestion sends a user question request and blocks until a response is received.
+// This is called by the fab hook command when Claude Code's AskUserQuestion tool is invoked.
+// The method blocks until the TUI user selects answers.
+func (c *Client) RequestUserQuestion(req *UserQuestionRequestPayload) (*UserQuestionResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgUserQuestionRequest,
+		Payload: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("user question request failed: %s", resp.Error)
+	}
+
+	var result UserQuestionResponse
+	if resp.Payload != nil {
+		data, _ := json.Marshal(resp.Payload)
+		_ = json.Unmarshal(data, &result)
+	}
+	return &result, nil
+}
+
+// RespondUserQuestion sends a response to a pending user question.
+// Called by the TUI when the user selects answers.
+func (c *Client) RespondUserQuestion(id string, answers map[string]string) error {
+	resp, err := c.Send(&Request{
+		Type: MsgUserQuestionRespond,
+		Payload: UserQuestionRespondPayload{
+			ID:      id,
+			Answers: answers,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("respond user question failed: %s", resp.Error)
+	}
+	return nil
+}
+
 // Stats retrieves aggregated session statistics.
 func (c *Client) Stats(project string) (*StatsResponse, error) {
 	resp, err := c.Send(&Request{

@@ -257,17 +257,22 @@ func TestModeState_PendingApprovals(t *testing.T) {
 		t.Error("expected NeedsApproval() to be false initially")
 	}
 
-	state.SetPendingApprovals(true, false)
+	state.SetPendingApprovals(true, false, false)
 	if !state.NeedsApproval() {
 		t.Error("expected NeedsApproval() to be true with pending permission")
 	}
 
-	state.SetPendingApprovals(false, true)
+	state.SetPendingApprovals(false, true, false)
 	if !state.NeedsApproval() {
 		t.Error("expected NeedsApproval() to be true with pending action")
 	}
 
-	state.SetPendingApprovals(false, false)
+	state.SetPendingApprovals(false, false, true)
+	if !state.NeedsApproval() {
+		t.Error("expected NeedsApproval() to be true with pending user question")
+	}
+
+	state.SetPendingApprovals(false, false, false)
 	if state.NeedsApproval() {
 		t.Error("expected NeedsApproval() to be false after clearing")
 	}

@@ -63,6 +63,17 @@ func (i *InputLine) Clear() {
 	i.input.SetValue("")
 }
 
+// SetPlaceholder sets the placeholder text.
+func (i *InputLine) SetPlaceholder(text string) {
+	i.input.Placeholder = text
+}
+
+// Focus sets focus to the input.
+func (i *InputLine) Focus() {
+	i.input.Focus()
+	i.focused = true
+}
+
 // View renders the input line.
 func (i InputLine) View() string {
 	var style = inputLineStyle

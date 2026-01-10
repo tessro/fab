@@ -13,6 +13,8 @@ const (
 	ModeInput
 	// ModeAbortConfirm means the user is being asked to confirm an abort.
 	ModeAbortConfirm
+	// ModeUserQuestion means the user is answering a question from Claude.
+	ModeUserQuestion
 )
 
 // String returns the string representation of a Mode.
@@ -24,6 +26,8 @@ func (m Mode) String() string {
 		return "input"
 	case ModeAbortConfirm:
 		return "abort_confirm"
+	case ModeUserQuestion:
+		return "user_question"
 	default:
 		return "unknown"
 	}
@@ -32,7 +36,7 @@ func (m Mode) String() string {
 // ModeState centralizes all mode and focus-related state for the TUI.
 // This provides a single source of truth for the current interaction state.
 type ModeState struct {
-	// Mode is the current interaction mode (normal, input, abort confirmation).
+	// Mode is the current interaction mode (normal, input, abort confirmation, user question).
 	Mode Mode
 
 	// Focus indicates which panel is currently focused when in normal mode.
@@ -46,6 +50,9 @@ type ModeState struct {
 
 	// HasPendingAction indicates if there's a staged action awaiting approval.
 	HasPendingAction bool
+
+	// HasPendingUserQuestion indicates if there's a user question awaiting response.
+	HasPendingUserQuestion bool
 }
 
 // NewModeState creates a new ModeState with default values.
@@ -161,14 +168,44 @@ func (s *ModeState) CancelAbort() error {
 }
 
 // SetPendingApprovals updates the pending approval state.
-func (s *ModeState) SetPendingApprovals(hasPermission, hasAction bool) {
+func (s *ModeState) SetPendingApprovals(hasPermission, hasAction, hasUserQuestion bool) {
 	s.HasPendingPermission = hasPermission
 	s.HasPendingAction = hasAction
+	s.HasPendingUserQuestion = hasUserQuestion
 }
 
 // NeedsApproval returns true if there's any pending approval.
 func (s *ModeState) NeedsApproval() bool {
-	return s.HasPendingPermission || s.HasPendingAction
+	return s.HasPendingPermission || s.HasPendingAction || s.HasPendingUserQuestion
+}
+
+// EnterUserQuestionMode transitions to user question mode.
+// Returns an error if already in user question mode or in another modal mode.
+func (s *ModeState) EnterUserQuestionMode() error {
+	if s.Mode == ModeUserQuestion {
+		return ErrAlreadyInMode
+	}
+	if s.Mode == ModeAbortConfirm || s.Mode == ModeInput {
+		return ErrInvalidModeTransition
+	}
+	s.Mode = ModeUserQuestion
+	return nil
+}
+
+// ExitUserQuestionMode returns from user question mode to normal mode.
+// Returns an error if not currently in user question mode.
+func (s *ModeState) ExitUserQuestionMode() error {
+	if s.Mode != ModeUserQuestion {
+		return ErrInvalidModeTransition
+	}
+	s.Mode = ModeNormal
+	s.Focus = FocusAgentList
+	return nil
+}
+
+// IsUserQuestion returns true if in user question mode.
+func (s *ModeState) IsUserQuestion() bool {
+	return s.Mode == ModeUserQuestion
 }
 
 // IsNormal returns true if in normal mode.
@@ -194,7 +231,7 @@ func (s *ModeState) Validate() error {
 		if s.AbortAgentID == "" {
 			return ErrMissingAgentID
 		}
-	case ModeNormal, ModeInput:
+	case ModeNormal, ModeInput, ModeUserQuestion:
 		// AbortAgentID should be empty when not in abort mode
 		if s.AbortAgentID != "" {
 			return errors.New("abort agent ID should be empty when not in abort mode")

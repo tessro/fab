@@ -12,20 +12,23 @@ import (
 
 // ChatView displays chat entries for a selected agent in a conversational format.
 type ChatView struct {
-	entries           []daemon.ChatEntryDTO
-	width             int
-	height            int
-	focused           bool
-	agentID           string
-	project           string
-	viewport          viewport.Model
-	ready             bool
-	pendingAction     *daemon.StagedAction      // pending action awaiting approval
-	pendingPermission *daemon.PermissionRequest // pending permission request
-	inputView         string                    // rendered input line view
-	inputHeight       int                       // height of input line (for layout)
-	abortConfirming   bool                      // awaiting abort confirmation
-	abortAgentID      string                    // agent being aborted
+	entries             []daemon.ChatEntryDTO
+	width               int
+	height              int
+	focused             bool
+	agentID             string
+	project             string
+	viewport            viewport.Model
+	ready               bool
+	pendingAction       *daemon.StagedAction      // pending action awaiting approval
+	pendingPermission   *daemon.PermissionRequest // pending permission request
+	pendingUserQuestion *daemon.UserQuestion      // pending user question
+	questionSelected    int                       // index of selected option (0-based, per question)
+	questionIndex       int                       // which question we're on (for multi-question)
+	inputView           string                    // rendered input line view
+	inputHeight         int                       // height of input line (for layout)
+	abortConfirming     bool                      // awaiting abort confirmation
+	abortAgentID        string                    // agent being aborted
 }
 
 // NewChatView creates a new chat view component.
@@ -56,6 +59,13 @@ func (v *ChatView) updateViewportSize() {
 	// Reserve space for pending permission request if present
 	if v.pendingPermission != nil {
 		contentHeight -= 2 // 1 line for content + 1 line padding
+	}
+
+	// Reserve space for pending user question if present
+	if v.pendingUserQuestion != nil {
+		// Calculate height based on number of options
+		questionHeight := v.calculateUserQuestionHeight()
+		contentHeight -= questionHeight
 	}
 
 	// Reserve space for abort confirmation bar if present
@@ -157,6 +167,88 @@ func (v *ChatView) PendingPermissionID() string {
 		return ""
 	}
 	return v.pendingPermission.ID
+}
+
+// SetPendingUserQuestion sets the pending user question for this chat view.
+func (v *ChatView) SetPendingUserQuestion(question *daemon.UserQuestion) {
+	hadQuestion := v.pendingUserQuestion != nil
+	hasQuestion := question != nil
+	v.pendingUserQuestion = question
+	// Reset selection state when question changes
+	if question != nil && (v.pendingUserQuestion == nil || v.pendingUserQuestion.ID != question.ID) {
+		v.questionSelected = 0
+		v.questionIndex = 0
+	}
+	// Recalculate viewport size if pending question state changed
+	if hadQuestion != hasQuestion {
+		v.updateViewportSize()
+	}
+}
+
+// HasPendingUserQuestion returns whether there's a pending user question.
+func (v *ChatView) HasPendingUserQuestion() bool {
+	return v.pendingUserQuestion != nil
+}
+
+// PendingUserQuestionID returns the ID of the pending user question, or empty string.
+func (v *ChatView) PendingUserQuestionID() string {
+	if v.pendingUserQuestion == nil {
+		return ""
+	}
+	return v.pendingUserQuestion.ID
+}
+
+// QuestionMoveUp moves the selection up in the user question options.
+func (v *ChatView) QuestionMoveUp() {
+	if v.pendingUserQuestion == nil || v.questionIndex >= len(v.pendingUserQuestion.Questions) {
+		return
+	}
+	options := v.pendingUserQuestion.Questions[v.questionIndex].Options
+	if v.questionSelected > 0 {
+		v.questionSelected--
+	} else {
+		// Wrap to bottom, including "Other" option
+		v.questionSelected = len(options) // "Other" is the last option
+	}
+}
+
+// QuestionMoveDown moves the selection down in the user question options.
+func (v *ChatView) QuestionMoveDown() {
+	if v.pendingUserQuestion == nil || v.questionIndex >= len(v.pendingUserQuestion.Questions) {
+		return
+	}
+	options := v.pendingUserQuestion.Questions[v.questionIndex].Options
+	// +1 for "Other" option
+	if v.questionSelected < len(options) {
+		v.questionSelected++
+	} else {
+		// Wrap to top
+		v.questionSelected = 0
+	}
+}
+
+// GetSelectedAnswer returns the selected answer for the current question.
+// Returns the option label, or "" for "Other" (which requires freeform input).
+func (v *ChatView) GetSelectedAnswer() (header string, label string, isOther bool) {
+	if v.pendingUserQuestion == nil || v.questionIndex >= len(v.pendingUserQuestion.Questions) {
+		return "", "", false
+	}
+	q := v.pendingUserQuestion.Questions[v.questionIndex]
+	if v.questionSelected >= len(q.Options) {
+		// "Other" option selected
+		return q.Header, "", true
+	}
+	return q.Header, q.Options[v.questionSelected].Label, false
+}
+
+// calculateUserQuestionHeight calculates the height needed for the user question UI.
+func (v *ChatView) calculateUserQuestionHeight() int {
+	if v.pendingUserQuestion == nil || v.questionIndex >= len(v.pendingUserQuestion.Questions) {
+		return 0
+	}
+	q := v.pendingUserQuestion.Questions[v.questionIndex]
+	// 1 for question header + options count + 1 for "Other" + 1 for padding
+	return 1 + len(q.Options) + 1 + 1
 }
 
 // SetInputView sets the rendered input line view to display.
@@ -414,6 +506,9 @@ func (v ChatView) View() string {
 	if v.pendingPermission != nil {
 		emptyHeight -= 2
 	}
+	if v.pendingUserQuestion != nil {
+		emptyHeight -= v.calculateUserQuestionHeight()
+	}
 	if v.abortConfirming {
 		emptyHeight -= 2
 	}
@@ -432,6 +527,9 @@ func (v ChatView) View() string {
 	// Abort confirmation takes highest priority
 	if v.abortConfirming {
 		parts = append(parts, v.renderAbortConfirmation())
+	} else if v.pendingUserQuestion != nil {
+		// User question takes priority over permission/action
+		parts = append(parts, v.renderPendingUserQuestion())
 	} else if v.pendingPermission != nil {
 		// Add pending permission bar if present (takes priority over action)
 		parts = append(parts, v.renderPendingPermission())
@@ -518,4 +616,51 @@ func (v ChatView) renderAbortConfirmation() string {
 	label := abortConfirmLabelStyle.Render("⚠ Abort agent " + v.abortAgentID + "?")
 	hint := abortConfirmHintStyle.Render("(y: confirm, n: cancel)")
 	return abortConfirmStyle.Width(v.width - 4).Render(label + " " + hint)
+}
+
+// renderPendingUserQuestion renders the user question with selectable options.
+func (v ChatView) renderPendingUserQuestion() string {
+	if v.pendingUserQuestion == nil || v.questionIndex >= len(v.pendingUserQuestion.Questions) {
+		return ""
+	}
+
+	q := v.pendingUserQuestion.Questions[v.questionIndex]
+
+	var lines []string
+
+	// Question header with icon
+	headerLine := userQuestionHeaderStyle.Render("❓ " + q.Question)
+	lines = append(lines, headerLine)
+
+	// Render each option
+	for i, opt := range q.Options {
+		var line string
+		if i == v.questionSelected {
+			// Selected option
+			line = userQuestionSelectedStyle.Render("▶ " + opt.Label)
+			if opt.Description != "" {
+				line += userQuestionDescStyle.Render(" - " + opt.Description)
+			}
+		} else {
+			// Unselected option
+			line = userQuestionOptionStyle.Render("  " + opt.Label)
+			if opt.Description != "" {
+				line += userQuestionDescStyle.Render(" - " + opt.Description)
+			}
+		}
+		lines = append(lines, line)
+	}
+
+	// "Other" option (always present)
+	otherIndex := len(q.Options)
+	if v.questionSelected == otherIndex {
+		lines = append(lines, userQuestionSelectedStyle.Render("▶ Other")+userQuestionDescStyle.Render(" - Enter custom response"))
+	} else {
+		lines = append(lines, userQuestionOptionStyle.Render("  Other")+userQuestionDescStyle.Render(" - Enter custom response"))
+	}
+
+	// Join all lines
+	content := strings.Join(lines, "\n")
+
+	return userQuestionStyle.Width(v.width - 4).Render(content)
 }

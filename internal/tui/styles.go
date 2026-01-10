@@ -170,6 +170,27 @@ var (
 	abortConfirmHintStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#A0A0A0"))
 
+	// User question styles (AskUserQuestion from Claude)
+	userQuestionStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#2B3B4B")). // Dark blue background
+				Padding(0, 1)
+
+	userQuestionHeaderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#60A5FA")). // Light blue
+				Bold(true)
+
+	userQuestionOptionStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#E0E0E0"))
+
+	userQuestionSelectedStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#FFFFFF")).
+					Background(lipgloss.Color("#4B5B6B")).
+					Bold(true)
+
+	userQuestionDescStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				Italic(true)
+
 	// Error display styles
 	errorBarStyle = lipgloss.NewStyle().
 			Foreground(errorColor).
