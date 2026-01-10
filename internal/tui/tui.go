@@ -1200,8 +1200,8 @@ func (m *Model) updateLayout() {
 		contentHeight = 1
 	}
 
-	// Split width: 25% agent list, 75% chat view
-	listWidth := m.width * 25 / 100
+	// Split width: 38% agent list, 62% chat view
+	listWidth := m.width * 38 / 100
 	chatWidth := m.width - listWidth
 
 	m.agentList.SetSize(listWidth, contentHeight)
