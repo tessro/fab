@@ -97,7 +97,7 @@ var (
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Bold(true)
 
-	// Special style for the manager/supervisor agent
+	// Special style for the manager agent
 	agentManagerIDStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FFD700")). // Gold
 				Bold(true)

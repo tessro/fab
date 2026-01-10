@@ -491,7 +491,7 @@ func (s *Supervisor) handleProjectSet(ctx context.Context, req *daemon.Request) 
 const ManagerAgentID = "manager"
 
 // ManagerProject is the special project name for the manager in the agent list.
-const ManagerProject = "supervisor"
+const ManagerProject = "manager"
 
 // handleAgentList lists agents.
 func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *daemon.Response {
@@ -519,7 +519,7 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 			Worktree:    "",
 			StartedAt:   mgr.StartedAt(),
 			Task:        "",
-			Description: "Supervisor",
+			Description: "Manager",
 		})
 	}
 

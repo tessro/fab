@@ -157,7 +157,7 @@ func (l AgentList) View() string {
 	return borderStyle.Width(l.width - 2).Height(l.height - 2).Render(inner)
 }
 
-// ManagerAgentID is the special agent ID for the supervisor/manager.
+// ManagerAgentID is the special agent ID for the manager agent.
 const ManagerAgentID = "manager"
 
 // isManagerAgent returns true if the agent is the special manager agent.
