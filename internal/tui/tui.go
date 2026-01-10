@@ -190,7 +190,11 @@ func Run() error {
 
 // RunWithClient starts the TUI with a pre-connected daemon client.
 func RunWithClient(client *daemon.Client, opts *TUIOptions) error {
-	slog.Debug("tui.RunWithClient: starting", "initial_agent_id", opts.InitialAgentID)
+	var initialAgentID string
+	if opts != nil {
+		initialAgentID = opts.InitialAgentID
+	}
+	slog.Debug("tui.RunWithClient: starting", "initial_agent_id", initialAgentID)
 	p := tea.NewProgram(
 		NewWithClient(client, opts),
 		tea.WithAltScreen(),
