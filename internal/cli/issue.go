@@ -166,6 +166,7 @@ var (
 	issueCreateDescription string
 	issueCreateType        string
 	issueCreatePriority    int
+	issueCreateCommit      bool
 )
 
 var issueCreateCmd = &cobra.Command{
@@ -198,6 +199,14 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("🚌 Created issue: %s\n", iss.ID)
 	fmt.Printf("   Title: %s\n", iss.Title)
+
+	if issueCreateCommit {
+		if err := backend.Commit(context.Background()); err != nil {
+			return fmt.Errorf("commit issues: %w", err)
+		}
+		fmt.Println("🚌 Issue changes committed and pushed")
+	}
+
 	return nil
 }
 
@@ -329,6 +338,7 @@ func init() {
 	issueCreateCmd.Flags().StringVarP(&issueCreateDescription, "description", "d", "", "Issue description")
 	issueCreateCmd.Flags().StringVar(&issueCreateType, "type", "task", "Issue type (task, bug, feature, chore)")
 	issueCreateCmd.Flags().IntVar(&issueCreatePriority, "priority", 1, "Issue priority (0=low, 1=medium, 2=high)")
+	issueCreateCmd.Flags().BoolVar(&issueCreateCommit, "commit", false, "Commit and push changes immediately")
 
 	// update flags
 	issueUpdateCmd.Flags().StringVarP(&issueUpdateStatus, "status", "s", "", "New status (open, closed, blocked)")
