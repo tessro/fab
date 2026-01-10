@@ -1,6 +1,6 @@
 ---
 id: fa-56e
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-09T22:38:10.740887-08:00
