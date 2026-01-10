@@ -113,6 +113,7 @@ func (c *Client) nextID() string {
 // Send sends a request and waits for the response.
 // This blocks until the response is received or an error occurs.
 // Send and RecvEvent are mutually exclusive - only one can run at a time.
+// On connection errors, the connection is closed so that IsConnected() returns false.
 func (c *Client) Send(req *Request) (*Response, error) {
 	// Get connection state under mu
 	c.mu.Lock()
@@ -136,20 +137,37 @@ func (c *Client) Send(req *Request) (*Response, error) {
 
 	// Set deadline for this request/response cycle
 	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
+		c.closeConnLocked()
 		return nil, fmt.Errorf("set deadline: %w", err)
 	}
 	defer func() { _ = conn.SetDeadline(time.Time{}) }() // Always clear deadline on exit
 
 	if err := encoder.Encode(req); err != nil {
+		c.closeConnLocked()
 		return nil, fmt.Errorf("encode request: %w", err)
 	}
 
 	var resp Response
 	if err := decoder.Decode(&resp); err != nil {
+		c.closeConnLocked()
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	return &resp, nil
+}
+
+// closeConnLocked closes the main connection and clears connection state.
+// Caller must NOT hold c.mu (this method acquires it).
+func (c *Client) closeConnLocked() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		_ = c.conn.Close()
+		c.conn = nil
+		c.encoder = nil
+		c.decoder = nil
+		c.attached = false
+	}
 }
 
 // Ping sends a ping request to check daemon connectivity.

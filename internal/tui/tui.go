@@ -1080,6 +1080,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PermissionResultMsg:
 		if msg.Err != nil {
 			cmds = append(cmds, m.setError(msg.Err))
+			// Check if connection was lost and trigger reconnection
+			if m.client != nil && !m.client.IsConnected() {
+				slog.Debug("connection lost during permission response, triggering reconnection")
+				m.connState = ConnectionReconnecting
+				m.header.SetConnectionState(m.connState)
+				cmds = append(cmds, m.attemptReconnect())
+			}
 		} else {
 			// Remove the permission from our pending list
 			permID := m.chatView.PendingPermissionID()
