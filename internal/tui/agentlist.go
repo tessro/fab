@@ -269,8 +269,15 @@ func (l AgentList) stateIcon(agentID, state string) string {
 	}
 
 	switch state {
-	case "starting", "running":
-		// Animated spinner for active states
+	case "starting":
+		// Animated spinner for starting state
+		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
+	case "running":
+		// Manager agent doesn't spin when running - it's idle waiting for input
+		if isManagerAgent(agentID) {
+			return "○"
+		}
+		// Animated spinner for active agents
 		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "idle":
 		return "○"
