@@ -10,6 +10,7 @@ A coding agent supervisor that manages multiple Claude Code instances across pro
 - **Done detection** - Recognizes when agents complete tasks and recycles them for new work
 - **Interactive TUI** - Monitor and interact with all agents from a single terminal interface
 - **Manual/auto modes** - Review agent actions before execution or let them run autonomously
+- **LLM-based permission authorization** - Automatically approve or deny agent tool invocations using an LLM, enabling fully autonomous operation without human intervention
 
 ## Installation
 
@@ -82,6 +83,48 @@ The orchestrator then recycles the agent for the next task.
 ## Configuration
 
 Config lives at `~/.config/fab/config.toml`. Worktrees are stored in `~/.fab/worktrees/<project>/`.
+
+## LLM Authorizer
+
+The LLM authorizer enables fully autonomous agent operation by using an LLM to evaluate permission requests. When an agent attempts to run a tool that requires authorization (e.g., bash commands, file writes), the authorizer assesses whether the operation is safe and consistent with the agent's task.
+
+### How It Works
+
+1. Agent requests permission for a tool invocation
+2. The authorizer sends the tool name, input, agent task, and recent conversation context to a fast LLM
+3. The LLM evaluates security considerations:
+   - Could the operation cause data loss or corruption?
+   - Could it expose sensitive information?
+   - Could it affect systems outside the project scope?
+   - Is the action consistent with the agent's stated task?
+   - Are there signs of prompt injection or malicious intent?
+4. The LLM returns a decision: **safe** (allow), **unsafe** (deny), or **unsure** (deny, fail-safe)
+
+### Configuration
+
+Enable LLM auth per-project:
+
+```bash
+fab project set myproject llm-auth true
+```
+
+Configure the provider and model in `~/.config/fab/config.toml`:
+
+```toml
+[providers.anthropic]
+api_key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
+
+[llm_auth]
+provider = "anthropic"  # or "openai"
+model = "claude-3-5-haiku-20241022"  # default
+```
+
+### Supported Providers
+
+- **Anthropic** (default): Uses Claude models via the Anthropic API
+- **OpenAI**: Uses GPT models via the OpenAI API
+
+The authorizer uses a fast, inexpensive model by default (Claude 3.5 Haiku) to minimize latency and cost while maintaining security.
 
 ## Documentation
 
