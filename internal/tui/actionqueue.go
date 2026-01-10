@@ -15,6 +15,7 @@ type ActionQueue struct {
 	height   int
 	actions  []daemon.StagedAction
 	selected int
+	focused  bool
 }
 
 // NewActionQueue creates a new action queue component.
@@ -91,24 +92,66 @@ func (q *ActionQueue) Len() int {
 	return len(q.actions)
 }
 
+// SetFocused sets the focus state.
+func (q *ActionQueue) SetFocused(focused bool) {
+	q.focused = focused
+}
+
+// IsFocused returns whether the action queue is focused.
+func (q *ActionQueue) IsFocused() bool {
+	return q.focused
+}
+
 // View renders the action queue.
 func (q ActionQueue) View() string {
+	// Calculate inner dimensions (accounting for border)
+	innerWidth := q.width - 2
+	innerHeight := q.height - 2 - 1 // -2 for border, -1 for header
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
+	// Header with action count
+	titleStyle := paneTitleStyle
+	if q.focused {
+		titleStyle = paneTitleFocusedStyle
+	}
+	title := "Actions"
+	if len(q.actions) > 0 {
+		title = fmt.Sprintf("Actions (%d)", len(q.actions))
+	}
+	header := titleStyle.Width(innerWidth).Render(title)
+
+	// Content
+	var content string
 	if len(q.actions) == 0 {
-		return actionQueueEmptyStyle.Width(q.width).Height(q.height).Render("No pending actions")
+		content = actionQueueEmptyStyle.Width(innerWidth).Height(innerHeight).Render("No pending actions")
+	} else {
+		var rows []string
+		for i, action := range q.actions {
+			row := q.renderAction(i, action, innerWidth)
+			rows = append(rows, row)
+		}
+		content = actionQueueContainerStyle.Width(innerWidth).Height(innerHeight).Render(strings.Join(rows, "\n"))
 	}
 
-	var rows []string
-	for i, action := range q.actions {
-		row := q.renderAction(i, action)
-		rows = append(rows, row)
+	// Combine header and content
+	inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+
+	// Apply border
+	borderStyle := paneBorderStyle
+	if q.focused {
+		borderStyle = paneBorderFocusedStyle
 	}
 
-	content := strings.Join(rows, "\n")
-	return actionQueueContainerStyle.Width(q.width).Height(q.height).Render(content)
+	return borderStyle.Width(q.width - 2).Height(q.height - 2).Render(inner)
 }
 
 // renderAction renders a single action row.
-func (q ActionQueue) renderAction(index int, action daemon.StagedAction) string {
+func (q ActionQueue) renderAction(index int, action daemon.StagedAction, width int) string {
 	isSelected := index == q.selected
 
 	// Type icon
@@ -123,7 +166,7 @@ func (q ActionQueue) renderAction(index int, action daemon.StagedAction) string 
 	projectStr := actionQueueProjectStyle.Render(action.Project)
 
 	// Payload preview (truncated)
-	payload := q.truncatePayload(action.Payload, q.width-40)
+	payload := q.truncatePayload(action.Payload, width-30)
 	payloadStr := actionQueuePayloadStyle.Render(payload)
 
 	// Time since created
@@ -141,7 +184,7 @@ func (q ActionQueue) renderAction(index int, action daemon.StagedAction) string 
 	// Right-align duration
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(ageStr)
-	spacerWidth := q.width - leftWidth - rightWidth - 4 // padding
+	spacerWidth := width - leftWidth - rightWidth - 2 // padding
 	if spacerWidth < 1 {
 		spacerWidth = 1
 	}
@@ -151,9 +194,9 @@ func (q ActionQueue) renderAction(index int, action daemon.StagedAction) string 
 
 	// Apply selection styling
 	if isSelected {
-		return actionQueueRowSelectedStyle.Width(q.width).Render(row)
+		return actionQueueRowSelectedStyle.Width(width).Render(row)
 	}
-	return actionQueueRowStyle.Width(q.width).Render(row)
+	return actionQueueRowStyle.Width(width).Render(row)
 }
 
 // typeIcon returns an icon for the action type.
@@ -193,13 +236,4 @@ func (q ActionQueue) truncatePayload(payload string, maxLen int) string {
 		return payload[:maxLen-3] + "..."
 	}
 	return payload
-}
-
-// Header renders a header line for the action queue section.
-func (q ActionQueue) Header() string {
-	count := len(q.actions)
-	if count == 0 {
-		return actionQueueHeaderStyle.Render("Actions")
-	}
-	return actionQueueHeaderStyle.Render(fmt.Sprintf("Actions (%d)", count))
 }

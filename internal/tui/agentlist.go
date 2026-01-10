@@ -20,6 +20,7 @@ type AgentList struct {
 	selected       int
 	spinnerFrame   int
 	needsAttention map[string]bool // agents with pending permissions/actions
+	focused        bool
 }
 
 // NewAgentList creates a new agent list component.
@@ -102,20 +103,58 @@ func (l *AgentList) SetNeedsAttention(agentIDs map[string]bool) {
 	l.needsAttention = agentIDs
 }
 
+// SetFocused sets the focus state.
+func (l *AgentList) SetFocused(focused bool) {
+	l.focused = focused
+}
+
+// IsFocused returns whether the agent list is focused.
+func (l *AgentList) IsFocused() bool {
+	return l.focused
+}
+
 // View renders the agent list.
 func (l AgentList) View() string {
+	// Calculate inner dimensions (accounting for border)
+	innerWidth := l.width - 2
+	innerHeight := l.height - 2 - 1 // -2 for border, -1 for header
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
+	// Header
+	titleStyle := paneTitleStyle
+	if l.focused {
+		titleStyle = paneTitleFocusedStyle
+	}
+	header := titleStyle.Width(innerWidth).Render("Agents")
+
+	// Content
+	var content string
 	if len(l.agents) == 0 {
-		return agentListEmptyStyle.Width(l.width).Height(l.height).Render("No agents")
+		content = agentListEmptyStyle.Width(innerWidth).Height(innerHeight).Render("No agents")
+	} else {
+		var rows []string
+		for i, agent := range l.agents {
+			row := l.renderAgent(i, agent, innerWidth)
+			rows = append(rows, row)
+		}
+		content = agentListContainerStyle.Width(innerWidth).Height(innerHeight).Render(strings.Join(rows, "\n"))
 	}
 
-	var rows []string
-	for i, agent := range l.agents {
-		row := l.renderAgent(i, agent)
-		rows = append(rows, row)
+	// Combine header and content
+	inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+
+	// Apply border
+	borderStyle := paneBorderStyle
+	if l.focused {
+		borderStyle = paneBorderFocusedStyle
 	}
 
-	content := strings.Join(rows, "\n")
-	return agentListContainerStyle.Width(l.width).Height(l.height).Render(content)
+	return borderStyle.Width(l.width - 2).Height(l.height - 2).Render(inner)
 }
 
 // ManagerAgentID is the special agent ID for the supervisor/manager.
@@ -127,7 +166,7 @@ func isManagerAgent(agentID string) bool {
 }
 
 // renderAgent renders a single agent row.
-func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
+func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) string {
 	isSelected := index == l.selected
 
 	// Get row style based on selection
@@ -174,8 +213,8 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	// Calculate available width for description and add it if present
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(durationStr)
-	// Reserve space for: left content, space before desc, desc, min spacer (1), duration, padding (4)
-	availableForDesc := l.width - leftWidth - rightWidth - 4 - 1 - 1 // -1 for space before desc, -1 for min spacer
+	// Reserve space for: left content, space before desc, desc, min spacer (1), duration, padding (2)
+	availableForDesc := width - leftWidth - rightWidth - 2 - 1 - 1 // -1 for space before desc, -1 for min spacer
 	if agent.Description != "" && availableForDesc > 3 {
 		desc := truncateDescription(agent.Description, availableForDesc)
 		descStr := agentDescriptionStyle.Inherit(rowStyle).Render(desc)
@@ -184,7 +223,7 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	}
 
 	// Right-align duration - the spacer needs the row background too
-	spacerWidth := l.width - leftWidth - rightWidth - 4 // padding
+	spacerWidth := width - leftWidth - rightWidth - 2 // padding
 	if spacerWidth < 1 {
 		spacerWidth = 1
 	}
@@ -193,7 +232,7 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus) string {
 	row := left + spacer + durationStr
 
 	// Apply row styling with full width
-	return rowStyle.Width(l.width).Render(row)
+	return rowStyle.Width(width).Render(row)
 }
 
 // stateIcon returns an icon for the agent state.

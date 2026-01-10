@@ -28,7 +28,7 @@ func NewInputLine() InputLine {
 func (i *InputLine) SetSize(width, height int) {
 	i.width = width
 	i.height = height
-	i.input.Width = width - 4 // Account for prompt and padding
+	i.input.Width = width - 8 // Account for border (2), padding (2), and prompt (4)
 }
 
 // SetFocused sets the focus state.
@@ -76,9 +76,10 @@ func (i *InputLine) Focus() {
 
 // View renders the input line.
 func (i InputLine) View() string {
-	var style = inputLineStyle
+	style := inputLineStyle
 	if i.focused {
 		style = inputLineFocusedStyle
 	}
-	return style.Width(i.width).Render(i.input.View())
+	// Account for border when setting width
+	return style.Width(i.width - 2).Render(i.input.View())
 }

@@ -171,9 +171,12 @@ type Model struct {
 
 // New creates a new TUI model.
 func New() Model {
+	agentList := NewAgentList()
+	agentList.SetFocused(true) // Agent list is focused by default
+
 	return Model{
 		header:         NewHeader(),
-		agentList:      NewAgentList(),
+		agentList:      agentList,
 		chatView:       NewChatView(),
 		inputLine:      NewInputLine(),
 		helpBar:        NewHelpBar(),
@@ -1193,20 +1196,13 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 
 // syncFocusToComponents updates component focus states to match the ModeState focus.
 func (m *Model) syncFocusToComponents(focus Focus) {
-	switch focus {
-	case FocusAgentList:
-		m.chatView.SetFocused(false)
-		m.inputLine.SetFocused(false)
-	case FocusChatView:
-		m.chatView.SetFocused(true)
-		m.inputLine.SetFocused(false)
-	case FocusInputLine:
-		m.chatView.SetFocused(false)
-		m.inputLine.SetFocused(true)
+	m.agentList.SetFocused(focus == FocusAgentList)
+	m.chatView.SetFocused(focus == FocusChatView)
+	m.inputLine.SetFocused(focus == FocusInputLine)
+	m.actionQueue.SetFocused(focus == FocusActionQueue)
+
+	if focus == FocusInputLine {
 		m.chatView.SetInputView(m.inputLine.View(), 1)
-	case FocusActionQueue:
-		m.chatView.SetFocused(false)
-		m.inputLine.SetFocused(false)
 	}
 }
 
@@ -1257,8 +1253,8 @@ func (m *Model) updateLayout() {
 	m.actionQueue.SetSize(queueWidth, contentHeight)
 	m.helpBar.SetWidth(m.width)
 
-	// Input line sized to fit inside chat pane (accounting for border)
-	inputLineHeight := 1
+	// Input line sized to fit inside chat pane (accounting for chat pane border and input border)
+	inputLineHeight := 3 // 1 line content + 2 for border
 	m.inputLine.SetSize(chatWidth-4, inputLineHeight)
 	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight)
 }

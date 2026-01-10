@@ -57,12 +57,34 @@ var (
 			Foreground(mutedColor).
 			Padding(0, 1)
 
+	// Pane title styles
+	paneTitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#2D2D2D")).
+			Bold(true).
+			Padding(0, 1)
+
+	paneTitleFocusedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(primaryColor).
+				Bold(true).
+				Padding(0, 1)
+
+	// Pane border styles
+	paneBorderStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(mutedColor)
+
+	paneBorderFocusedStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(primaryColor)
+
 	// Agent list styles
 	agentListContainerStyle = lipgloss.NewStyle()
 
 	agentListEmptyStyle = lipgloss.NewStyle().
 				Foreground(mutedColor).
-				Padding(1, 2)
+				Padding(0, 1)
 
 	agentRowStyle = lipgloss.NewStyle().
 			Padding(0, 1)
@@ -93,33 +115,21 @@ var (
 	agentDurationStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
 
-	// Chat view header styles
-	chatHeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#2D2D2D")).
-			Padding(0, 1)
-
-	chatHeaderFocusedStyle = lipgloss.NewStyle().
-				Background(primaryColor).
-				Padding(0, 1)
-
-	chatHeaderAgentStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true)
-
-	chatHeaderProjectStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#A0A0A0"))
-
 	chatEmptyStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
 			Padding(1, 2)
 
-	// Input line styles (inline, no border since it's inside the chat pane)
+	// Input line styles
 	inputLineStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#2D2D2D")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(mutedColor).
+			Background(lipgloss.Color("#1E1E1E")).
 			Padding(0, 1)
 
 	inputLineFocusedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#3B3B3B")).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(primaryColor).
+				Background(lipgloss.Color("#252525")).
 				Padding(0, 1)
 
 	// Chat view styles
@@ -201,7 +211,7 @@ var (
 
 	actionQueueEmptyStyle = lipgloss.NewStyle().
 				Foreground(mutedColor).
-				Padding(1, 2)
+				Padding(0, 1)
 
 	actionQueueRowStyle = lipgloss.NewStyle().
 				Padding(0, 1)
@@ -222,9 +232,4 @@ var (
 
 	actionQueueAgeStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
-
-	actionQueueHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true).
-				Padding(0, 1)
 )

@@ -479,23 +479,26 @@ func truncateResult(result string, maxWidth int) string {
 // View renders the chat view.
 func (v ChatView) View() string {
 	if v.agentID == "" {
-		empty := chatEmptyStyle.Width(v.width).Height(v.height).Render("Select an agent to view chat")
-		return empty
+		// Show empty state with consistent border
+		innerWidth := v.width - 2
+		innerHeight := v.height - 2 - 1
+		header := paneTitleStyle.Width(innerWidth).Render("Chat")
+		content := chatEmptyStyle.Width(innerWidth).Height(innerHeight).Render("Select an agent to view chat")
+		inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+		return paneBorderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
 	}
 
-	// Header showing agent info
-	headerText := lipgloss.JoinHorizontal(lipgloss.Center,
-		chatHeaderAgentStyle.Render(v.agentID),
-		" ",
-		chatHeaderProjectStyle.Render(v.project),
-	)
+	// Header showing agent info - use pane title styles for consistency
+	headerText := v.agentID
+	if v.project != "" {
+		headerText += " · " + v.project
+	}
 
-	var header string
+	titleStyle := paneTitleStyle
 	if v.focused {
-		header = chatHeaderFocusedStyle.Width(v.width - 2).Render(headerText)
-	} else {
-		header = chatHeaderStyle.Width(v.width - 2).Render(headerText)
+		titleStyle = paneTitleFocusedStyle
 	}
+	header := titleStyle.Width(v.width - 2).Render(headerText)
 
 	// Viewport content
 	var content string
