@@ -22,7 +22,7 @@ var tuiCmd = &cobra.Command{
 			return err
 		}
 		defer client.Close()
-		return tui.RunWithClient(client)
+		return tui.RunWithClient(client, nil)
 	},
 }
 

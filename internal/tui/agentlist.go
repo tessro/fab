@@ -67,6 +67,13 @@ func (l *AgentList) SelectedIndex() int {
 	return l.selected
 }
 
+// SetSelected sets the selection index.
+func (l *AgentList) SetSelected(index int) {
+	if index >= 0 && index < len(l.agents) {
+		l.selected = index
+	}
+}
+
 // MoveUp moves selection up one item.
 func (l *AgentList) MoveUp() {
 	if l.selected > 0 {

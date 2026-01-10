@@ -178,6 +178,9 @@ type Model struct {
 	// Usage tracking
 	lastUsageFetch time.Time
 	usageLimits    usage.Limits
+
+	// Initial agent to select on startup (empty = first agent)
+	initialAgentID string
 }
 
 // New creates a new TUI model.
@@ -200,10 +203,20 @@ func New() Model {
 	}
 }
 
+// TUIOptions configures the TUI behavior.
+type TUIOptions struct {
+	// InitialAgentID specifies an agent to select on startup.
+	// If empty, the first agent in the list will be selected.
+	InitialAgentID string
+}
+
 // NewWithClient creates a new TUI model with a pre-connected daemon client.
-func NewWithClient(client *daemon.Client) Model {
+func NewWithClient(client *daemon.Client, opts *TUIOptions) Model {
 	m := New()
 	m.client = client
+	if opts != nil {
+		m.initialAgentID = opts.InitialAgentID
+	}
 	return m
 }
 
@@ -1022,8 +1035,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.pruneStaleAgentState(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-			// Auto-select first agent if none is currently selected
+			// Auto-select agent if none is currently selected
 			if m.chatView.AgentID() == "" && len(msg.Agents) > 0 {
+				// If an initial agent was specified, find and select it
+				if m.initialAgentID != "" {
+					for i, agent := range msg.Agents {
+						if agent.ID == m.initialAgentID {
+							m.agentList.SetSelected(i)
+							break
+						}
+					}
+					// Clear the initial agent ID so we don't keep trying to select it
+					m.initialAgentID = ""
+				}
 				if cmd := m.selectCurrentAgent(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
@@ -1592,9 +1616,9 @@ func Run() error {
 }
 
 // RunWithClient starts the TUI with a pre-connected daemon client.
-func RunWithClient(client *daemon.Client) error {
+func RunWithClient(client *daemon.Client, opts *TUIOptions) error {
 	p := tea.NewProgram(
-		NewWithClient(client),
+		NewWithClient(client, opts),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

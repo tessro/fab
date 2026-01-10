@@ -58,8 +58,10 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("   Working directory: %s\n", resp.WorkDir)
 
-	// Run TUI in planner mode
-	return tui.RunPlannerMode(client, resp.ID)
+	// Launch main TUI with the planner selected
+	return tui.RunWithClient(client, &tui.TUIOptions{
+		InitialAgentID: tui.PlannerAgentIDPrefix + resp.ID,
+	})
 }
 
 var planListCmd = &cobra.Command{
@@ -129,8 +131,10 @@ var planChatCmd = &cobra.Command{
 
 		client := MustConnect()
 
-		// Run TUI in planner mode
-		return tui.RunPlannerMode(client, id)
+		// Launch main TUI with the planner selected
+		return tui.RunWithClient(client, &tui.TUIOptions{
+			InitialAgentID: tui.PlannerAgentIDPrefix + id,
+		})
 	},
 }
 
