@@ -1,6 +1,6 @@
 ---
 id: fa-38b
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-10T08:37:19.505683-08:00
