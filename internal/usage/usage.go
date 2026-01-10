@@ -235,11 +235,11 @@ type Limits struct {
 	OutputTokens int64 `json:"output_tokens"`
 }
 
-// DefaultProLimits returns conservative defaults for Claude Pro plan.
-// Actual limits vary by model and subscription; configure as needed.
+// DefaultProLimits returns defaults for Claude Pro plan.
+// Based on observed behavior: ~1M output tokens per 5-hour window.
 func DefaultProLimits() Limits {
 	return Limits{
-		OutputTokens: 500_000, // ~500K output tokens per 5-hour window
+		OutputTokens: 1_000_000, // ~1M output tokens per 5-hour window
 	}
 }
 

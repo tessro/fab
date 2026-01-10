@@ -143,8 +143,8 @@ func TestUsagePercent(t *testing.T) {
 
 func TestDefaultLimits(t *testing.T) {
 	pro := DefaultProLimits()
-	if pro.OutputTokens != 500_000 {
-		t.Errorf("Pro limits: expected 500000, got %d", pro.OutputTokens)
+	if pro.OutputTokens != 1_000_000 {
+		t.Errorf("Pro limits: expected 1000000, got %d", pro.OutputTokens)
 	}
 
 	max := DefaultMaxLimits()
