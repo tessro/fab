@@ -897,7 +897,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 			}
 			log.Log(context.Background(), logLevel, "readloop: result message",
 				"is_error", msg.IsError,
-				"result", truncateForLog(msg.Result, 200),
+				"result", logging.TruncateForLog(msg.Result, 200),
 			)
 		}
 
@@ -1021,10 +1021,3 @@ func (a *Agent) IsReadLoopRunning() bool {
 	}
 }
 
-// truncateForLog truncates a string for logging, adding "..." if truncated.
-func truncateForLog(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}

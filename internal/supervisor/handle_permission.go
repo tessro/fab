@@ -10,6 +10,7 @@ import (
 
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/llmauth"
+	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -84,7 +85,7 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 
 	log.Info("permission request received",
 		"tool", permReq.ToolName,
-		"input", string(permReq.ToolInput),
+		"input", logging.TruncateForLog(string(permReq.ToolInput), 200),
 	)
 
 	// Check if LLM permissions checker is enabled for this project
@@ -133,9 +134,9 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 	log.Info("permission response sent",
 		"id", id,
 		"tool", permReq.ToolName,
-		"input", string(permReq.ToolInput),
+		"input", logging.TruncateForLog(string(permReq.ToolInput), 200),
 		"behavior", resp.Behavior,
-		"message", resp.Message,
+		"message", logging.TruncateForLog(resp.Message, 200),
 	)
 
 	return successResponse(req, resp)
@@ -236,15 +237,15 @@ func (s *Supervisor) handlePermissionRespond(_ context.Context, req *daemon.Requ
 			"id", respPayload.ID,
 			"agent", origReq.AgentID,
 			"tool", origReq.ToolName,
-			"input", string(origReq.ToolInput),
+			"input", logging.TruncateForLog(string(origReq.ToolInput), 200),
 			"behavior", respPayload.Behavior,
-			"message", respPayload.Message,
+			"message", logging.TruncateForLog(respPayload.Message, 200),
 		)
 	} else {
 		slog.Info("permission response from TUI",
 			"id", respPayload.ID,
 			"behavior", respPayload.Behavior,
-			"message", respPayload.Message,
+			"message", logging.TruncateForLog(respPayload.Message, 200),
 		)
 	}
 

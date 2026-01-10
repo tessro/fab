@@ -141,3 +141,15 @@ func captureStack() []byte {
 		buf = make([]byte, len(buf)*2)
 	}
 }
+
+// TruncateForLog truncates a string for logging, adding "..." if truncated.
+// Useful for preventing log bloat from large tool inputs/outputs.
+func TruncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
+}
