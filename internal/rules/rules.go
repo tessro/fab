@@ -31,10 +31,22 @@ type Rule struct {
 	Script   string   `toml:"script,omitempty"`   // Path to validation script
 }
 
+// ManagerConfig represents the manager agent configuration.
+type ManagerConfig struct {
+	// AllowedPatterns are Bash command patterns the manager can run without prompting.
+	// Uses the same pattern syntax as permissions.toml (e.g., "fab:*" for prefix match).
+	// Defaults to ["fab:*"] if not specified.
+	AllowedPatterns []string `toml:"allowed_patterns,omitempty"`
+}
+
 // Config represents a permissions configuration file.
 type Config struct {
-	Rules []Rule `toml:"rules"`
+	Rules   []Rule         `toml:"rules"`
+	Manager *ManagerConfig `toml:"manager,omitempty"`
 }
+
+// DefaultManagerAllowedPatterns returns the default allowed patterns for the manager.
+var DefaultManagerAllowedPatterns = []string{"fab:*"}
 
 // LoadConfig loads a permissions configuration from the given path.
 // Returns nil config and nil error if the file doesn't exist.
@@ -54,7 +66,23 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 
+	// Validate manager config if present
+	if cfg.Manager != nil && len(cfg.Manager.AllowedPatterns) > 0 {
+		if err := config.ValidateManagerAllowedPatterns(cfg.Manager.AllowedPatterns); err != nil {
+			return nil, fmt.Errorf("manager: %w", err)
+		}
+	}
+
 	return &cfg, nil
+}
+
+// ManagerAllowedPatterns returns the manager's allowed patterns from the config.
+// Returns default patterns (fab:*) if no manager config is specified.
+func (c *Config) ManagerAllowedPatterns() []string {
+	if c != nil && c.Manager != nil && len(c.Manager.AllowedPatterns) > 0 {
+		return c.Manager.AllowedPatterns
+	}
+	return DefaultManagerAllowedPatterns
 }
 
 // GlobalConfigPath returns the path to the global permissions config.

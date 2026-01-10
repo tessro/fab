@@ -621,3 +621,102 @@ func TestScriptMatchWithTildePath(t *testing.T) {
 		t.Errorf("ScriptMatch with absolute path = %v, want allow", action)
 	}
 }
+
+func TestManagerAllowedPatterns_Default(t *testing.T) {
+	// With nil config, should return default patterns
+	var cfg *Config
+	patterns := cfg.ManagerAllowedPatterns()
+	if len(patterns) != 1 || patterns[0] != "fab:*" {
+		t.Errorf("ManagerAllowedPatterns() = %v, want [fab:*]", patterns)
+	}
+}
+
+func TestManagerAllowedPatterns_NoManager(t *testing.T) {
+	// With config but no manager section, should return default patterns
+	cfg := &Config{
+		Rules: []Rule{
+			{Tool: "Bash", Action: ActionAllow, Pattern: "ls:*"},
+		},
+	}
+	patterns := cfg.ManagerAllowedPatterns()
+	if len(patterns) != 1 || patterns[0] != "fab:*" {
+		t.Errorf("ManagerAllowedPatterns() = %v, want [fab:*]", patterns)
+	}
+}
+
+func TestManagerAllowedPatterns_Custom(t *testing.T) {
+	cfg := &Config{
+		Manager: &ManagerConfig{
+			AllowedPatterns: []string{"fab:*", "git:*", "ls:*"},
+		},
+	}
+	patterns := cfg.ManagerAllowedPatterns()
+	expected := []string{"fab:*", "git:*", "ls:*"}
+	if len(patterns) != len(expected) {
+		t.Fatalf("ManagerAllowedPatterns() len = %d, want %d", len(patterns), len(expected))
+	}
+	for i, p := range patterns {
+		if p != expected[i] {
+			t.Errorf("ManagerAllowedPatterns()[%d] = %q, want %q", i, p, expected[i])
+		}
+	}
+}
+
+func TestLoadConfigWithManager(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "permissions.toml")
+
+	content := `
+[[rules]]
+tool = "Bash"
+action = "allow"
+pattern = "ls:*"
+
+[manager]
+allowed_patterns = ["fab:*", "git:*"]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if config.Manager == nil {
+		t.Fatal("Manager config is nil")
+	}
+
+	if len(config.Manager.AllowedPatterns) != 2 {
+		t.Errorf("got %d manager patterns, want 2", len(config.Manager.AllowedPatterns))
+	}
+
+	patterns := config.ManagerAllowedPatterns()
+	if patterns[0] != "fab:*" || patterns[1] != "git:*" {
+		t.Errorf("ManagerAllowedPatterns() = %v, want [fab:* git:*]", patterns)
+	}
+}
+
+func TestLoadConfigWithInvalidManagerPattern(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "permissions.toml")
+
+	content := `
+[[rules]]
+tool = "Bash"
+action = "allow"
+pattern = "ls:*"
+
+[manager]
+allowed_patterns = ["fab:*", ""]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("LoadConfig expected error for empty pattern, got nil")
+	}
+}

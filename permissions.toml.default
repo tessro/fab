@@ -138,6 +138,15 @@ patterns = [
 ]
 
 # =============================================================================
+# MANAGER CONFIGURATION
+# =============================================================================
+# The manager agent runs supervisory tasks. These patterns control which
+# Bash commands it can run without prompting.
+
+[manager]
+allowed_patterns = ["fab:*"]
+
+# =============================================================================
 # EXAMPLES
 # =============================================================================
 #

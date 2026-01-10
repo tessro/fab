@@ -17,6 +17,7 @@ import (
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/project"
 	"github.com/tessro/fab/internal/registry"
+	"github.com/tessro/fab/internal/rules"
 	"github.com/tessro/fab/internal/usage"
 	"github.com/tessro/fab/internal/version"
 )
@@ -55,6 +56,9 @@ const PermissionTimeout = 5 * time.Minute
 
 // New creates a new Supervisor with the given registry and agent manager.
 func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
+	// Load manager allowed patterns from global permissions.toml
+	managerPatterns := loadManagerPatterns()
+
 	s := &Supervisor{
 		registry:      reg,
 		agents:        agents,
@@ -64,7 +68,7 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		questions:     daemon.NewUserQuestionManager(PermissionTimeout),
 		startedAt:     time.Now(),
 		shutdownCh:    make(chan struct{}),
-		manager:       manager.New(manager.DefaultWorkDir(), reg.ManagerAllowedPatterns()),
+		manager:       manager.New(manager.DefaultWorkDir(), managerPatterns),
 	}
 
 	// Set up callback to start agent read loops when agent starts
@@ -1894,4 +1898,22 @@ func (s *Supervisor) broadcastManagerChatEntry(entry agent.ChatEntry) {
 		Type:      "manager_chat_entry",
 		ChatEntry: dto,
 	})
+}
+
+// loadManagerPatterns loads manager allowed patterns from the global permissions.toml.
+// Returns default patterns if the file doesn't exist or has no manager section.
+func loadManagerPatterns() []string {
+	path, err := rules.GlobalConfigPath()
+	if err != nil {
+		slog.Debug("failed to get permissions config path", "error", err)
+		return rules.DefaultManagerAllowedPatterns
+	}
+
+	cfg, err := rules.LoadConfig(path)
+	if err != nil {
+		slog.Warn("failed to load permissions config", "path", path, "error", err)
+		return rules.DefaultManagerAllowedPatterns
+	}
+
+	return cfg.ManagerAllowedPatterns()
 }

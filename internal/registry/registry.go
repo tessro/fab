@@ -37,18 +37,9 @@ type ProjectEntry struct {
 	Path string `toml:"path,omitempty"`
 }
 
-// ManagerConfig represents the manager agent configuration.
-type ManagerConfig struct {
-	// AllowedPatterns are Bash command patterns the manager can run without prompting.
-	// Uses the same pattern syntax as permissions.toml (e.g., "fab:*" for prefix match).
-	// Defaults to ["fab:*"] if not specified.
-	AllowedPatterns []string `toml:"allowed_patterns,omitempty"`
-}
-
 // Config represents the fab configuration file.
 type Config struct {
 	Projects []ProjectEntry `toml:"projects"`
-	Manager  *ManagerConfig `toml:"manager,omitempty"`
 }
 
 // Registry manages the persistent collection of projects.
@@ -57,9 +48,7 @@ type Registry struct {
 	projectBaseDir string // Base directory for project storage (testing only)
 	// +checklocks:mu
 	projects map[string]*project.Project
-	// +checklocks:mu
-	managerConfig *ManagerConfig
-	mu            sync.RWMutex
+	mu       sync.RWMutex
 }
 
 // New creates a new Registry with the default config path.
@@ -120,14 +109,6 @@ func (r *Registry) load() error {
 		p.Autostart = entry.Autostart
 		r.projects[entry.Name] = p
 	}
-
-	// Validate and store manager config
-	if config.Manager != nil && len(config.Manager.AllowedPatterns) > 0 {
-		if err := configPkg.ValidateManagerAllowedPatterns(config.Manager.AllowedPatterns); err != nil {
-			return err
-		}
-	}
-	r.managerConfig = config.Manager
 
 	return nil
 }
@@ -306,17 +287,3 @@ func (r *Registry) ConfigPath() string {
 	return r.configPath
 }
 
-// DefaultManagerAllowedPatterns returns the default allowed patterns for the manager.
-var DefaultManagerAllowedPatterns = []string{"fab:*"}
-
-// ManagerAllowedPatterns returns the configured allowed patterns for the manager.
-// Returns default patterns (fab:*) if no manager config is specified.
-func (r *Registry) ManagerAllowedPatterns() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if r.managerConfig != nil && len(r.managerConfig.AllowedPatterns) > 0 {
-		return r.managerConfig.AllowedPatterns
-	}
-	return DefaultManagerAllowedPatterns
-}
