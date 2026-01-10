@@ -171,7 +171,7 @@ var (
 var issueCreateCmd = &cobra.Command{
 	Use:   "create <title>",
 	Short: "Create a new issue",
-	Long:  "Create a new issue. Commits and pushes immediately.",
+	Long:  "Create a new issue. Use 'fab issue commit' to push changes.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runIssueCreate,
 }
@@ -212,7 +212,7 @@ var (
 var issueUpdateCmd = &cobra.Command{
 	Use:   "update <id>",
 	Short: "Update an issue",
-	Long:  "Update an issue's status, priority, or other fields. Commits and pushes immediately.",
+	Long:  "Update an issue's status, priority, or other fields. Use 'fab issue commit' to push changes.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runIssueUpdate,
 }
@@ -250,7 +250,7 @@ func runIssueUpdate(cmd *cobra.Command, args []string) error {
 var issueCloseCmd = &cobra.Command{
 	Use:   "close <id>",
 	Short: "Close an issue",
-	Long:  "Mark an issue as closed. Commits and pushes immediately.",
+	Long:  "Mark an issue as closed. Use 'fab issue commit' to push changes.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runIssueClose,
 }
@@ -266,6 +266,29 @@ func runIssueClose(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("🚌 Closed issue: %s\n", args[0])
+	return nil
+}
+
+// issue commit
+
+var issueCommitCmd = &cobra.Command{
+	Use:   "commit",
+	Short: "Commit and push issue changes",
+	Long:  "Stage, commit, and push any pending issue changes to the remote repository.",
+	RunE:  runIssueCommit,
+}
+
+func runIssueCommit(cmd *cobra.Command, args []string) error {
+	backend, err := getIssueBackend()
+	if err != nil {
+		return err
+	}
+
+	if err := backend.Commit(context.Background()); err != nil {
+		return fmt.Errorf("commit issues: %w", err)
+	}
+
+	fmt.Println("🚌 Issue changes committed and pushed")
 	return nil
 }
 
@@ -319,6 +342,7 @@ func init() {
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
 	issueCmd.AddCommand(issueCloseCmd)
+	issueCmd.AddCommand(issueCommitCmd)
 
 	rootCmd.AddCommand(issueCmd)
 }

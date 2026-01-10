@@ -24,4 +24,7 @@ type Backend interface {
 
 	// Ready returns issues with no open dependencies (ready to work on).
 	Ready(ctx context.Context) ([]*Issue, error)
+
+	// Commit stages, commits, and pushes any pending issue changes.
+	Commit(ctx context.Context) error
 }

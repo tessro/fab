@@ -68,12 +68,6 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 		return nil, err
 	}
 
-	// Commit and push
-	msg := fmt.Sprintf("issue: create %s\n\n%s", id, iss.Title)
-	if err := b.commitAndPush(msg); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
-	}
-
 	return iss, nil
 }
 
@@ -196,12 +190,6 @@ func (b *Backend) Update(ctx context.Context, id string, params issue.UpdatePara
 		return nil, err
 	}
 
-	// Commit and push
-	msg := fmt.Sprintf("issue: update %s", id)
-	if err := b.commitAndPush(msg); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
-	}
-
 	return iss, nil
 }
 
@@ -210,6 +198,11 @@ func (b *Backend) Close(ctx context.Context, id string) error {
 	status := issue.StatusClosed
 	_, err := b.Update(ctx, id, issue.UpdateParams{Status: &status})
 	return err
+}
+
+// Commit stages, commits, and pushes any pending issue changes.
+func (b *Backend) Commit(ctx context.Context) error {
+	return b.commitAndPush("issue: update tickets")
 }
 
 // Ready returns issues with no open dependencies.
