@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/logging"
+	"github.com/tessro/fab/internal/plugin"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -483,6 +484,7 @@ func (a *Agent) Start(initialPrompt string) error {
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "default",
+		"--plugin-dir", plugin.DefaultInstallDir(),
 		"--settings", string(settingsJSON))
 	if workDir != "" {
 		cmd.Dir = workDir

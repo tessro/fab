@@ -18,6 +18,7 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/logging"
+	"github.com/tessro/fab/internal/plugin"
 )
 
 // Errors returned by manager operations.
@@ -259,6 +260,7 @@ func (m *Manager) Start() error {
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "default",
+		"--plugin-dir", plugin.DefaultInstallDir(),
 		"--settings", string(settingsJSON),
 		"-p", systemPrompt)
 	cmd.Dir = m.workDir

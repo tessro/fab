@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/logging"
+	"github.com/tessro/fab/internal/plugin"
 	"github.com/tessro/fab/internal/registry"
 	"github.com/tessro/fab/internal/supervisor"
 )
@@ -142,6 +144,15 @@ func runDaemon() error {
 		return fmt.Errorf("setup logging: %w", err)
 	}
 	defer logCleanup()
+
+	// Install Claude Code plugin (fresh install every startup)
+	pluginDir := plugin.DefaultInstallDir()
+	if err := plugin.Install(pluginDir); err != nil {
+		slog.Warn("failed to install Claude Code plugin", "error", err)
+		// Continue without plugin - not fatal
+	} else {
+		slog.Info("installed Claude Code plugin", "dir", pluginDir)
+	}
 
 	pidPath := daemon.DefaultPIDPath()
 

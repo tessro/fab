@@ -19,6 +19,7 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/logging"
+	"github.com/tessro/fab/internal/plugin"
 )
 
 // Errors returned by planner operations.
@@ -244,6 +245,7 @@ func (p *Planner) Start() error {
 		"--input-format", "stream-json",
 		"--verbose",
 		"--permission-mode", "plan",
+		"--plugin-dir", plugin.DefaultInstallDir(),
 		"--settings", string(settingsJSON),
 		"-p", planPrompt)
 	cmd.Dir = p.workDir
