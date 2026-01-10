@@ -163,9 +163,30 @@ func (l AgentList) View() string {
 // ManagerAgentID is the special agent ID for the manager agent.
 const ManagerAgentID = "manager"
 
+// PlannerAgentIDPrefix is the prefix for planner agents in the agent list.
+const PlannerAgentIDPrefix = "plan:"
+
 // isManagerAgent returns true if the agent is the special manager agent.
 func isManagerAgent(agentID string) bool {
 	return agentID == ManagerAgentID
+}
+
+// isPlannerAgent returns true if the agent is a planner agent.
+func isPlannerAgent(agentID string) bool {
+	return len(agentID) > len(PlannerAgentIDPrefix) && agentID[:len(PlannerAgentIDPrefix)] == PlannerAgentIDPrefix
+}
+
+// plannerAgentID creates a TUI agent ID for a planner.
+func plannerAgentID(plannerID string) string {
+	return PlannerAgentIDPrefix + plannerID
+}
+
+// extractPlannerID extracts the real planner ID from a TUI agent ID.
+func extractPlannerID(agentID string) string {
+	if isPlannerAgent(agentID) {
+		return agentID[len(PlannerAgentIDPrefix):]
+	}
+	return agentID
 }
 
 // renderAgent renders a single agent row.
@@ -190,12 +211,16 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(bgStyle)
 	stateStr := stateStyle.Render(stateIcon)
 
-	// Agent ID - use special style for manager
+	// Agent ID - use special style for manager and planner
 	idStyle := agentIDStyle
+	displayID := agent.ID
 	if isManagerAgent(agent.ID) {
 		idStyle = agentManagerIDStyle
+	} else if isPlannerAgent(agent.ID) {
+		idStyle = agentPlannerIDStyle
+		displayID = extractPlannerID(agent.ID) // Show just the short ID, not the prefix
 	}
-	idStr := idStyle.Inherit(bgStyle).Render(agent.ID)
+	idStr := idStyle.Inherit(bgStyle).Render(displayID)
 
 	// Project name
 	projectStr := agentProjectStyle.Inherit(bgStyle).Render(agent.Project)
@@ -312,8 +337,8 @@ func (l AgentList) stateIcon(agentID, state string) string {
 		// Animated spinner for starting state
 		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "running":
-		// Manager agent doesn't spin when running - it's idle waiting for input
-		if isManagerAgent(agentID) {
+		// Manager and planner agents don't spin when running - they're idle waiting for input
+		if isManagerAgent(agentID) || isPlannerAgent(agentID) {
 			return "○"
 		}
 		// Animated spinner for active agents

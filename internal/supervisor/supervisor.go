@@ -2202,15 +2202,53 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 			return errorResponse(req, fmt.Sprintf("project not found: %s", startReq.Project))
 		}
 
-		// Planners use the main repo directory (not a worktree)
-		// since they're just reading code, not making changes
-		workDir = proj.RepoDir()
 		projectName = proj.Name
-	} else {
-		// Use default planner directory
-		home, _ := os.UserHomeDir()
-		workDir = filepath.Join(home, ".fab", "planners")
+
+		// Generate a planner ID first so we can create the worktree
+		plannerID := s.planners.GenerateID()
+
+		// Create a dedicated worktree for the planner (not subject to MaxAgents)
+		wtPath, err := proj.CreatePlannerWorktree(plannerID)
+		if err != nil {
+			return errorResponse(req, fmt.Sprintf("failed to create planner worktree: %v", err))
+		}
+		workDir = wtPath
+
+		// Create the planner with the specific ID
+		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt)
+		if err != nil {
+			_ = proj.DeletePlannerWorktree(plannerID)
+			return errorResponse(req, fmt.Sprintf("failed to create planner: %v", err))
+		}
+
+		// Set up entry callback for broadcasting
+		p.OnEntry(func(entry agent.ChatEntry) {
+			s.broadcastPlannerChatEntry(p.ID(), projectName, entry)
+		})
+
+		// Start the planner
+		if err := p.Start(); err != nil {
+			_ = s.planners.Delete(p.ID())
+			_ = proj.DeletePlannerWorktree(plannerID)
+			return errorResponse(req, fmt.Sprintf("failed to start planner: %v", err))
+		}
+
+		slog.Info("planner started",
+			"planner", p.ID(),
+			"project", projectName,
+			"workdir", workDir,
+		)
+
+		return successResponse(req, daemon.PlanStartResponse{
+			ID:      p.ID(),
+			Project: projectName,
+			WorkDir: workDir,
+		})
 	}
+
+	// Use default planner directory (no project)
+	home, _ := os.UserHomeDir()
+	workDir = filepath.Join(home, ".fab", "planners")
 
 	// Create the planner
 	p, err := s.planners.Create(projectName, workDir, startReq.Prompt)

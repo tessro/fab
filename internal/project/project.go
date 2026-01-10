@@ -232,3 +232,38 @@ func (p *Project) CreateManagerWorktree() error {
 
 	return nil
 }
+
+// PlannerWorktreePath returns the path to a planner's worktree.
+func (p *Project) PlannerWorktreePath(plannerID string) string {
+	return filepath.Join(p.WorktreesDir(), "wt-plan-"+plannerID)
+}
+
+// CreatePlannerWorktree creates a dedicated worktree for a planner.
+// Unlike agent worktrees, planner worktrees are NOT subject to MaxAgents limits.
+// The planner gets read-only access to the codebase for exploration.
+func (p *Project) CreatePlannerWorktree(plannerID string) (string, error) {
+	wtPath := p.PlannerWorktreePath(plannerID)
+
+	// Check if worktree already exists
+	if _, err := os.Stat(wtPath); err == nil {
+		// Already exists, just ensure it's up to date
+		_ = p.resetWorktreeUnlocked(wtPath)
+		return wtPath, nil
+	}
+
+	// Create the worktree
+	if err := p.createWorktree(wtPath); err != nil {
+		return "", err
+	}
+
+	// Reset to pristine state (planners work off origin/main)
+	_ = p.resetWorktreeUnlocked(wtPath)
+
+	return wtPath, nil
+}
+
+// DeletePlannerWorktree removes a planner's worktree from disk.
+func (p *Project) DeletePlannerWorktree(plannerID string) error {
+	wtPath := p.PlannerWorktreePath(plannerID)
+	return p.removeWorktree(wtPath)
+}

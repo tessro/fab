@@ -22,6 +22,7 @@ type KeyBindings struct {
 	Approve key.Binding
 	Reject  key.Binding
 	Abort   key.Binding
+	Plan    key.Binding
 
 	// Input keys
 	Submit      key.Binding
@@ -86,6 +87,10 @@ func DefaultKeyBindings() KeyBindings {
 		Abort: key.NewBinding(
 			key.WithKeys("x"),
 			key.WithHelp("x", "abort"),
+		),
+		Plan: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "plan"),
 		),
 
 		Submit: key.NewBinding(

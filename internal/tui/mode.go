@@ -15,6 +15,10 @@ const (
 	ModeAbortConfirm
 	// ModeUserQuestion means the user is answering a question from Claude.
 	ModeUserQuestion
+	// ModePlanProjectSelect means the user is selecting a project for planning.
+	ModePlanProjectSelect
+	// ModePlanPrompt means the user is entering a planning prompt.
+	ModePlanPrompt
 )
 
 // String returns the string representation of a Mode.
@@ -28,6 +32,10 @@ func (m Mode) String() string {
 		return "abort_confirm"
 	case ModeUserQuestion:
 		return "user_question"
+	case ModePlanProjectSelect:
+		return "plan_project_select"
+	case ModePlanPrompt:
+		return "plan_prompt"
 	default:
 		return "unknown"
 	}
@@ -53,6 +61,15 @@ type ModeState struct {
 
 	// HasPendingUserQuestion indicates if there's a user question awaiting response.
 	HasPendingUserQuestion bool
+
+	// PlanProject is the selected project for planning (only valid when Mode == ModePlanPrompt).
+	PlanProject string
+
+	// PlanProjects is the list of available projects for planning (only valid when Mode == ModePlanProjectSelect).
+	PlanProjects []string
+
+	// PlanProjectIndex is the currently selected project index (only valid when Mode == ModePlanProjectSelect).
+	PlanProjectIndex int
 }
 
 // NewModeState creates a new ModeState with default values.
@@ -235,4 +252,107 @@ func (s *ModeState) Validate() error {
 		}
 	}
 	return nil
+}
+
+// EnterPlanProjectSelect transitions to plan project selection mode.
+// projects is the list of available projects to choose from.
+func (s *ModeState) EnterPlanProjectSelect(projects []string) error {
+	if s.Mode != ModeNormal {
+		return ErrInvalidModeTransition
+	}
+	if len(projects) == 0 {
+		return errors.New("no projects available")
+	}
+	s.Mode = ModePlanProjectSelect
+	s.PlanProjects = projects
+	s.PlanProjectIndex = 0
+	return nil
+}
+
+// PlanProjectSelectUp moves the selection up in the project list.
+func (s *ModeState) PlanProjectSelectUp() {
+	if s.Mode != ModePlanProjectSelect {
+		return
+	}
+	if s.PlanProjectIndex > 0 {
+		s.PlanProjectIndex--
+	}
+}
+
+// PlanProjectSelectDown moves the selection down in the project list.
+func (s *ModeState) PlanProjectSelectDown() {
+	if s.Mode != ModePlanProjectSelect {
+		return
+	}
+	if s.PlanProjectIndex < len(s.PlanProjects)-1 {
+		s.PlanProjectIndex++
+	}
+}
+
+// SelectPlanProject selects the current project and transitions to prompt mode.
+func (s *ModeState) SelectPlanProject() (string, error) {
+	if s.Mode != ModePlanProjectSelect {
+		return "", ErrInvalidModeTransition
+	}
+	if s.PlanProjectIndex < 0 || s.PlanProjectIndex >= len(s.PlanProjects) {
+		return "", errors.New("invalid project selection")
+	}
+	s.PlanProject = s.PlanProjects[s.PlanProjectIndex]
+	s.Mode = ModePlanPrompt
+	s.Focus = FocusInputLine
+	return s.PlanProject, nil
+}
+
+// CancelPlanProjectSelect cancels project selection and returns to normal mode.
+func (s *ModeState) CancelPlanProjectSelect() error {
+	if s.Mode != ModePlanProjectSelect {
+		return ErrInvalidModeTransition
+	}
+	s.Mode = ModeNormal
+	s.PlanProjects = nil
+	s.PlanProjectIndex = 0
+	return nil
+}
+
+// ExitPlanPromptMode returns from plan prompt mode to normal mode.
+// Returns the selected project name, or an error if not in plan prompt mode.
+func (s *ModeState) ExitPlanPromptMode() (string, error) {
+	if s.Mode != ModePlanPrompt {
+		return "", ErrInvalidModeTransition
+	}
+	project := s.PlanProject
+	s.Mode = ModeNormal
+	s.Focus = FocusChatView
+	s.PlanProject = ""
+	s.PlanProjects = nil
+	s.PlanProjectIndex = 0
+	return project, nil
+}
+
+// CancelPlanPromptMode cancels plan prompt mode without completing.
+func (s *ModeState) CancelPlanPromptMode() error {
+	if s.Mode != ModePlanPrompt {
+		return ErrInvalidModeTransition
+	}
+	s.Mode = ModeNormal
+	s.Focus = FocusAgentList
+	s.PlanProject = ""
+	s.PlanProjects = nil
+	s.PlanProjectIndex = 0
+	return nil
+}
+
+// IsPlanProjectSelect returns true if in plan project selection mode.
+func (s *ModeState) IsPlanProjectSelect() bool {
+	return s.Mode == ModePlanProjectSelect
+}
+
+// IsPlanPrompt returns true if in plan prompt mode.
+func (s *ModeState) IsPlanPrompt() bool {
+	return s.Mode == ModePlanPrompt
+}
+
+// SelectedPlanProject returns the selected project name and the list of projects.
+func (s *ModeState) SelectedPlanProject() (string, []string, int) {
+	return s.PlanProject, s.PlanProjects, s.PlanProjectIndex
 }

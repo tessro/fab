@@ -30,6 +30,13 @@ type ChatView struct {
 	inputFocused        bool                      // whether input line is focused (input mode)
 	abortConfirming     bool                      // awaiting abort confirmation
 	abortAgentID        string                    // agent being aborted
+
+	// Plan mode state
+	planProjectSelect bool     // in plan project selection mode
+	planProjects      []string // list of available projects
+	planProjectIndex  int      // selected project index
+	planPromptMode    bool     // in plan prompt mode
+	planPromptProject string   // project for plan prompt
 }
 
 // NewChatView creates a new chat view component.
@@ -485,6 +492,38 @@ func truncateResult(result string, maxWidth int) string {
 
 // View renders the chat view.
 func (v ChatView) View() string {
+	// Handle plan project selection mode
+	if v.planProjectSelect {
+		innerWidth := v.width - 2
+		header := paneTitleFocusedStyle.Width(innerWidth).Render("New Plan Agent")
+		content := v.renderPlanProjectSelection()
+		inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+		return chatViewFocusedBorderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
+	}
+
+	// Handle plan prompt mode
+	if v.planPromptMode {
+		innerWidth := v.width - 2
+		innerHeight := v.height - 2 - 1
+		header := paneTitleFocusedStyle.Width(innerWidth).Render("New Plan Agent")
+		content := v.renderPlanPromptMode()
+		parts := []string{header, content}
+		// Add input line with divider
+		if v.inputView != "" {
+			indicator := inputModeIndicatorStyle.Render(" PLAN ")
+			indicatorWidth := lipgloss.Width(indicator)
+			remainingWidth := innerWidth - indicatorWidth
+			leftDash := inputDividerFocusedStyle.Render(strings.Repeat("─", 2))
+			rightDash := inputDividerFocusedStyle.Render(strings.Repeat("─", remainingWidth-2))
+			divider := leftDash + indicator + rightDash
+			parts = append(parts, divider, v.inputView)
+		}
+		inner := lipgloss.JoinVertical(lipgloss.Left, parts...)
+		// Use remaining space
+		_ = innerHeight
+		return chatViewFocusedBorderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
+	}
+
 	if v.agentID == "" {
 		// Show empty state with consistent border
 		innerWidth := v.width - 2
@@ -690,4 +729,106 @@ func (v ChatView) renderPendingUserQuestion() string {
 	content := strings.Join(lines, "\n")
 
 	return userQuestionStyle.Width(v.width - 4).Render(content)
+}
+
+// SetPlanProjectSelection sets the plan project selection mode state.
+func (v *ChatView) SetPlanProjectSelection(projects []string, selectedIndex int) {
+	v.planProjectSelect = true
+	v.planProjects = projects
+	v.planProjectIndex = selectedIndex
+	v.updateViewportSize()
+}
+
+// ClearPlanProjectSelection clears plan project selection mode.
+func (v *ChatView) ClearPlanProjectSelection() {
+	v.planProjectSelect = false
+	v.planProjects = nil
+	v.planProjectIndex = 0
+	v.updateViewportSize()
+}
+
+// SetPlanPromptMode sets the plan prompt mode state.
+func (v *ChatView) SetPlanPromptMode(project string) {
+	v.planPromptMode = true
+	v.planPromptProject = project
+	v.updateViewportSize()
+}
+
+// ClearPlanPromptMode clears plan prompt mode.
+func (v *ChatView) ClearPlanPromptMode() {
+	v.planPromptMode = false
+	v.planPromptProject = ""
+	v.updateViewportSize()
+}
+
+// renderPlanProjectSelection renders the project selection UI.
+func (v *ChatView) renderPlanProjectSelection() string {
+	if !v.planProjectSelect || len(v.planProjects) == 0 {
+		return ""
+	}
+
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color("#2B4B3B")). // Dark green background
+		Padding(0, 1)
+
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#4ADE80")). // Light green
+		Bold(true)
+
+	optionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E0E0E0"))
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#3B6B4B")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, headerStyle.Render("Select a project to plan for:"))
+	lines = append(lines, "") // Empty line
+
+	for i, project := range v.planProjects {
+		if i == v.planProjectIndex {
+			lines = append(lines, selectedStyle.Render("▶ "+project))
+		} else {
+			lines = append(lines, optionStyle.Render("  "+project))
+		}
+	}
+
+	lines = append(lines, "")
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+	lines = append(lines, hintStyle.Render("↑/↓: select  Enter/y: confirm  Esc: cancel"))
+
+	content := strings.Join(lines, "\n")
+	return style.Width(v.width - 4).Render(content)
+}
+
+// renderPlanPromptMode renders the plan prompt mode header.
+func (v *ChatView) renderPlanPromptMode() string {
+	if !v.planPromptMode {
+		return ""
+	}
+
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color("#2B4B3B")). // Dark green background
+		Padding(0, 1)
+
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#4ADE80")). // Light green
+		Bold(true)
+
+	projectStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true)
+
+	var lines []string
+	lines = append(lines, headerStyle.Render("New Plan Agent"))
+	lines = append(lines, "Project: "+projectStyle.Render(v.planPromptProject))
+	lines = append(lines, "")
+
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+	lines = append(lines, hintStyle.Render("Enter your planning task below. Press Enter to start, Esc to cancel."))
+
+	content := strings.Join(lines, "\n")
+	return style.Width(v.width - 4).Render(content)
 }

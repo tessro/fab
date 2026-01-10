@@ -79,6 +79,19 @@ type AbortResultMsg struct {
 	Err error
 }
 
+// ProjectListMsg contains the list of projects for plan mode.
+type ProjectListMsg struct {
+	Projects []string
+	Err      error
+}
+
+// PlanStartResultMsg is the result of starting a planner.
+type PlanStartResultMsg struct {
+	PlannerID string
+	Project   string
+	Err       error
+}
+
 // tickMsg is sent on regular intervals to drive spinner animation.
 type tickMsg time.Time
 
@@ -289,7 +302,7 @@ func (m Model) waitForEvent() tea.Cmd {
 	}
 }
 
-// fetchAgentList retrieves the current agent list.
+// fetchAgentList retrieves the current agent list (including planners).
 func (m Model) fetchAgentList() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
@@ -299,13 +312,41 @@ func (m Model) fetchAgentList() tea.Cmd {
 		if err != nil {
 			return AgentListMsg{Err: err}
 		}
-		return AgentListMsg{Agents: resp.Agents}
+
+		// Also fetch planners and merge them into the list
+		agents := resp.Agents
+		plannerResp, err := m.client.PlanList("")
+		if err == nil && plannerResp != nil {
+			for _, p := range plannerResp.Planners {
+				startedAt := time.Now()
+				if p.StartedAt != "" {
+					if t, err := time.Parse(time.RFC3339, p.StartedAt); err == nil {
+						startedAt = t
+					}
+				}
+				agents = append(agents, daemon.AgentStatus{
+					ID:          plannerAgentID(p.ID),
+					Project:     p.Project,
+					State:       p.State,
+					Worktree:    p.WorkDir,
+					StartedAt:   startedAt,
+					Description: "Planner",
+				})
+			}
+		}
+
+		return AgentListMsg{Agents: agents}
 	}
 }
 
 // isManager returns true if the given agent ID is the manager agent.
 func isManager(agentID string) bool {
 	return isManagerAgent(agentID)
+}
+
+// isPlanner returns true if the given agent ID is a planner agent.
+func isPlanner(agentID string) bool {
+	return isPlannerAgent(agentID)
 }
 
 // sendAgentMessage sends a user message to an agent via stream-json.
@@ -318,6 +359,8 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 		var err error
 		if isManager(agentID) {
 			err = m.client.ManagerSendMessage(project, content)
+		} else if isPlanner(agentID) {
+			err = m.client.PlanSendMessage(extractPlannerID(agentID), content)
 		} else {
 			err = m.client.AgentSendMessage(agentID, content)
 		}
@@ -325,7 +368,7 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 	}
 }
 
-// fetchAgentChatHistory retrieves chat history for an agent (or manager).
+// fetchAgentChatHistory retrieves chat history for an agent (or manager/planner).
 // project is required when agentID is "manager".
 func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	return func() tea.Msg {
@@ -337,6 +380,12 @@ func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 		if isManager(agentID) {
 			var resp *daemon.ManagerChatHistoryResponse
 			resp, err = m.client.ManagerChatHistory(project, 0) // 0 = all entries
+			if err == nil {
+				entries = resp.Entries
+			}
+		} else if isPlanner(agentID) {
+			var resp *daemon.PlanChatHistoryResponse
+			resp, err = m.client.PlanChatHistory(extractPlannerID(agentID), 0)
 			if err == nil {
 				entries = resp.Entries
 			}
@@ -379,6 +428,38 @@ func (m Model) fetchStats() tea.Cmd {
 			return StatsMsg{Err: err}
 		}
 		return StatsMsg{Stats: resp}
+	}
+}
+
+// fetchProjectsForPlan retrieves the list of projects for plan mode.
+func (m Model) fetchProjectsForPlan() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return ProjectListMsg{Err: fmt.Errorf("not connected")}
+		}
+		resp, err := m.client.ProjectList()
+		if err != nil {
+			return ProjectListMsg{Err: err}
+		}
+		var projects []string
+		for _, p := range resp.Projects {
+			projects = append(projects, p.Name)
+		}
+		return ProjectListMsg{Projects: projects}
+	}
+}
+
+// startPlanner starts a planner for the given project and prompt.
+func (m Model) startPlanner(project, prompt string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return PlanStartResultMsg{Err: fmt.Errorf("not connected")}
+		}
+		resp, err := m.client.PlanStart(project, prompt)
+		if err != nil {
+			return PlanStartResultMsg{Err: err}
+		}
+		return PlanStartResultMsg{PlannerID: resp.ID, Project: resp.Project}
 	}
 }
 
@@ -623,6 +704,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
+		// Handle plan project selection mode
+		if m.modeState.IsPlanProjectSelect() {
+			switch {
+			case key.Matches(msg, m.keys.Cancel):
+				// Cancel project selection
+				_ = m.modeState.CancelPlanProjectSelect()
+				m.chatView.ClearPlanProjectSelection()
+			case key.Matches(msg, m.keys.Approve), key.Matches(msg, m.keys.Submit):
+				// Select project and enter prompt mode
+				project, err := m.modeState.SelectPlanProject()
+				if err == nil {
+					m.chatView.ClearPlanProjectSelection()
+					m.chatView.SetPlanPromptMode(project)
+					m.syncFocusToComponents(FocusInputLine)
+					m.inputLine.SetPlaceholder("What would you like to plan?")
+					m.inputLine.Focus()
+					m.chatView.SetInputView(m.inputLine.View(), 1, true)
+				}
+			case key.Matches(msg, m.keys.Up):
+				m.modeState.PlanProjectSelectUp()
+				_, projects, idx := m.modeState.SelectedPlanProject()
+				m.chatView.SetPlanProjectSelection(projects, idx)
+			case key.Matches(msg, m.keys.Down):
+				m.modeState.PlanProjectSelectDown()
+				_, projects, idx := m.modeState.SelectedPlanProject()
+				m.chatView.SetPlanProjectSelection(projects, idx)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
+		// Handle plan prompt mode
+		if m.modeState.IsPlanPrompt() {
+			switch {
+			case key.Matches(msg, m.keys.Cancel):
+				// Cancel plan mode
+				_ = m.modeState.CancelPlanPromptMode()
+				m.inputLine.Clear()
+				m.inputLine.SetPlaceholder("Type a message...")
+				m.chatView.ClearPlanPromptMode()
+				m.syncFocusToComponents(FocusAgentList)
+			case key.Matches(msg, m.keys.Submit):
+				// Submit plan request
+				input := m.inputLine.Value()
+				if input != "" {
+					project, _ := m.modeState.ExitPlanPromptMode()
+					cmds = append(cmds, m.startPlanner(project, input))
+					m.inputLine.Clear()
+					m.inputLine.SetPlaceholder("Type a message...")
+					m.chatView.ClearPlanPromptMode()
+					m.syncFocusToComponents(FocusChatView)
+				}
+			default:
+				// Pass all other keys to input
+				cmd := m.inputLine.Update(msg)
+				cmds = append(cmds, cmd)
+				m.chatView.SetInputView(m.inputLine.View(), 1, true)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			// Close client to unblock any pending RecvEvent() calls
@@ -797,6 +938,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.modeState.Focus == FocusChatView {
 				m.chatView.PageDown()
 			}
+
+		case key.Matches(msg, m.keys.Plan):
+			// Start plan mode - fetch projects first
+			if m.modeState.IsNormal() {
+				cmds = append(cmds, m.fetchProjectsForPlan())
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -966,6 +1113,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatView.SetPendingUserQuestion(nil)
 		// Update attention indicators
 		m.updateNeedsAttention()
+
+	case ProjectListMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else if len(msg.Projects) == 0 {
+			cmds = append(cmds, m.setError(fmt.Errorf("no projects configured")))
+		} else {
+			// Enter plan project selection mode
+			if err := m.modeState.EnterPlanProjectSelect(msg.Projects); err != nil {
+				cmds = append(cmds, m.setError(err))
+			} else {
+				// Show project selection in chat view
+				m.chatView.SetPlanProjectSelection(msg.Projects, 0)
+			}
+		}
+
+	case PlanStartResultMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else {
+			slog.Info("planner started from TUI",
+				"planner", msg.PlannerID,
+				"project", msg.Project,
+			)
+			// The planner_created event will add it to the agent list
+			// We just need to refresh the list to ensure we see it
+			cmds = append(cmds, m.fetchAgentList())
+		}
 
 	case AbortResultMsg:
 		if msg.Err != nil {
@@ -1218,6 +1393,80 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 			}
 		}
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
+
+	case "planner_created":
+		// A new planner was created - add to list
+		agents := m.agentList.Agents()
+		startedAt := time.Now()
+		if event.StartedAt != "" {
+			if t, err := time.Parse(time.RFC3339, event.StartedAt); err == nil {
+				startedAt = t
+			}
+		}
+		tuiAgentID := plannerAgentID(event.AgentID)
+		agents = append(agents, daemon.AgentStatus{
+			ID:          tuiAgentID,
+			Project:     event.Project,
+			State:       "starting",
+			StartedAt:   startedAt,
+			Description: "Planner",
+		})
+		m.agentList.SetAgents(agents)
+		m.header.SetAgentCounts(len(agents), countRunning(agents))
+		// Auto-select the new planner if no agent is currently selected
+		if m.chatView.AgentID() == "" {
+			return m.selectCurrentAgent()
+		}
+
+	case "planner_state":
+		// Update planner state in the list
+		tuiAgentID := plannerAgentID(event.AgentID)
+		agents := m.agentList.Agents()
+		for i := range agents {
+			if agents[i].ID == tuiAgentID {
+				agents[i].State = event.State
+				m.agentList.SetAgents(agents)
+				break
+			}
+		}
+		m.header.SetAgentCounts(len(agents), countRunning(agents))
+
+	case "planner_deleted":
+		// A planner was deleted - remove from list
+		tuiAgentID := plannerAgentID(event.AgentID)
+		wasSelected := tuiAgentID == m.chatView.AgentID()
+		agents := m.agentList.Agents()
+		for i := range agents {
+			if agents[i].ID == tuiAgentID {
+				agents = append(agents[:i], agents[i+1:]...)
+				break
+			}
+		}
+		m.agentList.SetAgents(agents)
+		m.header.SetAgentCounts(len(agents), countRunning(agents))
+		// If the deleted planner was selected, auto-select the next agent
+		if wasSelected {
+			m.chatView.ClearAgent()
+			if len(agents) > 0 {
+				return m.selectCurrentAgent()
+			}
+		}
+
+	case "planner_chat_entry":
+		// Handle chat entry events from planner
+		tuiAgentID := plannerAgentID(event.AgentID)
+		if event.ChatEntry != nil && tuiAgentID == m.chatView.AgentID() {
+			m.chatView.AppendEntry(*event.ChatEntry)
+		}
+
+	case "plan_complete":
+		// Could show a completion notification
+		// For now, just log it (the planner will call fab agent done)
+		slog.Debug("plan completed",
+			"planner", event.AgentID,
+			"project", event.Project,
+			"plan_file", event.Data,
+		)
 	}
 	return nil
 }

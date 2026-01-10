@@ -73,12 +73,21 @@ func (m *Manager) emit(event Event) {
 	}
 }
 
+// GenerateID generates a new unique planner ID.
+func (m *Manager) GenerateID() string {
+	return generateID()
+}
+
 // Create creates a new planning agent.
 // workDir is the directory the planner will work in.
 // prompt is the planning task to work on.
 func (m *Manager) Create(project, workDir, prompt string) (*Planner, error) {
-	id := generateID()
+	return m.CreateWithID(generateID(), project, workDir, prompt)
+}
 
+// CreateWithID creates a new planning agent with a specific ID.
+// This is useful when the ID must be known before creation (e.g., for worktree naming).
+func (m *Manager) CreateWithID(id, project, workDir, prompt string) (*Planner, error) {
 	p := New(id, project, workDir, prompt)
 
 	// Register state change callback
