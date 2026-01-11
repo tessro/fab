@@ -86,7 +86,7 @@ var projectConfigShowCmd = &cobra.Command{
 var projectConfigGetCmd = &cobra.Command{
 	Use:   "get <project> <key>",
 	Short: "Get a configuration value",
-	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend, permissions-checker, agent-backend",
+	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend, permissions-checker, agent-backend, planner-backend, coding-backend",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runProjectConfigGet,
 }
@@ -94,7 +94,7 @@ var projectConfigGetCmd = &cobra.Command{
 var projectConfigSetCmd = &cobra.Command{
 	Use:   "set <project> <key> <value>",
 	Short: "Set a configuration value",
-	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents           Maximum concurrent agents (1-100)\n  autostart            Start orchestration when daemon starts (true/false)\n  issue-backend        Issue backend type (tk/gh/github)\n  permissions-checker  Permission authorization method (manual/llm)\n  agent-backend        Agent CLI backend (claude/codex)",
+	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents           Maximum concurrent agents (1-100)\n  autostart            Start orchestration when daemon starts (true/false)\n  issue-backend        Issue backend type (tk/gh/github)\n  permissions-checker  Permission authorization method (manual/llm)\n  agent-backend        Agent CLI backend fallback (claude/codex)\n  planner-backend      Planning agent CLI backend (claude/codex)\n  coding-backend       Coding agent CLI backend (claude/codex)",
 	Args:  cobra.ExactArgs(3),
 	RunE:  runProjectConfigSet,
 }
@@ -332,6 +332,8 @@ func runProjectConfigShow(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(w, "  issue-backend:\t%v\n", result.Config["issue-backend"])
 	_, _ = fmt.Fprintf(w, "  permissions-checker:\t%v\n", result.Config["permissions-checker"])
 	_, _ = fmt.Fprintf(w, "  agent-backend:\t%v\n", result.Config["agent-backend"])
+	_, _ = fmt.Fprintf(w, "  planner-backend:\t%v\n", result.Config["planner-backend"])
+	_, _ = fmt.Fprintf(w, "  coding-backend:\t%v\n", result.Config["coding-backend"])
 	_ = w.Flush()
 
 	return nil

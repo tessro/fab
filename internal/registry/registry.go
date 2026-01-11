@@ -38,7 +38,9 @@ type ProjectEntry struct {
 	AllowedAuthors     []string `toml:"allowed-authors,omitempty"`     // GitHub usernames allowed to create issues
 	Autostart          bool     `toml:"autostart,omitempty"`           // Start orchestration when daemon starts
 	PermissionsChecker string   `toml:"permissions-checker,omitempty"` // Permission checker: "manual" (default), "llm"
-	AgentBackend       string   `toml:"agent-backend,omitempty"`       // Agent CLI backend: "claude" (default), "codex"
+	AgentBackend       string   `toml:"agent-backend,omitempty"`       // Agent CLI backend: "claude" (default), "codex" - used as fallback
+	PlannerBackend     string   `toml:"planner-backend,omitempty"`     // Planner CLI backend: "claude" (default), "codex"
+	CodingBackend      string   `toml:"coding-backend,omitempty"`      // Coding agent CLI backend: "claude" (default), "codex"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 
@@ -190,6 +192,8 @@ func (r *Registry) load() error {
 		p.Autostart = entry.Autostart
 		p.PermissionsChecker = permissionsChecker
 		p.AgentBackend = agentBackend
+		p.PlannerBackend = entry.PlannerBackend
+		p.CodingBackend = entry.CodingBackend
 		r.projects[entry.Name] = p
 	}
 
@@ -228,6 +232,8 @@ func (r *Registry) save() error {
 			Autostart:          p.Autostart,
 			PermissionsChecker: p.PermissionsChecker,
 			AgentBackend:       p.AgentBackend,
+			PlannerBackend:     p.PlannerBackend,
+			CodingBackend:      p.CodingBackend,
 		})
 	}
 
@@ -389,11 +395,13 @@ const (
 	ConfigKeyAllowedAuthors     ConfigKey = "allowed-authors"
 	ConfigKeyPermissionsChecker ConfigKey = "permissions-checker"
 	ConfigKeyAgentBackend       ConfigKey = "agent-backend"
+	ConfigKeyPlannerBackend     ConfigKey = "planner-backend"
+	ConfigKeyCodingBackend      ConfigKey = "coding-backend"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend, ConfigKeyPlannerBackend, ConfigKeyCodingBackend}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -437,6 +445,10 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 		return checker, nil
 	case ConfigKeyAgentBackend:
 		return p.GetAgentBackend(), nil
+	case ConfigKeyPlannerBackend:
+		return p.GetPlannerBackend(), nil
+	case ConfigKeyCodingBackend:
+		return p.GetCodingBackend(), nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -469,6 +481,8 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		string(ConfigKeyAllowedAuthors):     p.AllowedAuthors,
 		string(ConfigKeyPermissionsChecker): permissionsChecker,
 		string(ConfigKeyAgentBackend):       p.GetAgentBackend(),
+		string(ConfigKeyPlannerBackend):     p.GetPlannerBackend(),
+		string(ConfigKeyCodingBackend):      p.GetCodingBackend(),
 	}, nil
 }
 
@@ -527,6 +541,18 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			return errors.New("invalid value for agent-backend: must be 'claude' or 'codex'")
 		}
 		p.AgentBackend = v
+	case ConfigKeyPlannerBackend:
+		v := strings.ToLower(value)
+		if v != "claude" && v != "codex" {
+			return errors.New("invalid value for planner-backend: must be 'claude' or 'codex'")
+		}
+		p.PlannerBackend = v
+	case ConfigKeyCodingBackend:
+		v := strings.ToLower(value)
+		if v != "claude" && v != "codex" {
+			return errors.New("invalid value for coding-backend: must be 'claude' or 'codex'")
+		}
+		p.CodingBackend = v
 	default:
 		return errors.New("invalid configuration key")
 	}

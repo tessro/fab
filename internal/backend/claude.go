@@ -150,3 +150,7 @@ func (b *ClaudeBackend) HookSettings(fabPath string) map[string]any {
 		},
 	}
 }
+
+func init() {
+	Register("claude", &ClaudeBackend{})
+}

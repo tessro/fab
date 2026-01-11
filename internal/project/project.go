@@ -29,7 +29,9 @@ type Project struct {
 	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
 	Autostart      bool     // Start orchestration when daemon starts
 	PermissionsChecker string // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
-	AgentBackend   string   // Agent CLI backend: "claude" (default), "codex"
+	AgentBackend   string   // Agent CLI backend: "claude" (default), "codex" - used as fallback if planner/coding not set
+	PlannerBackend string   // Planner CLI backend: "claude" (default), "codex"
+	CodingBackend  string   // Coding agent CLI backend: "claude" (default), "codex"
 	BaseDir        string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
@@ -211,11 +213,30 @@ func (p *Project) IsRunning() bool {
 const DefaultAgentBackend = "claude"
 
 // GetAgentBackend returns the configured agent backend, or the default ("claude").
+// This is used as a fallback when planner-backend or coding-backend are not set.
 func (p *Project) GetAgentBackend() string {
 	if p.AgentBackend == "" {
 		return DefaultAgentBackend
 	}
 	return p.AgentBackend
+}
+
+// GetPlannerBackend returns the configured planner backend.
+// Falls back to AgentBackend if not explicitly set, then to "claude".
+func (p *Project) GetPlannerBackend() string {
+	if p.PlannerBackend != "" {
+		return p.PlannerBackend
+	}
+	return p.GetAgentBackend()
+}
+
+// GetCodingBackend returns the configured coding agent backend.
+// Falls back to AgentBackend if not explicitly set, then to "claude".
+func (p *Project) GetCodingBackend() string {
+	if p.CodingBackend != "" {
+		return p.CodingBackend
+	}
+	return p.GetAgentBackend()
 }
 
 // ManagerWorktreePath returns the path to the manager's worktree.

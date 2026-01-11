@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	_ "github.com/tessro/fab/internal/backend" // Register backends for tests
 	"github.com/tessro/fab/internal/project"
 )
 

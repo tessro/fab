@@ -66,9 +66,18 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 		workDir = wtPath
 		log.Debug("handlePlanStart: worktree created", "path", workDir)
 
+		// Get the planner backend from project config
+		backendName := proj.GetPlannerBackend()
+		b, err := backend.Get(backendName)
+		if err != nil {
+			log.Error("handlePlanStart: failed to get backend", "backend", backendName, "error", err)
+			_ = proj.DeletePlannerWorktree(plannerID)
+			return errorResponse(req, fmt.Sprintf("unknown backend: %s", backendName))
+		}
+
 		// Create the planner with the specific ID
-		log.Debug("handlePlanStart: creating planner instance")
-		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt, backend.NewClaudeBackend())
+		log.Debug("handlePlanStart: creating planner instance", "backend", backendName)
+		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt, b)
 		if err != nil {
 			log.Error("handlePlanStart: failed to create planner", "error", err)
 			_ = proj.DeletePlannerWorktree(plannerID)
@@ -103,7 +112,7 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 	home, _ := os.UserHomeDir()
 	workDir = filepath.Join(home, ".fab", "planners")
 
-	// Create the planner
+	// Create the planner (use default Claude backend when no project)
 	log.Debug("handlePlanStart: creating planner instance", "workdir", workDir)
 	p, err := s.planners.Create(projectName, workDir, startReq.Prompt, backend.NewClaudeBackend())
 	if err != nil {

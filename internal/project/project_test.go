@@ -304,3 +304,81 @@ func TestGetAgentBackend(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPlannerBackend(t *testing.T) {
+	tests := []struct {
+		name           string
+		plannerBackend string
+		agentBackend   string
+		want           string
+	}{
+		{
+			name:           "explicit planner backend",
+			plannerBackend: "codex",
+			agentBackend:   "claude",
+			want:           "codex",
+		},
+		{
+			name:           "falls back to agent backend",
+			plannerBackend: "",
+			agentBackend:   "codex",
+			want:           "codex",
+		},
+		{
+			name:           "falls back to default when both empty",
+			plannerBackend: "",
+			agentBackend:   "",
+			want:           DefaultAgentBackend,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.PlannerBackend = tt.plannerBackend
+			p.AgentBackend = tt.agentBackend
+			if got := p.GetPlannerBackend(); got != tt.want {
+				t.Errorf("GetPlannerBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetCodingBackend(t *testing.T) {
+	tests := []struct {
+		name          string
+		codingBackend string
+		agentBackend  string
+		want          string
+	}{
+		{
+			name:          "explicit coding backend",
+			codingBackend: "codex",
+			agentBackend:  "claude",
+			want:          "codex",
+		},
+		{
+			name:          "falls back to agent backend",
+			codingBackend: "",
+			agentBackend:  "codex",
+			want:          "codex",
+		},
+		{
+			name:          "falls back to default when both empty",
+			codingBackend: "",
+			agentBackend:  "",
+			want:          DefaultAgentBackend,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.CodingBackend = tt.codingBackend
+			p.AgentBackend = tt.agentBackend
+			if got := p.GetCodingBackend(); got != tt.want {
+				t.Errorf("GetCodingBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

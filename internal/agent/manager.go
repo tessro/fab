@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/event"
 	"github.com/tessro/fab/internal/id"
 	"github.com/tessro/fab/internal/project"
@@ -140,6 +141,7 @@ func (m *Manager) emitProjectEvent(e ProjectEvent) {
 
 // Create creates a new agent for the given project.
 // It creates a dedicated worktree for the agent and returns the new agent.
+// Uses the project's configured coding-backend (falling back to agent-backend, then "claude").
 // Returns ErrNoCapacity if max agents reached.
 func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 	agentID := id.Generate()
@@ -155,7 +157,17 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 		return nil, err
 	}
 
-	agent := New(agentID, proj, wt)
+	// Get the coding backend from project config
+	backendName := proj.GetCodingBackend()
+	b, err := backend.Get(backendName)
+	if err != nil {
+		slog.Error("failed to get backend", "backend", backendName, "error", err)
+		// Clean up worktree on error
+		_ = proj.DeleteWorktreeForAgent(agentID)
+		return nil, err
+	}
+
+	agent := NewWithBackend(agentID, proj, wt, b)
 
 	// Register state change callback to emit events
 	agent.OnStateChange(func(old, new State) {
