@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/rules"
@@ -34,9 +35,16 @@ func (s *Supervisor) getProjectManager(projectName string) (*manager.Manager, er
 		return nil, fmt.Errorf("create manager worktree: %w", err)
 	}
 
+	// Get the agent backend for this project
+	b, err := backend.Get(proj.GetAgentBackend())
+	if err != nil {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("get backend: %w", err)
+	}
+
 	// Create new manager for this project
 	wtPath := proj.ManagerWorktreePath()
-	mgr = manager.New(wtPath, projectName, s.managerPatterns)
+	mgr = manager.New(wtPath, projectName, b, s.managerPatterns)
 	s.managers[projectName] = mgr
 	s.mu.Unlock()
 

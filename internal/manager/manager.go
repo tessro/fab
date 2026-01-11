@@ -4,12 +4,12 @@
 package manager
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
 
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/plugin"
 	"github.com/tessro/fab/internal/processagent"
 )
@@ -39,6 +39,9 @@ const (
 type Manager struct {
 	*processagent.ProcessAgent
 
+	// backend is the agent CLI backend (e.g., ClaudeBackend).
+	backend backend.Backend
+
 	// Project name this manager belongs to
 	project string
 
@@ -50,10 +53,12 @@ type Manager struct {
 // New creates a new manager agent for a project.
 // workDir is the manager's worktree directory (e.g., ~/.fab/projects/<project>/worktrees/wt-manager).
 // project is the name of the project this manager belongs to.
+// b is the agent CLI backend to use for command building.
 // allowedPatterns specifies Bash command patterns that are allowed without prompting.
 // Uses fab pattern syntax (e.g., "fab:*" for prefix match).
-func New(workDir string, project string, allowedPatterns []string) *Manager {
+func New(workDir string, project string, b backend.Backend, allowedPatterns []string) *Manager {
 	m := &Manager{
+		backend:         b,
 		project:         project,
 		allowedPatterns: allowedPatterns,
 	}
@@ -95,7 +100,7 @@ func (m *Manager) SendMessage(content string) error {
 	return m.ProcessAgent.SendMessage(content)
 }
 
-// buildCommand creates the exec.Cmd for the Claude Code process.
+// buildCommand creates the exec.Cmd for the agent CLI process.
 func (m *Manager) buildCommand() (*exec.Cmd, error) {
 	// Get fab binary path for the system prompt
 	fabPath, err := os.Executable()
@@ -108,25 +113,16 @@ func (m *Manager) buildCommand() (*exec.Cmd, error) {
 
 	// Build settings with allowed tools based on configured patterns
 	settings := m.buildSettings()
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return nil, fmt.Errorf("marshal settings: %w", err)
-	}
 
-	// Build claude command
-	cmd := exec.Command("claude",
-		"--output-format", "stream-json",
-		"--input-format", "stream-json",
-		"--verbose",
-		"--permission-mode", "default",
-		"--plugin-dir", plugin.DefaultInstallDir(),
-		"--settings", string(settingsJSON),
-		"-p", systemPrompt)
-
-	// Set environment
-	cmd.Env = append(os.Environ(), "FAB_MANAGER=1")
-
-	return cmd, nil
+	// Use backend to build the command
+	return m.backend.BuildCommand(backend.CommandConfig{
+		WorkDir:       m.WorkDir(),
+		AgentID:       "manager:" + m.project,
+		InitialPrompt: systemPrompt,
+		PluginDir:     plugin.DefaultInstallDir(),
+		Settings:      settings,
+		Env:           []string{"FAB_MANAGER=1"},
+	})
 }
 
 // buildSettings creates the Claude Code settings with allowed tool permissions.

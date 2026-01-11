@@ -49,4 +49,12 @@ type CommandConfig struct {
 	// HookSettings contains CLI-specific hook configuration.
 	// This is typically the result of calling Backend.HookSettings().
 	HookSettings map[string]any
+
+	// Settings contains additional CLI settings (e.g., permissions).
+	// These are merged with HookSettings when building the command.
+	Settings map[string]any
+
+	// Env contains additional environment variables to set for the CLI process.
+	// These are appended to os.Environ().
+	Env []string
 }
