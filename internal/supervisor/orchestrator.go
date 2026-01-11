@@ -141,6 +141,11 @@ func (s *Supervisor) ShutdownWithTimeout(timeout time.Duration) bool {
 
 // shutdownInternal performs the actual shutdown work.
 func (s *Supervisor) shutdownInternal() {
+	// Stop heartbeat monitor first
+	if s.heartbeat != nil {
+		s.heartbeat.Stop()
+	}
+
 	// Get list of running orchestrators
 	s.mu.RLock()
 	projectNames := make([]string, 0, len(s.orchestrators))

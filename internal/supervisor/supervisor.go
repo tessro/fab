@@ -54,6 +54,9 @@ type Supervisor struct {
 	// Global config for LLM auth settings
 	globalConfig *config.GlobalConfig
 
+	// Heartbeat monitor for detecting stuck agents
+	heartbeat *HeartbeatMonitor
+
 	mu sync.RWMutex
 }
 
@@ -97,6 +100,21 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 
 	// Set up planner event handlers
 	s.planners.OnEvent(s.handlePlannerEvent)
+
+	// Set up heartbeat monitor for detecting stuck agents
+	heartbeatCfg := DefaultHeartbeatConfig()
+	heartbeatCfg.SendMessage = func(agentID, message string) error {
+		a, err := agents.Get(agentID)
+		if err != nil {
+			return err
+		}
+		return a.SendMessage(message)
+	}
+	heartbeatCfg.StopAgent = func(agentID string) error {
+		return agents.Stop(agentID)
+	}
+	s.heartbeat = NewHeartbeatMonitor(agents, heartbeatCfg)
+	s.heartbeat.Start()
 
 	return s
 }

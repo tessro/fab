@@ -199,8 +199,16 @@ func (s *Supervisor) StartAgentReadLoop(a *agent.Agent) error {
 	cfg := agent.DefaultReadLoopConfig()
 	cfg.OnEntry = func(entry agent.ChatEntry) {
 		s.broadcastChatEntry(info.ID, info.Project, entry)
+		// Record output for heartbeat monitoring
+		if s.heartbeat != nil {
+			s.heartbeat.RecordOutput(info.ID)
+		}
 	}
 	cfg.OnExit = func(exitErr error) {
+		// Remove from heartbeat monitoring
+		if s.heartbeat != nil {
+			s.heartbeat.RemoveAgent(info.ID)
+		}
 		// Release claims when agent crashes (non-nil exitErr means crash)
 		if exitErr != nil {
 			orch := s.getOrchestrator(info.Project)
