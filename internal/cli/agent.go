@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tessro/fab/internal/tui"
 )
 
 var agentCmd = &cobra.Command{
@@ -98,11 +100,16 @@ var agentAbortCmd = &cobra.Command{
 func runAgentAbort(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
 
+	// Check if this is a planner agent
+	isPlanner := strings.HasPrefix(agentID, tui.PlannerAgentIDPrefix)
+
 	// Confirm unless --yes is specified
 	if !abortNoConfirm {
 		action := "gracefully abort"
-		if abortForce {
+		if abortForce && !isPlanner {
 			action = "force kill"
+		} else if isPlanner {
+			action = "stop"
 		}
 		fmt.Printf("Are you sure you want to %s agent %s? [y/N] ", action, agentID)
 		var confirm string
@@ -115,14 +122,22 @@ func runAgentAbort(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
 	defer client.Close()
 
-	if err := client.AgentAbort(agentID, abortForce); err != nil {
-		return fmt.Errorf("abort agent: %w", err)
-	}
-
-	if abortForce {
-		fmt.Printf("🚌 Force killed agent %s\n", agentID)
+	if isPlanner {
+		// Planners use PlanStop (graceful only, force is ignored)
+		plannerID := strings.TrimPrefix(agentID, tui.PlannerAgentIDPrefix)
+		if err := client.PlanStop(plannerID); err != nil {
+			return fmt.Errorf("stop planner: %w", err)
+		}
+		fmt.Printf("🚌 Stopped planner %s\n", agentID)
 	} else {
-		fmt.Printf("🚌 Sent quit to agent %s\n", agentID)
+		if err := client.AgentAbort(agentID, abortForce); err != nil {
+			return fmt.Errorf("abort agent: %w", err)
+		}
+		if abortForce {
+			fmt.Printf("🚌 Force killed agent %s\n", agentID)
+		} else {
+			fmt.Printf("🚌 Sent quit to agent %s\n", agentID)
+		}
 	}
 	return nil
 }

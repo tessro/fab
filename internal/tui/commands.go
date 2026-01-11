@@ -316,13 +316,19 @@ func (m Model) answerUserQuestion(questionID string, answers map[string]string) 
 	}
 }
 
-// abortAgent aborts a running agent.
+// abortAgent aborts a running agent (or stops a planner).
 func (m Model) abortAgent(agentID string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
 			return nil
 		}
-		err := m.client.AgentAbort(agentID, force)
+		var err error
+		if isPlanner(agentID) {
+			// Planners use PlanStop (graceful only, force is ignored)
+			err = m.client.PlanStop(extractPlannerID(agentID))
+		} else {
+			err = m.client.AgentAbort(agentID, force)
+		}
 		return abortResultMsg{Err: err}
 	}
 }
