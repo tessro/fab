@@ -102,6 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.chatView.ClearPlanProjectSelection()
 					m.chatView.SetPlanPromptMode(project)
 					m.syncFocusToComponents(FocusInputLine)
+					m.inputLine.Clear()
 					m.inputLine.SetPlaceholder("What would you like to plan?")
 					m.inputLine.Focus()
 					m.chatView.SetInputView(m.inputLine.View(), 1, true)
