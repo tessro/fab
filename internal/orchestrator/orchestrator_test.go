@@ -262,7 +262,7 @@ func TestOrchestrator_QueueKickstart_ManualMode(t *testing.T) {
 	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
 
 	// Queue kickstart
-	orch.queueKickstart(a)
+	orch.QueueKickstart(a)
 
 	// In manual mode, kickstart should be staged
 	if orch.actions.Len() != 1 {
@@ -296,7 +296,7 @@ func TestOrchestrator_QueueKickstart_EmptyPrompt(t *testing.T) {
 	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
 
 	// Queue kickstart with empty prompt
-	orch.queueKickstart(a)
+	orch.QueueKickstart(a)
 
 	// No action should be queued with empty prompt
 	if orch.actions.Len() != 0 {
@@ -340,8 +340,8 @@ func TestOrchestrator_QueueKickstart_SkipsWhenUserIntervening(t *testing.T) {
 	a.MarkUserInput()
 
 	// Queue kickstart - should be skipped
-	if orch.queueKickstart(a) {
-		t.Error("expected queueKickstart to return false when user is intervening")
+	if orch.QueueKickstart(a) {
+		t.Error("expected QueueKickstart to return false when user is intervening")
 	}
 
 	// No action should be queued
@@ -369,8 +369,8 @@ func TestOrchestrator_QueueKickstart_ProceedsAfterSilence(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Queue kickstart - should proceed now
-	if !orch.queueKickstart(a) {
-		t.Error("expected queueKickstart to return true after silence threshold")
+	if !orch.QueueKickstart(a) {
+		t.Error("expected QueueKickstart to return true after silence threshold")
 	}
 
 	// Action should be queued
@@ -395,8 +395,8 @@ func TestOrchestrator_InterventionSilence_DisabledWhenZero(t *testing.T) {
 	a.MarkUserInput()
 
 	// Queue kickstart - should proceed even with recent user input
-	if !orch.queueKickstart(a) {
-		t.Error("expected queueKickstart to proceed when intervention detection is disabled")
+	if !orch.QueueKickstart(a) {
+		t.Error("expected QueueKickstart to proceed when intervention detection is disabled")
 	}
 
 	// Action should be queued

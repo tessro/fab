@@ -331,9 +331,10 @@ func (o *Orchestrator) spawnAgent() error {
 	return nil
 }
 
-// queueKickstart queues or executes the kickstart action based on mode.
+// QueueKickstart queues or executes the kickstart action based on mode.
 // Returns true if kickstart was queued/executed, false if skipped due to user intervention.
-func (o *Orchestrator) queueKickstart(a *agent.Agent) bool {
+// This should be called when an agent becomes idle to resume automatic task execution.
+func (o *Orchestrator) QueueKickstart(a *agent.Agent) bool {
 	prompt := o.config.KickstartPrompt
 	if prompt == "" {
 		return false
