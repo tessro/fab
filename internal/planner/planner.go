@@ -516,6 +516,7 @@ func (p *Planner) runReadLoop() {
 	}
 
 	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), agent.MaxScanTokenSize)
 	lineCount := 0
 	log.Debug("planner.runReadLoop: waiting for first line from claude")
 

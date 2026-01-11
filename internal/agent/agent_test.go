@@ -164,6 +164,19 @@ func TestDefaultReadLoopConfig(t *testing.T) {
 	}
 }
 
+func TestMaxScanTokenSize(t *testing.T) {
+	// MaxScanTokenSize must be large enough for large file reads (at least 1MB)
+	if MaxScanTokenSize < 1024*1024 {
+		t.Errorf("MaxScanTokenSize too small: %d bytes, should be at least 1MB", MaxScanTokenSize)
+	}
+
+	// Current value should be 10MB
+	expectedSize := 10 * 1024 * 1024
+	if MaxScanTokenSize != expectedSize {
+		t.Errorf("MaxScanTokenSize = %d, want %d", MaxScanTokenSize, expectedSize)
+	}
+}
+
 func TestAgent_ExitError(t *testing.T) {
 	a := New("test-1", nil, nil)
 

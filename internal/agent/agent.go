@@ -23,6 +23,11 @@ import (
 // StopTimeout is the duration to wait for graceful shutdown before force killing.
 const StopTimeout = 5 * time.Second
 
+// MaxScanTokenSize is the maximum size of a single JSONL line from Claude Code output.
+// This must be large enough to handle Read tool responses with large file contents.
+// Default bufio.Scanner limit is 64KB which is too small for large files.
+const MaxScanTokenSize = 10 * 1024 * 1024 // 10MB
+
 // DefaultInterventionSilence is the duration of silence before considering user intervention ended.
 // After a user sends a message, the orchestrator will pause kickstart for this duration.
 const DefaultInterventionSilence = 60 * time.Second
@@ -851,6 +856,7 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 	}
 
 	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), MaxScanTokenSize)
 
 	for scanner.Scan() {
 		// Check for stop signal
