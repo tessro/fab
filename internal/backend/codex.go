@@ -2,7 +2,6 @@
 package backend
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -85,131 +84,98 @@ func (b *CodexBackend) HookSettings(fabPath string) map[string]any {
 
 // convertEvent converts a Codex event to a canonical StreamMessage.
 func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
-	switch event.Msg.Type {
-	case "task_started":
+	switch event.Type {
+	case "thread.started":
+		// Session initialization with thread_id
 		return &StreamMessage{
 			Type:    "system",
 			Subtype: "init",
 		}, nil
 
-	case "task_complete":
-		return &StreamMessage{
-			Type:   "result",
-			Result: event.Msg.LastAgentMessage,
-		}, nil
+	case "turn.started":
+		// New turn beginning - no specific message needed
+		return nil, nil
 
-	case "agent_message":
-		return &StreamMessage{
-			Type: "assistant",
-			Message: &NestedMessage{
-				Role: "assistant",
-				Content: []ContentBlock{
-					{
-						Type: "text",
-						Text: event.Msg.Message,
-					},
-				},
-			},
-		}, nil
-
-	case "agent_message_delta":
-		// For streaming deltas, we still emit as assistant message
-		return &StreamMessage{
-			Type: "assistant",
-			Message: &NestedMessage{
-				Role: "assistant",
-				Content: []ContentBlock{
-					{
-						Type: "text",
-						Text: event.Msg.Delta,
-					},
-				},
-			},
-		}, nil
-
-	case "exec_command_begin":
-		// Convert to tool_use format
-		cmdInput, _ := json.Marshal(map[string]any{
-			"command": event.Msg.Command,
-			"cwd":     event.Msg.Cwd,
-		})
-		return &StreamMessage{
-			Type: "assistant",
-			Message: &NestedMessage{
-				Role: "assistant",
-				Content: []ContentBlock{
-					{
-						Type:  "tool_use",
-						ID:    event.Msg.CallID,
-						Name:  "Bash",
-						Input: cmdInput,
-					},
-				},
-			},
-		}, nil
-
-	case "exec_command_output_delta":
-		// Decode base64 chunk and emit as partial tool result
-		output := ""
-		if event.Msg.Chunk != "" {
-			decoded, err := base64.StdEncoding.DecodeString(event.Msg.Chunk)
-			if err == nil {
-				output = string(decoded)
-			}
-		}
-		return &StreamMessage{
-			Type: "user",
-			Message: &NestedMessage{
-				Role: "user",
-				Content: []ContentBlock{
-					{
-						Type:      "tool_result",
-						ToolUseID: event.Msg.CallID,
-						Content:   FlexContent(output),
-					},
-				},
-			},
-		}, nil
-
-	case "exec_command_end":
-		// Emit complete tool result
-		output := event.Msg.AggregatedOutput
-		if output == "" {
-			output = event.Msg.FormattedOutput
-		}
-		isError := event.Msg.ExitCode != 0
-		return &StreamMessage{
-			Type: "user",
-			Message: &NestedMessage{
-				Role: "user",
-				Content: []ContentBlock{
-					{
-						Type:      "tool_result",
-						ToolUseID: event.Msg.CallID,
-						Content:   FlexContent(output),
-						IsError:   isError,
-					},
-				},
-			},
-		}, nil
-
-	case "token_count":
-		// Extract token usage if available
-		var usage *Usage
-		if event.Msg.Info != nil && event.Msg.Info.LastTokenUsage != nil {
-			tu := event.Msg.Info.LastTokenUsage
-			usage = &Usage{
-				InputTokens:         tu.InputTokens,
-				OutputTokens:        tu.OutputTokens,
-				CacheReadInputTokens: tu.CachedInputTokens,
-			}
-		}
-		if usage != nil {
+	case "turn.completed":
+		// Turn complete with usage stats
+		if event.Usage != nil {
 			return &StreamMessage{
 				Type: "assistant",
 				Message: &NestedMessage{
-					Role:  "assistant",
-					Usage: usage,
+					Role: "assistant",
+					Usage: &Usage{
+						InputTokens:          event.Usage.InputTokens,
+						OutputTokens:         event.Usage.OutputTokens,
+						CacheReadInputTokens: event.Usage.CachedInputTokens,
+					},
+				},
+			}, nil
+		}
+		return nil, nil
+
+	case "item.started":
+		// Tool use beginning (command execution)
+		if event.Item != nil && event.Item.Type == "command_execution" {
+			cmdInput, _ := json.Marshal(map[string]any{
+				"command": event.Item.Command,
+			})
+			return &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{
+							Type:  "tool_use",
+							ID:    event.Item.ID,
+							Name:  "Bash",
+							Input: cmdInput,
+						},
+					},
+				},
+			}, nil
+		}
+		return nil, nil
+
+	case "item.completed":
+		if event.Item == nil {
+			return nil, nil
+		}
+
+		switch event.Item.Type {
+		case "reasoning":
+			// Agent reasoning/thinking - skip for now (could emit as system message)
+			return nil, nil
+
+		case "agent_message":
+			// Agent text response
+			return &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{
+							Type: "text",
+							Text: event.Item.Text,
+						},
+					},
+				},
+			}, nil
+
+		case "command_execution":
+			// Command execution completed
+			isError := event.Item.ExitCode != nil && *event.Item.ExitCode != 0
+			return &StreamMessage{
+				Type: "user",
+				Message: &NestedMessage{
+					Role: "user",
+					Content: []ContentBlock{
+						{
+							Type:      "tool_result",
+							ToolUseID: event.Item.ID,
+							Content:   FlexContent(event.Item.AggregatedOutput),
+							IsError:   isError,
+						},
+					},
 				},
 			}, nil
 		}
@@ -218,7 +184,7 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 	case "error":
 		return &StreamMessage{
 			Type:    "result",
-			Result:  event.Msg.Message,
+			Result:  event.Message,
 			IsError: true,
 		}, nil
 
@@ -227,7 +193,7 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 		return &StreamMessage{
 			Type:    "system",
 			Subtype: "warning",
-			Result:  event.Msg.Message,
+			Result:  event.Message,
 		}, nil
 
 	default:
@@ -238,67 +204,33 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 
 // Codex protocol types
 
-// codexEvent represents a Codex event wrapper.
+// codexEvent represents a flat Codex event with type at top level.
+// Event types: thread.started, turn.started, turn.completed,
+// item.started, item.completed, error, warning
 type codexEvent struct {
-	ID  string       `json:"id"`
-	Msg codexEventMsg `json:"msg"`
+	Type     string          `json:"type"`      // Event type discriminator
+	ThreadID string          `json:"thread_id"` // For thread.started
+	Item     *codexItem      `json:"item"`      // For item.* events
+	Usage    *codexUsage     `json:"usage"`     // For turn.completed
+	Message  string          `json:"message"`   // For error/warning
 }
 
-// codexEventMsg represents the inner event message.
-type codexEventMsg struct {
-	Type string `json:"type"`
-
-	// TurnStarted
-	ModelContextWindow int64 `json:"model_context_window,omitempty"`
-
-	// TurnComplete
-	LastAgentMessage string `json:"last_agent_message,omitempty"`
-
-	// AgentMessage
-	Message string `json:"message,omitempty"`
-
-	// AgentMessageDelta
-	Delta string `json:"delta,omitempty"`
-
-	// ExecCommandBegin/End
-	CallID    string   `json:"call_id,omitempty"`
-	ProcessID string   `json:"process_id,omitempty"`
-	TurnID    string   `json:"turn_id,omitempty"`
-	Command   []string `json:"command,omitempty"`
-	Cwd       string   `json:"cwd,omitempty"`
-
-	// ExecCommandOutputDelta
-	Stream string `json:"stream,omitempty"` // "stdout" or "stderr"
-	Chunk  string `json:"chunk,omitempty"`  // base64-encoded
-
-	// ExecCommandEnd
-	Stdout           string `json:"stdout,omitempty"`
-	Stderr           string `json:"stderr,omitempty"`
-	AggregatedOutput string `json:"aggregated_output,omitempty"`
-	ExitCode         int    `json:"exit_code,omitempty"`
-	FormattedOutput  string `json:"formatted_output,omitempty"`
-
-	// TokenCount
-	Info *codexTokenInfo `json:"info,omitempty"`
-
-	// Note: Error and Warning events use "message" field which is already
-	// captured by the Message field above (AgentMessage events use the same key).
+// codexItem represents an item in item.started/item.completed events.
+type codexItem struct {
+	ID               string `json:"id"`
+	Type             string `json:"type"`             // "reasoning", "command_execution", "agent_message"
+	Text             string `json:"text"`             // For reasoning, agent_message
+	Command          string `json:"command"`          // For command_execution
+	AggregatedOutput string `json:"aggregated_output"`
+	ExitCode         *int   `json:"exit_code"`        // Pointer to distinguish null from 0
+	Status           string `json:"status"`           // "in_progress", "completed", "failed"
 }
 
-// codexTokenInfo contains token usage information.
-type codexTokenInfo struct {
-	TotalTokenUsage    *codexTokenUsage `json:"total_token_usage,omitempty"`
-	LastTokenUsage     *codexTokenUsage `json:"last_token_usage,omitempty"`
-	ModelContextWindow int64            `json:"model_context_window,omitempty"`
-}
-
-// codexTokenUsage contains token counts.
-type codexTokenUsage struct {
-	InputTokens          int `json:"input_tokens"`
-	CachedInputTokens    int `json:"cached_input_tokens"`
-	OutputTokens         int `json:"output_tokens"`
-	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
-	TotalTokens          int `json:"total_tokens"`
+// codexUsage contains token usage from turn.completed events.
+type codexUsage struct {
+	InputTokens       int `json:"input_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens"`
+	OutputTokens      int `json:"output_tokens"`
 }
 
 // codexSubmission represents a submission to Codex stdin.

@@ -1,7 +1,6 @@
 package backend_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -109,8 +108,8 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("task_started", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"task_started","model_context_window":128000}}`
+	t.Run("thread.started", func(t *testing.T) {
+		line := `{"type":"thread.started","thread_id":"019bac20-11a2-7061-9708-dda3b7642ac3"}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -126,8 +125,20 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("task_complete", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"task_complete","last_agent_message":"Done!"}}`
+	t.Run("turn.started", func(t *testing.T) {
+		line := `{"type":"turn.started"}`
+		msg, err := b.ParseStreamMessage([]byte(line))
+		if err != nil {
+			t.Fatalf("ParseStreamMessage() error = %v", err)
+		}
+		// turn.started returns nil (no specific message needed)
+		if msg != nil {
+			t.Errorf("ParseStreamMessage() = %v, want nil for turn.started", msg)
+		}
+	})
+
+	t.Run("turn.completed with usage", func(t *testing.T) {
+		line := `{"type":"turn.completed","usage":{"input_tokens":8202,"cached_input_tokens":6400,"output_tokens":55}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -135,16 +146,25 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
 		}
-		if msg.Type != "result" {
-			t.Errorf("Type = %q, want %q", msg.Type, "result")
+		if msg.Type != "assistant" {
+			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
 		}
-		if msg.Result != "Done!" {
-			t.Errorf("Result = %q, want %q", msg.Result, "Done!")
+		if msg.Message.Usage == nil {
+			t.Fatal("Usage is nil")
+		}
+		if msg.Message.Usage.InputTokens != 8202 {
+			t.Errorf("InputTokens = %d, want 8202", msg.Message.Usage.InputTokens)
+		}
+		if msg.Message.Usage.OutputTokens != 55 {
+			t.Errorf("OutputTokens = %d, want 55", msg.Message.Usage.OutputTokens)
+		}
+		if msg.Message.Usage.CacheReadInputTokens != 6400 {
+			t.Errorf("CacheReadInputTokens = %d, want 6400", msg.Message.Usage.CacheReadInputTokens)
 		}
 	})
 
-	t.Run("agent_message", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"agent_message","message":"Hello, I can help you."}}`
+	t.Run("item.completed agent_message", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Created hello.txt with Hello World."}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -164,30 +184,25 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if len(msg.Message.Content) != 1 {
 			t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
 		}
-		if msg.Message.Content[0].Text != "Hello, I can help you." {
-			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Hello, I can help you.")
+		if msg.Message.Content[0].Text != "Created hello.txt with Hello World." {
+			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Created hello.txt with Hello World.")
 		}
 	})
 
-	t.Run("agent_message_delta", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"agent_message_delta","delta":"Hello"}}`
+	t.Run("item.completed reasoning", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Creating a new file using shell command**"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
 		}
-		if msg == nil {
-			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if msg.Message.Content[0].Text != "Hello" {
-			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Hello")
+		// Reasoning items are skipped (return nil)
+		if msg != nil {
+			t.Errorf("ParseStreamMessage() = %v, want nil for reasoning item", msg)
 		}
 	})
 
-	t.Run("exec_command_begin", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"exec_command_begin","call_id":"call-123","command":["ls","-la"],"cwd":"/tmp"}}`
+	t.Run("item.started command_execution", func(t *testing.T) {
+		line := `{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -208,8 +223,8 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if block.Name != "Bash" {
 			t.Errorf("block.Name = %q, want %q", block.Name, "Bash")
 		}
-		if block.ID != "call-123" {
-			t.Errorf("block.ID = %q, want %q", block.ID, "call-123")
+		if block.ID != "item_1" {
+			t.Errorf("block.ID = %q, want %q", block.ID, "item_1")
 		}
 
 		// Check input contains command
@@ -217,46 +232,17 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if err := json.Unmarshal(block.Input, &input); err != nil {
 			t.Fatalf("failed to unmarshal input: %v", err)
 		}
-		cmd, ok := input["command"].([]any)
+		cmd, ok := input["command"].(string)
 		if !ok {
-			t.Fatalf("input command is not []any: %T", input["command"])
+			t.Fatalf("input command is not string: %T", input["command"])
 		}
-		if len(cmd) != 2 || cmd[0] != "ls" || cmd[1] != "-la" {
-			t.Errorf("input command = %v, want [ls -la]", cmd)
-		}
-	})
-
-	t.Run("exec_command_output_delta", func(t *testing.T) {
-		// Base64 encode "hello\n"
-		chunk := base64.StdEncoding.EncodeToString([]byte("hello\n"))
-		line := `{"id":"1","msg":{"type":"exec_command_output_delta","call_id":"call-123","stream":"stdout","chunk":"` + chunk + `"}}`
-		msg, err := b.ParseStreamMessage([]byte(line))
-		if err != nil {
-			t.Fatalf("ParseStreamMessage() error = %v", err)
-		}
-		if msg == nil {
-			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "user" {
-			t.Errorf("Type = %q, want %q", msg.Type, "user")
-		}
-		if len(msg.Message.Content) != 1 {
-			t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
-		}
-		block := msg.Message.Content[0]
-		if block.Type != "tool_result" {
-			t.Errorf("block.Type = %q, want %q", block.Type, "tool_result")
-		}
-		if block.ToolUseID != "call-123" {
-			t.Errorf("block.ToolUseID = %q, want %q", block.ToolUseID, "call-123")
-		}
-		if string(block.Content) != "hello\n" {
-			t.Errorf("block.Content = %q, want %q", block.Content, "hello\n")
+		if cmd != "/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"" {
+			t.Errorf("input command = %q, want /bin/zsh -lc \"printf '%%s' 'Hello World' > hello.txt\"", cmd)
 		}
 	})
 
-	t.Run("exec_command_end", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"exec_command_end","call_id":"call-123","aggregated_output":"file1.txt\nfile2.txt","exit_code":0}}`
+	t.Run("item.completed command_execution success", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat hello.txt'","aggregated_output":"Hello World","exit_code":0,"status":"completed"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -271,16 +257,19 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if block.Type != "tool_result" {
 			t.Errorf("block.Type = %q, want %q", block.Type, "tool_result")
 		}
-		if string(block.Content) != "file1.txt\nfile2.txt" {
-			t.Errorf("block.Content = %q, want %q", block.Content, "file1.txt\nfile2.txt")
+		if block.ToolUseID != "item_1" {
+			t.Errorf("block.ToolUseID = %q, want %q", block.ToolUseID, "item_1")
+		}
+		if string(block.Content) != "Hello World" {
+			t.Errorf("block.Content = %q, want %q", block.Content, "Hello World")
 		}
 		if block.IsError {
 			t.Error("block.IsError should be false for exit_code 0")
 		}
 	})
 
-	t.Run("exec_command_end with error", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"exec_command_end","call_id":"call-123","aggregated_output":"command not found","exit_code":127}}`
+	t.Run("item.completed command_execution failed", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat nonexistent.txt'","aggregated_output":"cat: nonexistent.txt: No such file or directory\n","exit_code":1,"status":"failed"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -294,34 +283,8 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("token_count", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":200,"total_tokens":300}}}}`
-		msg, err := b.ParseStreamMessage([]byte(line))
-		if err != nil {
-			t.Fatalf("ParseStreamMessage() error = %v", err)
-		}
-		if msg == nil {
-			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if msg.Message.Usage == nil {
-			t.Fatal("Usage is nil")
-		}
-		if msg.Message.Usage.InputTokens != 100 {
-			t.Errorf("InputTokens = %d, want 100", msg.Message.Usage.InputTokens)
-		}
-		if msg.Message.Usage.OutputTokens != 200 {
-			t.Errorf("OutputTokens = %d, want 200", msg.Message.Usage.OutputTokens)
-		}
-		if msg.Message.Usage.CacheReadInputTokens != 50 {
-			t.Errorf("CacheReadInputTokens = %d, want 50", msg.Message.Usage.CacheReadInputTokens)
-		}
-	})
-
 	t.Run("error", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"error","message":"API rate limit exceeded"}}`
+		line := `{"type":"error","message":"API rate limit exceeded"}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -341,7 +304,7 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 	})
 
 	t.Run("warning", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"warning","message":"Context window is 80% full"}}`
+		line := `{"type":"warning","message":"Context window is 80% full"}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -358,7 +321,7 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 	})
 
 	t.Run("unknown event type", func(t *testing.T) {
-		line := `{"id":"1","msg":{"type":"unknown_event","data":"something"}}`
+		line := `{"type":"unknown_event","data":"something"}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
