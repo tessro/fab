@@ -471,6 +471,17 @@ func (a *Agent) Start(initialPrompt string) error {
 					},
 				},
 			},
+			"Stop": []any{
+				map[string]any{
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": fabPath + " hook Stop",
+							"timeout": 10, // Short timeout for idle notification
+						},
+					},
+				},
+			},
 		},
 	}
 

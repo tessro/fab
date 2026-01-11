@@ -173,6 +173,8 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handleAgentChatHistory(ctx, req)
 	case daemon.MsgAgentDescribe:
 		return s.handleAgentDescribe(ctx, req)
+	case daemon.MsgAgentIdle:
+		return s.handleAgentIdle(ctx, req)
 
 	// TUI streaming
 	case daemon.MsgAttach:

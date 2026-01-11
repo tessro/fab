@@ -36,6 +36,7 @@ const (
 	MsgAgentInput    MessageType = "agent.input"    // Send input to agent
 	MsgAgentOutput   MessageType = "agent.output"   // Get buffered output from agent
 	MsgAgentDescribe MessageType = "agent.describe" // Set agent description
+	MsgAgentIdle     MessageType = "agent.idle"     // Agent signals it has gone idle (Stop hook)
 
 	// TUI streaming
 	MsgAttach           MessageType = "attach" // Subscribe to agent output streams
@@ -299,6 +300,12 @@ type AgentOutputResponse struct {
 type AgentDescribeRequest struct {
 	AgentID     string `json:"agent_id,omitempty"` // Agent ID (from FAB_AGENT_ID env, optional)
 	Description string `json:"description"`        // Human-readable description of current work
+}
+
+// AgentIdleRequest is the payload for agent.idle requests.
+// Sent by the Stop hook when Claude Code finishes responding.
+type AgentIdleRequest struct {
+	AgentID string `json:"agent_id,omitempty"` // Agent ID (from FAB_AGENT_ID env)
 }
 
 // AttachRequest is the payload for attach requests.

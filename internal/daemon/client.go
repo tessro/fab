@@ -534,6 +534,22 @@ func (c *Client) AgentDescribe(agentID, description string) error {
 	return nil
 }
 
+// NotifyIdle notifies the daemon that an agent has gone idle (finished responding).
+// Called by the Stop hook when Claude Code completes a response.
+func (c *Client) NotifyIdle(agentID string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgAgentIdle,
+		Payload: AgentIdleRequest{AgentID: agentID},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return NewServerError("agent idle", resp.Error)
+	}
+	return nil
+}
+
 // AgentChatHistory retrieves the chat history for an agent.
 func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryResponse, error) {
 	resp, err := c.Send(&Request{

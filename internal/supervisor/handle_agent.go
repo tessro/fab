@@ -320,3 +320,42 @@ func (s *Supervisor) handleAgentDescribe(ctx context.Context, req *daemon.Reques
 
 	return successResponse(req, nil)
 }
+
+// handleAgentIdle handles the idle notification from the Stop hook.
+// This is called when Claude Code finishes responding, signaling the agent is idle.
+func (s *Supervisor) handleAgentIdle(ctx context.Context, req *daemon.Request) *daemon.Response {
+	var idleReq daemon.AgentIdleRequest
+	if err := unmarshalPayload(req.Payload, &idleReq); err != nil {
+		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if idleReq.AgentID == "" {
+		return errorResponse(req, "agent_id is required")
+	}
+
+	// Look up the agent
+	a, err := s.agents.Get(idleReq.AgentID)
+	if err != nil {
+		// Agent not found - might be a non-managed session, ignore silently
+		slog.Debug("agent idle notification for unknown agent",
+			"agent", idleReq.AgentID,
+		)
+		return successResponse(req, nil)
+	}
+
+	// Transition agent to idle state
+	if err := a.MarkIdle(); err != nil {
+		// Log but don't fail - agent might already be in idle or different state
+		slog.Debug("failed to mark agent as idle",
+			"agent", idleReq.AgentID,
+			"error", err,
+			"current_state", a.GetState(),
+		)
+	} else {
+		slog.Info("agent marked as idle (Stop hook)",
+			"agent", idleReq.AgentID,
+		)
+	}
+
+	return successResponse(req, nil)
+}

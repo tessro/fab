@@ -145,6 +145,11 @@ func runHook(cmd *cobra.Command, args []string) error {
 		"stdin", string(input),
 	)
 
+	// Handle Stop hook - notify daemon that agent is idle
+	if hookName == "Stop" {
+		return handleStopHook()
+	}
+
 	// Validate hook name
 	if hookName != "PreToolUse" && hookName != "PermissionRequest" {
 		// Pass through for unsupported hook types
@@ -362,6 +367,42 @@ func outputHookResponse(hookName, behavior, message string, interrupt bool) erro
 
 	slog.Debug("hook response", "stdout", string(data))
 	fmt.Println(string(data))
+	return nil
+}
+
+// handleStopHook handles the Stop hook from Claude Code.
+// It notifies the daemon that the agent has gone idle (finished responding).
+func handleStopHook() error {
+	// Get agent ID from environment
+	agentID := os.Getenv("FAB_AGENT_ID")
+	if agentID == "" {
+		// Not running as a managed agent, nothing to do
+		slog.Debug("Stop hook called without FAB_AGENT_ID, ignoring")
+		return nil
+	}
+
+	slog.Debug("Stop hook triggered, notifying daemon of idle state", "agent", agentID)
+
+	// Connect to daemon
+	client, err := ConnectClient()
+	if err != nil {
+		// If daemon is not running, just log and continue
+		slog.Debug("could not connect to daemon for idle notification", "error", err)
+		return nil
+	}
+	defer client.Close()
+
+	// Notify daemon that agent is idle
+	if err := client.NotifyIdle(agentID); err != nil {
+		slog.Warn("failed to notify daemon of idle state",
+			"agent", agentID,
+			"error", err,
+		)
+		// Don't fail the hook, just log the error
+	} else {
+		slog.Info("notified daemon of idle state", "agent", agentID)
+	}
+
 	return nil
 }
 
