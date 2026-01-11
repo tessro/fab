@@ -234,6 +234,10 @@ When work needs to be done, ALWAYS file an issue using fab:
 
 `+"`"+`fab issue create "title" --type <type> --priority <priority> --description "description"`+"`"+`
 
+**Specify dependencies** between issues using --depends-on:
+`+"`"+`fab issue create "title" --depends-on 42,43 --description "..."`+"`"+`
+Issues with dependencies won't appear in 'fab issue ready' until their dependencies are closed.
+
 Issue types:
 - task: General work items
 - feature: New functionality

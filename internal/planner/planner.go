@@ -307,6 +307,12 @@ This appears in the TUI and helps users track your progress.
 3. **Create detailed GitHub issues** for each discrete piece of work:
    Use: fab issue create "Title" --description "Detailed description" --type feature/task/bug
 
+   **Specify dependencies** between issues using --depends-on:
+   fab issue create "Title" --depends-on 42,43 --description "..."
+
+   This ensures issues are worked on in the correct order. Issues with dependencies
+   won't appear in 'fab issue ready' until their dependencies are closed.
+
    Each issue should:
    - Be independently implementable by an agent
    - Have clear acceptance criteria
