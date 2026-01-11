@@ -144,7 +144,7 @@ func (m *Model) syncFocusToComponents(focus Focus) {
 	m.inputLine.SetFocused(focus == FocusInputLine)
 
 	if focus == FocusInputLine {
-		m.chatView.SetInputView(m.inputLine.View(), 1, true)
+		m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 	}
 }
 
@@ -166,8 +166,8 @@ func (m *Model) updateLayout() {
 	m.helpBar.SetWidth(m.width)
 
 	// Input line sized to fit inside chat pane (no border, just content + padding)
-	// Height: 1 line content + 1 line divider = 2 total
-	inputLineHeight := 2
-	m.inputLine.SetSize(chatWidth-2, 1) // Width accounts for chat pane border only
+	// Height: content lines + 1 line divider
+	m.inputLine.SetSize(chatWidth-2, m.inputLine.ContentHeight()) // Width accounts for chat pane border only
+	inputLineHeight := m.inputLine.ContentHeight() + 1            // +1 for divider
 	m.chatView.SetInputView(m.inputLine.View(), inputLineHeight, m.modeState.IsInputting())
 }

@@ -29,6 +29,7 @@ type KeyBindings struct {
 	Cancel      key.Binding
 	HistoryUp   key.Binding
 	HistoryDown key.Binding
+	NewLine     key.Binding
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -108,6 +109,10 @@ func DefaultKeyBindings() KeyBindings {
 		HistoryDown: key.NewBinding(
 			key.WithKeys("down"),
 			key.WithHelp("↓", "history next"),
+		),
+		NewLine: key.NewBinding(
+			key.WithKeys("shift+enter"),
+			key.WithHelp("shift+enter", "new line"),
 		),
 	}
 }

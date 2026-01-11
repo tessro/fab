@@ -158,3 +158,34 @@ func TestInputLine_ResetHistoryNavigation(t *testing.T) {
 		t.Errorf("savedInput = %q, want empty", il.savedInput)
 	}
 }
+
+func TestInputLine_ContentHeight(t *testing.T) {
+	il := NewInputLine()
+
+	// Initial height should be 1
+	if il.ContentHeight() != 1 {
+		t.Errorf("initial ContentHeight = %d, want 1", il.ContentHeight())
+	}
+
+	// After inserting a newline, height should be 2
+	il.InsertNewline()
+	if il.ContentHeight() != 2 {
+		t.Errorf("after InsertNewline, ContentHeight = %d, want 2", il.ContentHeight())
+	}
+
+	// Insert more newlines up to max
+	for i := 0; i < maxInputHeight; i++ {
+		il.InsertNewline()
+	}
+
+	// Height should be capped at maxInputHeight
+	if il.ContentHeight() != maxInputHeight {
+		t.Errorf("ContentHeight = %d, should be capped at %d", il.ContentHeight(), maxInputHeight)
+	}
+
+	// Clear should reset height
+	il.Clear()
+	if il.ContentHeight() != 1 {
+		t.Errorf("after Clear, ContentHeight = %d, want 1", il.ContentHeight())
+	}
+}

@@ -1,19 +1,22 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // maxHistorySize limits the number of entries stored in history.
 const maxHistorySize = 100
 
+// maxInputHeight limits how tall the input can grow (in lines of content).
+const maxInputHeight = 8
+
 // InputLine is a text input component for sending input to agents.
 type InputLine struct {
 	width   int
 	height  int
 	focused bool
-	input   textinput.Model
+	input   textarea.Model
 
 	// Input history for up/down navigation
 	history      []string
@@ -23,12 +26,16 @@ type InputLine struct {
 
 // NewInputLine creates a new input line component.
 func NewInputLine() InputLine {
-	ti := textinput.New()
-	ti.Placeholder = "Type a message..."
-	ti.CharLimit = 4096
-	ti.Prompt = "> "
+	ta := textarea.New()
+	ta.Placeholder = "Type a message..."
+	ta.CharLimit = 4096
+	ta.Prompt = "> "
+	ta.ShowLineNumbers = false
+	ta.SetHeight(1)
+	// Remove default enter key behavior - we'll handle it ourselves
+	ta.KeyMap.InsertNewline.SetEnabled(false)
 	return InputLine{
-		input:        ti,
+		input:        ta,
 		historyIndex: -1,
 	}
 }
@@ -37,7 +44,7 @@ func NewInputLine() InputLine {
 func (i *InputLine) SetSize(width, height int) {
 	i.width = width
 	i.height = height
-	i.input.Width = width - 6 // Account for padding (2) and prompt (4)
+	i.input.SetWidth(width - 6) // Account for padding (2) and prompt (4)
 }
 
 // SetFocused sets the focus state.
@@ -59,6 +66,7 @@ func (i *InputLine) IsFocused() bool {
 func (i *InputLine) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	i.input, cmd = i.input.Update(msg)
+	i.updateHeight()
 	return cmd
 }
 
@@ -70,6 +78,7 @@ func (i *InputLine) Value() string {
 // Clear resets the input value.
 func (i *InputLine) Clear() {
 	i.input.SetValue("")
+	i.input.SetHeight(1) // Reset to single line
 }
 
 // SetPlaceholder sets the placeholder text.
@@ -162,4 +171,28 @@ func (i *InputLine) HistoryDown() bool {
 func (i *InputLine) ResetHistoryNavigation() {
 	i.historyIndex = -1
 	i.savedInput = ""
+}
+
+// InsertNewline inserts a newline at the cursor position (for shift+enter).
+func (i *InputLine) InsertNewline() {
+	i.input.InsertString("\n")
+	i.updateHeight()
+}
+
+// ContentHeight returns the height needed to display the current content.
+// Minimum 1, maximum maxInputHeight.
+func (i *InputLine) ContentHeight() int {
+	lines := i.input.LineCount()
+	if lines < 1 {
+		lines = 1
+	}
+	if lines > maxInputHeight {
+		lines = maxInputHeight
+	}
+	return lines
+}
+
+// updateHeight adjusts the textarea height based on content.
+func (i *InputLine) updateHeight() {
+	i.input.SetHeight(i.ContentHeight())
 }

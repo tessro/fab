@@ -25,6 +25,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = m.modeState.ExitInputMode()
 				m.syncFocusToComponents(FocusChatView)
 				m.chatView.SetInputView(m.inputLine.View(), 1, false)
+			case key.Matches(msg, m.keys.NewLine):
+				// Insert a newline (shift+enter)
+				m.inputLine.InsertNewline()
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			case key.Matches(msg, m.keys.Submit):
 				// Check if we're answering a user question with freeform "Other" input
 				if question := m.pendingUserQuestionForAgent(m.chatView.AgentID()); question != nil {
@@ -74,16 +78,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.HistoryUp):
 				// Navigate to previous (older) history entry
 				m.inputLine.HistoryUp()
-				m.chatView.SetInputView(m.inputLine.View(), 1, true)
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			case key.Matches(msg, m.keys.HistoryDown):
 				// Navigate to next (newer) history entry
 				m.inputLine.HistoryDown()
-				m.chatView.SetInputView(m.inputLine.View(), 1, true)
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			default:
 				// Pass all other keys to input
 				cmd := m.inputLine.Update(msg)
 				cmds = append(cmds, cmd)
-				m.chatView.SetInputView(m.inputLine.View(), 1, true)
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -129,6 +133,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.inputLine.SetPlaceholder("Type a message...")
 				m.chatView.ClearPlanPromptMode()
 				m.syncFocusToComponents(FocusAgentList)
+			case key.Matches(msg, m.keys.NewLine):
+				// Insert a newline (shift+enter)
+				m.inputLine.InsertNewline()
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			case key.Matches(msg, m.keys.Submit):
 				// Submit plan request
 				input := m.inputLine.Value()
@@ -144,7 +152,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Pass all other keys to input
 				cmd := m.inputLine.Update(msg)
 				cmds = append(cmds, cmd)
-				m.chatView.SetInputView(m.inputLine.View(), 1, true)
+				m.chatView.SetInputView(m.inputLine.View(), m.inputLine.ContentHeight(), true)
 			}
 			return m, tea.Batch(cmds...)
 		}
