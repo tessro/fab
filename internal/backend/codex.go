@@ -50,32 +50,29 @@ func (b *CodexBackend) ParseStreamMessage(line []byte) (*StreamMessage, error) {
 	return b.convertEvent(&event)
 }
 
-// FormatInputMessage returns an error for Codex because it does not support
-// stdin messages during a session. Multi-turn conversations require using
-// `codex exec resume <thread-id>` to spawn a new process for follow-up messages.
+// FormatInputMessage formats a user message for Codex stdin.
+// Codex uses a submission queue protocol with id and op fields.
 func (b *CodexBackend) FormatInputMessage(content string, sessionID string) ([]byte, error) {
-	return nil, fmt.Errorf("codex backend does not support stdin messages; use exec resume instead")
-}
-
-// BuildResumeCommand creates an exec.Cmd for resuming a Codex session with a follow-up message.
-// Codex requires spawning `codex exec resume <thread-id> "<message>"` for multi-turn conversations.
-func (b *CodexBackend) BuildResumeCommand(cfg CommandConfig, threadID string) (*exec.Cmd, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID is required for resume")
+	submission := codexSubmission{
+		ID: sessionID,
+		Op: codexOp{
+			Type: "user_input",
+			Items: []codexInputItem{
+				{
+					Type: "text",
+					Text: content,
+				},
+			},
+		},
 	}
 
-	args := []string{"exec", "resume", "--json", "--full-auto", threadID}
-
-	// Add follow-up prompt if provided
-	if cfg.InitialPrompt != "" {
-		args = append(args, cfg.InitialPrompt)
+	data, err := json.Marshal(submission)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal codex submission: %w", err)
 	}
 
-	cmd := exec.Command("codex", args...)
-	cmd.Dir = cfg.WorkDir
-	cmd.Env = append(os.Environ(), "FAB_AGENT_ID="+cfg.AgentID)
-
-	return cmd, nil
+	// Add newline for JSONL format
+	return append(data, '\n'), nil
 }
 
 // HookSettings returns CLI-specific hook configuration.
@@ -89,14 +86,14 @@ func (b *CodexBackend) HookSettings(fabPath string) map[string]any {
 func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 	switch event.Type {
 	case "thread.started":
-		// Session initialization with thread_id
+		// Session initialization - capture thread_id for session management
 		return &StreamMessage{
 			Type:    "system",
 			Subtype: "init",
 		}, nil
 
 	case "turn.started":
-		// New turn beginning - no specific message needed
+		// New turn beginning - no action needed
 		return nil, nil
 
 	case "turn.completed":
@@ -114,10 +111,13 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 				},
 			}, nil
 		}
-		return nil, nil
+		return &StreamMessage{
+			Type:   "result",
+			Result: "",
+		}, nil
 
 	case "item.started":
-		// Tool use beginning (command execution)
+		// Tool use beginning
 		if event.Item != nil && event.Item.Type == "command_execution" {
 			cmdInput, _ := json.Marshal(map[string]any{
 				"command": event.Item.Command,
@@ -143,14 +143,9 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 		if event.Item == nil {
 			return nil, nil
 		}
-
 		switch event.Item.Type {
 		case "reasoning":
-			// Agent reasoning/thinking - skip for now (could emit as system message)
-			return nil, nil
-
-		case "agent_message":
-			// Agent text response
+			// Agent thinking/reasoning
 			return &StreamMessage{
 				Type: "assistant",
 				Message: &NestedMessage{
@@ -163,9 +158,8 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 					},
 				},
 			}, nil
-
 		case "command_execution":
-			// Command execution completed
+			// Command completed
 			isError := event.Item.ExitCode != nil && *event.Item.ExitCode != 0
 			return &StreamMessage{
 				Type: "user",
@@ -177,6 +171,20 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 							ToolUseID: event.Item.ID,
 							Content:   FlexContent(event.Item.AggregatedOutput),
 							IsError:   isError,
+						},
+					},
+				},
+			}, nil
+		case "agent_message":
+			// Agent text response
+			return &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{
+							Type: "text",
+							Text: event.Item.Text,
 						},
 					},
 				},
@@ -207,15 +215,13 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 
 // Codex protocol types
 
-// codexEvent represents a flat Codex event with type at top level.
-// Event types: thread.started, turn.started, turn.completed,
-// item.started, item.completed, error, warning
+// codexEvent represents a Codex event (flat structure with type at top level).
 type codexEvent struct {
-	Type     string          `json:"type"`      // Event type discriminator
-	ThreadID string          `json:"thread_id"` // For thread.started
-	Item     *codexItem      `json:"item"`      // For item.* events
-	Usage    *codexUsage     `json:"usage"`     // For turn.completed
-	Message  string          `json:"message"`   // For error/warning
+	Type     string      `json:"type"`      // "thread.started", "item.completed", etc.
+	ThreadID string      `json:"thread_id"` // For thread.started
+	Item     *codexItem  `json:"item"`      // For item.* events
+	Usage    *codexUsage `json:"usage"`     // For turn.completed
+	Message  string      `json:"message"`   // For error/warning
 }
 
 // codexItem represents an item in item.started/item.completed events.
@@ -225,7 +231,7 @@ type codexItem struct {
 	Text             string `json:"text"`             // For reasoning, agent_message
 	Command          string `json:"command"`          // For command_execution
 	AggregatedOutput string `json:"aggregated_output"`
-	ExitCode         *int   `json:"exit_code"`        // Pointer to distinguish null from 0
+	ExitCode         *int   `json:"exit_code"`        // Pointer to distinguish 0 from absent
 	Status           string `json:"status"`           // "in_progress", "completed", "failed"
 }
 
@@ -234,6 +240,24 @@ type codexUsage struct {
 	InputTokens       int `json:"input_tokens"`
 	CachedInputTokens int `json:"cached_input_tokens"`
 	OutputTokens      int `json:"output_tokens"`
+}
+
+// codexSubmission represents a submission to Codex stdin.
+type codexSubmission struct {
+	ID string   `json:"id"`
+	Op codexOp  `json:"op"`
+}
+
+// codexOp represents an operation in a submission.
+type codexOp struct {
+	Type  string           `json:"type"`
+	Items []codexInputItem `json:"items"`
+}
+
+// codexInputItem represents an input item in a submission.
+type codexInputItem struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 }
 
 // Compile-time check that CodexBackend implements Backend.

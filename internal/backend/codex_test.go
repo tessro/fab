@@ -131,7 +131,7 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
 		}
-		// turn.started returns nil (no specific message needed)
+		// turn.started returns nil (no action needed)
 		if msg != nil {
 			t.Errorf("ParseStreamMessage() = %v, want nil for turn.started", msg)
 		}
@@ -163,8 +163,8 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("item.completed agent_message", func(t *testing.T) {
-		line := `{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Created hello.txt with Hello World."}}`
+	t.Run("item.completed with agent_message", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Hello, I can help you."}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -184,25 +184,30 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if len(msg.Message.Content) != 1 {
 			t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
 		}
-		if msg.Message.Content[0].Text != "Created hello.txt with Hello World." {
-			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Created hello.txt with Hello World.")
+		if msg.Message.Content[0].Text != "Hello, I can help you." {
+			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Hello, I can help you.")
 		}
 	})
 
-	t.Run("item.completed reasoning", func(t *testing.T) {
+	t.Run("item.completed with reasoning", func(t *testing.T) {
 		line := `{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Creating a new file using shell command**"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
 		}
-		// Reasoning items are skipped (return nil)
-		if msg != nil {
-			t.Errorf("ParseStreamMessage() = %v, want nil for reasoning item", msg)
+		if msg == nil {
+			t.Fatal("ParseStreamMessage() returned nil")
+		}
+		if msg.Type != "assistant" {
+			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
+		}
+		if msg.Message.Content[0].Text != "**Creating a new file using shell command**" {
+			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "**Creating a new file using shell command**")
 		}
 	})
 
-	t.Run("item.started command_execution", func(t *testing.T) {
-		line := `{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}`
+	t.Run("item.started with command_execution", func(t *testing.T) {
+		line := `{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'ls -la'","status":"in_progress"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -236,13 +241,13 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if !ok {
 			t.Fatalf("input command is not string: %T", input["command"])
 		}
-		if cmd != "/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"" {
-			t.Errorf("input command = %q, want /bin/zsh -lc \"printf '%%s' 'Hello World' > hello.txt\"", cmd)
+		if cmd != "/bin/zsh -lc 'ls -la'" {
+			t.Errorf("input command = %q, want %q", cmd, "/bin/zsh -lc 'ls -la'")
 		}
 	})
 
-	t.Run("item.completed command_execution success", func(t *testing.T) {
-		line := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat hello.txt'","aggregated_output":"Hello World","exit_code":0,"status":"completed"}}`
+	t.Run("item.completed with command_execution success", func(t *testing.T) {
+		line := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'ls'","aggregated_output":"file1.txt\nfile2.txt","exit_code":0,"status":"completed"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
 			t.Fatalf("ParseStreamMessage() error = %v", err)
@@ -260,15 +265,15 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		if block.ToolUseID != "item_1" {
 			t.Errorf("block.ToolUseID = %q, want %q", block.ToolUseID, "item_1")
 		}
-		if string(block.Content) != "Hello World" {
-			t.Errorf("block.Content = %q, want %q", block.Content, "Hello World")
+		if string(block.Content) != "file1.txt\nfile2.txt" {
+			t.Errorf("block.Content = %q, want %q", block.Content, "file1.txt\nfile2.txt")
 		}
 		if block.IsError {
 			t.Error("block.IsError should be false for exit_code 0")
 		}
 	})
 
-	t.Run("item.completed command_execution failed", func(t *testing.T) {
+	t.Run("item.completed with command_execution failure", func(t *testing.T) {
 		line := `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat nonexistent.txt'","aggregated_output":"cat: nonexistent.txt: No such file or directory\n","exit_code":1,"status":"failed"}}`
 		msg, err := b.ParseStreamMessage([]byte(line))
 		if err != nil {
@@ -320,6 +325,32 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 	})
 
+	t.Run("turn.completed without usage", func(t *testing.T) {
+		line := `{"type":"turn.completed"}`
+		msg, err := b.ParseStreamMessage([]byte(line))
+		if err != nil {
+			t.Fatalf("ParseStreamMessage() error = %v", err)
+		}
+		if msg == nil {
+			t.Fatal("ParseStreamMessage() returned nil")
+		}
+		if msg.Type != "result" {
+			t.Errorf("Type = %q, want %q", msg.Type, "result")
+		}
+	})
+
+	t.Run("item.completed with nil item", func(t *testing.T) {
+		line := `{"type":"item.completed"}`
+		msg, err := b.ParseStreamMessage([]byte(line))
+		if err != nil {
+			t.Fatalf("ParseStreamMessage() error = %v", err)
+		}
+		// Should return nil when item is nil
+		if msg != nil {
+			t.Errorf("ParseStreamMessage() = %v, want nil for item.completed with nil item", msg)
+		}
+	})
+
 	t.Run("unknown event type", func(t *testing.T) {
 		line := `{"type":"unknown_event","data":"something"}`
 		msg, err := b.ParseStreamMessage([]byte(line))
@@ -344,123 +375,46 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 func TestCodexBackend_FormatInputMessage(t *testing.T) {
 	b := &backend.CodexBackend{}
 
-	t.Run("returns error for stdin messages", func(t *testing.T) {
+	t.Run("basic message", func(t *testing.T) {
 		data, err := b.FormatInputMessage("hello world", "session-123")
-		if err == nil {
-			t.Fatal("FormatInputMessage() should return error")
-		}
-		if data != nil {
-			t.Errorf("FormatInputMessage() data = %v, want nil", data)
-		}
-		// Verify error message indicates why
-		if !strings.Contains(err.Error(), "exec resume") {
-			t.Errorf("error message should mention exec resume, got: %v", err)
-		}
-	})
-}
-
-func TestCodexBackend_BuildResumeCommand(t *testing.T) {
-	b := &backend.CodexBackend{}
-
-	t.Run("basic resume command", func(t *testing.T) {
-		cfg := backend.CommandConfig{
-			WorkDir:       "/tmp/test",
-			AgentID:       "test-agent",
-			InitialPrompt: "follow-up message",
-		}
-		cmd, err := b.BuildResumeCommand(cfg, "thread-123")
 		if err != nil {
-			t.Fatalf("BuildResumeCommand() error = %v", err)
-		}
-		if cmd == nil {
-			t.Fatal("BuildResumeCommand() returned nil command")
-		}
-		if cmd.Dir != "/tmp/test" {
-			t.Errorf("BuildResumeCommand() Dir = %q, want %q", cmd.Dir, "/tmp/test")
+			t.Fatalf("FormatInputMessage() error = %v", err)
 		}
 
-		// Check args include resume and thread ID
-		args := strings.Join(cmd.Args, " ")
-		if !strings.Contains(args, "exec") {
-			t.Errorf("BuildResumeCommand() args should contain 'exec', got %v", cmd.Args)
-		}
-		if !strings.Contains(args, "resume") {
-			t.Errorf("BuildResumeCommand() args should contain 'resume', got %v", cmd.Args)
-		}
-		if !strings.Contains(args, "--json") {
-			t.Errorf("BuildResumeCommand() args should contain '--json', got %v", cmd.Args)
-		}
-		if !strings.Contains(args, "--full-auto") {
-			t.Errorf("BuildResumeCommand() args should contain '--full-auto', got %v", cmd.Args)
-		}
-		if !strings.Contains(args, "thread-123") {
-			t.Errorf("BuildResumeCommand() args should contain thread ID, got %v", cmd.Args)
-		}
-		if !strings.Contains(args, "follow-up message") {
-			t.Errorf("BuildResumeCommand() args should contain prompt, got %v", cmd.Args)
-		}
-	})
-
-	t.Run("resume without prompt", func(t *testing.T) {
-		cfg := backend.CommandConfig{
-			WorkDir: "/tmp/test",
-			AgentID: "test-agent",
-		}
-		cmd, err := b.BuildResumeCommand(cfg, "thread-456")
-		if err != nil {
-			t.Fatalf("BuildResumeCommand() error = %v", err)
-		}
-		if cmd == nil {
-			t.Fatal("BuildResumeCommand() returned nil command")
+		// Should end with newline
+		if !strings.HasSuffix(string(data), "\n") {
+			t.Error("FormatInputMessage() should end with newline")
 		}
 
-		// Verify thread ID is in args but no trailing prompt
-		found := false
-		for i, arg := range cmd.Args {
-			if arg == "thread-456" {
-				found = true
-				// Thread ID should be the last arg when no prompt
-				if i != len(cmd.Args)-1 {
-					t.Errorf("thread ID should be last arg when no prompt, got args: %v", cmd.Args)
-				}
-				break
-			}
+		// Parse and verify structure
+		var submission struct {
+			ID string `json:"id"`
+			Op struct {
+				Type  string `json:"type"`
+				Items []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"items"`
+			} `json:"op"`
 		}
-		if !found {
-			t.Errorf("BuildResumeCommand() args should contain thread ID, got %v", cmd.Args)
-		}
-	})
-
-	t.Run("empty thread ID returns error", func(t *testing.T) {
-		cfg := backend.CommandConfig{
-			WorkDir: "/tmp/test",
-			AgentID: "test-agent",
-		}
-		_, err := b.BuildResumeCommand(cfg, "")
-		if err == nil {
-			t.Fatal("BuildResumeCommand() should return error for empty thread ID")
-		}
-	})
-
-	t.Run("environment includes FAB_AGENT_ID", func(t *testing.T) {
-		cfg := backend.CommandConfig{
-			WorkDir: "/tmp/test",
-			AgentID: "my-agent-123",
-		}
-		cmd, err := b.BuildResumeCommand(cfg, "thread-789")
-		if err != nil {
-			t.Fatalf("BuildResumeCommand() error = %v", err)
+		if err := json.Unmarshal(data, &submission); err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
 		}
 
-		found := false
-		for _, env := range cmd.Env {
-			if env == "FAB_AGENT_ID=my-agent-123" {
-				found = true
-				break
-			}
+		if submission.ID != "session-123" {
+			t.Errorf("ID = %q, want %q", submission.ID, "session-123")
 		}
-		if !found {
-			t.Error("BuildResumeCommand() env should include FAB_AGENT_ID")
+		if submission.Op.Type != "user_input" {
+			t.Errorf("Op.Type = %q, want %q", submission.Op.Type, "user_input")
+		}
+		if len(submission.Op.Items) != 1 {
+			t.Fatalf("Items length = %d, want 1", len(submission.Op.Items))
+		}
+		if submission.Op.Items[0].Type != "text" {
+			t.Errorf("Items[0].Type = %q, want %q", submission.Op.Items[0].Type, "text")
+		}
+		if submission.Op.Items[0].Text != "hello world" {
+			t.Errorf("Items[0].Text = %q, want %q", submission.Op.Items[0].Text, "hello world")
 		}
 	})
 }
