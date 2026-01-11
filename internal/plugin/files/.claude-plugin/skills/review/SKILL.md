@@ -42,11 +42,14 @@ Report:
 
 ### Step 2: Address Feedback
 
+**CRITICAL: You MUST address all issues found during review before proceeding.** Do not skip, defer, or ignore feedback. The review exists to catch problems - ignoring it defeats the purpose.
+
 After the sub-agent completes its review:
 
-1. Read through all issues and suggestions reported
-2. Fix any problems identified
-3. If significant changes were made, consider running `/review` again
+1. Carefully read through ALL issues and suggestions reported
+2. Fix every problem identified - no exceptions
+3. If the sub-agent raised concerns, address each one explicitly
+4. If significant changes were made, run `/review` again to verify fixes
 
 ### Step 3: Verify Fixes
 
@@ -56,7 +59,7 @@ Run the test suite one more time to ensure your fixes didn't introduce new issue
 
 After completing the review process, summarize:
 - What the sub-agent found
-- What you fixed
+- What you fixed (be specific - list each fix)
 - Confidence level that the implementation is ready to merge
 
-If you find issues during review, fix them before proceeding to close the issue.
+**IMPORTANT:** You may NOT proceed to commit or close the issue until ALL review feedback has been addressed. If the review found issues, you must fix them first. Do not proceed with unresolved feedback.
