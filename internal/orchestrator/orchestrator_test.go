@@ -12,10 +12,6 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.DefaultAgentMode != agent.DefaultMode {
-		t.Errorf("expected DefaultAgentMode=%s, got %s", agent.DefaultMode, cfg.DefaultAgentMode)
-	}
-
 	if cfg.KickstartPrompt == "" {
 		t.Error("expected KickstartPrompt to be non-empty")
 	}
@@ -33,9 +29,6 @@ func TestNew(t *testing.T) {
 	}
 	if orch.agents != agents {
 		t.Error("expected orchestrator to have the agent manager set")
-	}
-	if orch.actions == nil {
-		t.Error("expected orchestrator to have an action queue")
 	}
 	if orch.claims == nil {
 		t.Error("expected orchestrator to have a claim registry")
@@ -161,149 +154,6 @@ func TestOrchestrator_Commits(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_Actions(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-
-	orch := New(proj, agents, cfg)
-
-	actions := orch.Actions()
-	if actions == nil {
-		t.Fatal("expected Actions() to return non-nil")
-	}
-
-	// Should be able to add actions
-	actions.Add(StagedAction{
-		AgentID:   "agent-1",
-		Project:   proj.Name,
-		Type:      ActionSendMessage,
-		Payload:   "test message",
-		CreatedAt: time.Now(),
-	})
-
-	if actions.Len() != 1 {
-		t.Errorf("expected 1 action, got %d", actions.Len())
-	}
-}
-
-func TestOrchestrator_ApproveAction_NotFound(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-
-	orch := New(proj, agents, cfg)
-
-	err := orch.ApproveAction("nonexistent")
-	if err != ErrActionNotFound {
-		t.Errorf("expected ErrActionNotFound, got %v", err)
-	}
-}
-
-func TestOrchestrator_RejectAction_NotFound(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-
-	orch := New(proj, agents, cfg)
-
-	err := orch.RejectAction("nonexistent", "reason")
-	if err != ErrActionNotFound {
-		t.Errorf("expected ErrActionNotFound, got %v", err)
-	}
-}
-
-func TestOrchestrator_RejectAction_Success(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-
-	orch := New(proj, agents, cfg)
-
-	// Add an action
-	orch.actions.Add(StagedAction{
-		ID:        "test-action",
-		AgentID:   "agent-1",
-		Project:   proj.Name,
-		Type:      ActionSendMessage,
-		Payload:   "test message",
-		CreatedAt: time.Now(),
-	})
-
-	// Reject it
-	err := orch.RejectAction("test-action", "not needed")
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-
-	// Should be removed from queue
-	if orch.actions.Len() != 0 {
-		t.Errorf("expected 0 actions after reject, got %d", orch.actions.Len())
-	}
-}
-
-// mockAgent creates a minimal agent for testing
-func mockAgent(id, projectName string, mode agent.Mode) *agent.Agent {
-	proj := &project.Project{Name: projectName}
-	a := agent.New(id, proj, nil)
-	a.SetMode(mode)
-	return a
-}
-
-func TestOrchestrator_QueueKickstart_ManualMode(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-	cfg.KickstartPrompt = "test kickstart prompt"
-
-	orch := New(proj, agents, cfg)
-
-	// Create a mock agent in manual mode
-	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
-
-	// Queue kickstart
-	orch.QueueKickstart(a)
-
-	// In manual mode, kickstart should be staged
-	if orch.actions.Len() != 1 {
-		t.Fatalf("expected 1 staged action, got %d", orch.actions.Len())
-	}
-
-	action := orch.actions.List()[0]
-	if action.AgentID != "agent-1" {
-		t.Errorf("expected AgentID=agent-1, got %s", action.AgentID)
-	}
-	if action.Project != proj.Name {
-		t.Errorf("expected Project=%s, got %s", proj.Name, action.Project)
-	}
-	if action.Type != ActionSendMessage {
-		t.Errorf("expected Type=send_message, got %s", action.Type)
-	}
-	if action.Payload != "test kickstart prompt" {
-		t.Errorf("expected Payload='test kickstart prompt', got '%s'", action.Payload)
-	}
-}
-
-func TestOrchestrator_QueueKickstart_EmptyPrompt(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-	cfg.KickstartPrompt = "" // Empty prompt
-
-	orch := New(proj, agents, cfg)
-
-	// Create a mock agent
-	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
-
-	// Queue kickstart with empty prompt
-	orch.QueueKickstart(a)
-
-	// No action should be queued with empty prompt
-	if orch.actions.Len() != 0 {
-		t.Errorf("expected no staged actions with empty prompt, got %d", orch.actions.Len())
-	}
-}
-
 func TestOrchestrator_KickstartPromptContent(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -324,7 +174,7 @@ func TestOrchestrator_KickstartPromptContent(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_QueueKickstart_SkipsWhenUserIntervening(t *testing.T) {
+func TestOrchestrator_ExecuteKickstart_SkipsWhenUserIntervening(t *testing.T) {
 	proj := &project.Project{Name: "test-project"}
 	agents := agent.NewManager()
 	cfg := DefaultConfig()
@@ -333,24 +183,19 @@ func TestOrchestrator_QueueKickstart_SkipsWhenUserIntervening(t *testing.T) {
 
 	orch := New(proj, agents, cfg)
 
-	// Create a mock agent in manual mode
-	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+	// Create a mock agent
+	a := mockAgent("agent-1", proj.Name)
 
 	// Mark user input to simulate intervention
 	a.MarkUserInput()
 
-	// Queue kickstart - should be skipped
-	if orch.QueueKickstart(a) {
-		t.Error("expected QueueKickstart to return false when user is intervening")
-	}
-
-	// No action should be queued
-	if orch.actions.Len() != 0 {
-		t.Errorf("expected no staged actions when intervening, got %d", orch.actions.Len())
+	// Execute kickstart - should be skipped
+	if orch.ExecuteKickstart(a) {
+		t.Error("expected ExecuteKickstart to return false when user is intervening")
 	}
 }
 
-func TestOrchestrator_QueueKickstart_ProceedsAfterSilence(t *testing.T) {
+func TestOrchestrator_ExecuteKickstart_ProceedsAfterSilence(t *testing.T) {
 	proj := &project.Project{Name: "test-project"}
 	agents := agent.NewManager()
 	cfg := DefaultConfig()
@@ -359,8 +204,8 @@ func TestOrchestrator_QueueKickstart_ProceedsAfterSilence(t *testing.T) {
 
 	orch := New(proj, agents, cfg)
 
-	// Create a mock agent in manual mode
-	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+	// Create a mock agent
+	a := mockAgent("agent-1", proj.Name)
 
 	// Mark user input
 	a.MarkUserInput()
@@ -368,15 +213,10 @@ func TestOrchestrator_QueueKickstart_ProceedsAfterSilence(t *testing.T) {
 	// Wait for silence threshold to pass
 	time.Sleep(20 * time.Millisecond)
 
-	// Queue kickstart - should proceed now
-	if !orch.QueueKickstart(a) {
-		t.Error("expected QueueKickstart to return true after silence threshold")
-	}
-
-	// Action should be queued
-	if orch.actions.Len() != 1 {
-		t.Errorf("expected 1 staged action after silence, got %d", orch.actions.Len())
-	}
+	// Execute kickstart - should proceed now
+	// Note: returns true even though sendMessage may fail (no stdin)
+	orch.ExecuteKickstart(a)
+	// Just verify it doesn't panic - actual execution requires a running agent
 }
 
 func TestOrchestrator_InterventionSilence_DisabledWhenZero(t *testing.T) {
@@ -388,20 +228,16 @@ func TestOrchestrator_InterventionSilence_DisabledWhenZero(t *testing.T) {
 
 	orch := New(proj, agents, cfg)
 
-	// Create a mock agent in manual mode
-	a := mockAgent("agent-1", proj.Name, agent.ModeManual)
+	// Create a mock agent
+	a := mockAgent("agent-1", proj.Name)
 
 	// Mark user input
 	a.MarkUserInput()
 
-	// Queue kickstart - should proceed even with recent user input
-	if !orch.QueueKickstart(a) {
-		t.Error("expected QueueKickstart to proceed when intervention detection is disabled")
-	}
-
-	// Action should be queued
-	if orch.actions.Len() != 1 {
-		t.Errorf("expected 1 staged action when intervention disabled, got %d", orch.actions.Len())
+	// Execute kickstart - should proceed even with recent user input
+	// Note: ExecuteKickstart returns true when intervention detection is disabled
+	if !orch.ExecuteKickstart(a) {
+		t.Error("expected ExecuteKickstart to proceed when intervention detection is disabled")
 	}
 }
 
@@ -442,4 +278,11 @@ func TestDefaultConfig_IncludesInterventionSilence(t *testing.T) {
 		t.Errorf("expected InterventionSilence=%v, got %v",
 			agent.DefaultInterventionSilence, cfg.InterventionSilence)
 	}
+}
+
+// mockAgent creates a minimal agent for testing
+func mockAgent(id, projectName string) *agent.Agent {
+	proj := &project.Project{Name: projectName}
+	a := agent.New(id, proj, nil)
+	return a
 }

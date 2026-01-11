@@ -118,13 +118,13 @@ Interactive agents for user coordination:
 - Top bar: status summary (agent counts), session stats (tickets closed, commits made), usage meter
 - Left rail: all agents grouped by project, state indicators [S]tarting/[R]unning/[I]dle/[D]one
 - Main pane: selected agent's chat view (scrollable, interactive)
-- Permission requests and staged actions displayed inline
+- Permission requests and user questions displayed inline
 
 **Key bindings:**
 - `j/k` or arrows: navigate agents
 - `Enter`: open input line for chat
-- `a`: approve pending action/permission
-- `r`: reject pending action/permission
+- `y`: approve pending permission
+- `n`: deny pending permission
 - `d`: delete selected agent
 - `Esc`: cancel input / return to navigation
 - `q`: quit TUI (detach, agents keep running)
@@ -218,16 +218,12 @@ Each project gets an `Orchestrator` that manages the agent lifecycle:
    - Returns worktree to pool
    - Spawns replacement agent if tasks remain
 
-**Operating modes:**
-- **Manual mode** (default): Actions queued for user approval in TUI
-- **Auto mode**: Actions execute immediately
-
 ## Permission System
 
 Claude Code tool permissions can be handled via:
 
-1. **Manual mode**: TUI prompts user to approve/deny each request
-2. **LLM mode**: LLM evaluates requests for safety and task consistency
+1. **Manual**: TUI prompts user to approve/deny each permission request
+2. **LLM**: LLM evaluates requests for safety and task consistency
 3. **Rules**: Pattern-based rules in `permissions.toml`
 
 Permission requests flow through the `fab hook` command, which the Claude Code plugin calls before tool execution.
@@ -284,7 +280,6 @@ fab/
 │   │   └── helpers.go           # Shared utilities
 │   ├── orchestrator/            # Per-project orchestration
 │   │   ├── orchestrator.go      # Orchestration loop
-│   │   ├── actions.go           # Staged actions
 │   │   ├── claims.go            # Ticket claim tracking
 │   │   └── commits.go           # Commit tracking
 │   ├── agent/                   # Agent management

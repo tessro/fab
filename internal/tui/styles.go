@@ -167,15 +167,6 @@ var (
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(primaryColor)
 
-	// Pending action styles
-	pendingActionStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#3B3B3B")).
-				Padding(0, 1)
-
-	pendingActionLabelStyle = lipgloss.NewStyle().
-				Foreground(primaryColor).
-				Bold(true)
-
 	// Permission request styles
 	pendingPermissionStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("#4B3B2B")).

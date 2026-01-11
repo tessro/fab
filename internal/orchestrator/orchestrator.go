@@ -3,6 +3,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,16 +16,14 @@ import (
 	"github.com/tessro/fab/internal/project"
 )
 
+// ErrAlreadyRunning is returned when attempting to start an already-running orchestrator.
+var ErrAlreadyRunning = errors.New("orchestrator already running")
+
 // Default polling interval for checking ready issues.
 const DefaultPollInterval = 10 * time.Second
 
 // Config configures orchestrator behavior.
 type Config struct {
-	// DefaultAgentMode is propagated to new agents.
-	// ModeManual (default) stages actions for user confirmation.
-	// ModeAuto executes actions immediately.
-	DefaultAgentMode agent.Mode
-
 	// KickstartPrompt is sent to agents when they start.
 	KickstartPrompt string
 
@@ -49,7 +48,6 @@ type Config struct {
 // DefaultConfig returns the default orchestrator configuration.
 func DefaultConfig() Config {
 	return Config{
-		DefaultAgentMode:    agent.DefaultMode,
 		InterventionSilence: agent.DefaultInterventionSilence,
 		KickstartPrompt: `The 'fab' command is available on PATH - use 'fab', not './fab'.
 
@@ -75,9 +73,6 @@ type Orchestrator struct {
 	agents  *agent.Manager
 	config  Config // Set at construction, effectively immutable during operation
 
-	// Action queue for manual mode
-	actions *ActionQueue
-
 	// Ticket claim registry to prevent duplicate work
 	claims *ClaimRegistry
 
@@ -99,7 +94,6 @@ func New(proj *project.Project, agents *agent.Manager, cfg Config) *Orchestrator
 		project: proj,
 		config:  cfg,
 		agents:  agents,
-		actions: NewActionQueue(),
 		claims:  NewClaimRegistry(),
 		commits: NewCommitLog(DefaultCommitLogSize),
 	}
@@ -139,11 +133,6 @@ func (o *Orchestrator) IsRunning() bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.running
-}
-
-// Actions returns the action queue for manual mode operations.
-func (o *Orchestrator) Actions() *ActionQueue {
-	return o.actions
 }
 
 // IsAgentIntervening returns true if the user is currently intervening with the given agent.
@@ -312,9 +301,6 @@ func (o *Orchestrator) spawnAgent() error {
 		return err
 	}
 
-	// Set the agent mode from config
-	a.SetMode(o.config.DefaultAgentMode)
-
 	// Start the agent process immediately (without prompt)
 	if err := a.Start(""); err != nil {
 		return fmt.Errorf("start agent process: %w", err)
@@ -325,16 +311,16 @@ func (o *Orchestrator) spawnAgent() error {
 		o.config.OnAgentStarted(a)
 	}
 
-	// Execute kickstart immediately (no approval needed)
+	// Execute kickstart immediately
 	o.executeKickstart(a, o.config.KickstartPrompt)
 
 	return nil
 }
 
-// QueueKickstart queues or executes the kickstart action based on mode.
-// Returns true if kickstart was queued/executed, false if skipped due to user intervention.
+// ExecuteKickstart executes the kickstart action immediately.
+// Returns true if kickstart was executed, false if skipped due to user intervention or empty prompt.
 // This should be called when an agent becomes idle to resume automatic task execution.
-func (o *Orchestrator) QueueKickstart(a *agent.Agent) bool {
+func (o *Orchestrator) ExecuteKickstart(a *agent.Agent) bool {
 	prompt := o.config.KickstartPrompt
 	if prompt == "" {
 		return false
@@ -350,19 +336,8 @@ func (o *Orchestrator) QueueKickstart(a *agent.Agent) bool {
 		return false
 	}
 
-	if a.IsAutoMode() {
-		// Execute immediately
-		o.executeKickstart(a, prompt)
-	} else {
-		// Stage for approval
-		o.actions.Add(StagedAction{
-			AgentID:   a.ID,
-			Project:   o.project.Name,
-			Type:      ActionSendMessage,
-			Payload:   prompt,
-			CreatedAt: time.Now(),
-		})
-	}
+	// Execute immediately
+	o.executeKickstart(a, prompt)
 	return true
 }
 
@@ -443,67 +418,3 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 	return result, nil
 }
 
-// ApproveAction approves and executes a staged action.
-// The action is only removed from the queue on successful execution,
-// allowing retries if execution fails due to transient errors.
-// If the agent is in a terminal state (done/error), the action is removed
-// and an appropriate error is returned.
-func (o *Orchestrator) ApproveAction(actionID string) error {
-	action, ok := o.actions.Get(actionID)
-	if !ok {
-		return ErrActionNotFound
-	}
-
-	// Check if agent can accept input before attempting execution
-	a, err := o.agents.Get(action.AgentID)
-	if err != nil {
-		// Agent no longer exists - remove stale action
-		o.actions.Remove(actionID)
-		return fmt.Errorf("agent %s not found: %w", action.AgentID, err)
-	}
-
-	if a.IsTerminal() {
-		// Agent is done or errored - remove stale action
-		o.actions.Remove(actionID)
-		return fmt.Errorf("agent %s is in %s state", action.AgentID, a.GetState())
-	}
-
-	// Execute the action
-	if err := o.executeAction(action); err != nil {
-		return fmt.Errorf("failed to execute action: %w", err)
-	}
-
-	// Success - remove from queue
-	o.actions.Remove(actionID)
-	return nil
-}
-
-// RejectAction rejects and removes a staged action.
-func (o *Orchestrator) RejectAction(actionID string, reason string) error {
-	_, ok := o.actions.Remove(actionID)
-	if !ok {
-		return ErrActionNotFound
-	}
-	return nil
-}
-
-// executeAction executes a staged action.
-func (o *Orchestrator) executeAction(action StagedAction) error {
-	a, err := o.agents.Get(action.AgentID)
-	if err != nil {
-		return err
-	}
-
-	switch action.Type {
-	case ActionSendMessage:
-		// Use SendMessage instead of Write
-		return a.SendMessage(action.Payload)
-
-	case ActionQuit:
-		// Send /quit as a message
-		return a.SendMessage("/quit")
-
-	default:
-		return ErrUnknownActionType
-	}
-}

@@ -36,11 +36,6 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 	orch := orchestrator.New(proj, s.agents, cfg)
 	s.orchestrators[proj.Name] = orch
 
-	// Register callback for action queue events
-	orch.Actions().OnAdded(func(action orchestrator.StagedAction) {
-		s.handleActionQueued(proj.Name, action)
-	})
-
 	// Mark project as running
 	proj.SetRunning(true)
 

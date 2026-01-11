@@ -219,12 +219,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						"tool", perm.ToolName,
 					)
 					cmds = append(cmds, m.allowPermission(perm.ID))
-				} else if action := m.pendingActionForAgent(agentID); action != nil {
-					slog.Debug("approving action",
-						"action_id", action.ID,
-						"action_agent", action.AgentID,
-					)
-					cmds = append(cmds, m.approveAction(action.ID))
 				}
 			}
 
@@ -234,17 +228,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = m.modeState.CancelAbort()
 				m.chatView.SetAbortConfirming(false, "")
 			} else {
-				// Reject pending permission or action for selected agent
+				// Reject pending permission for selected agent
 				agentID := m.chatView.AgentID()
-				// Permissions take priority over actions
 				if perm := m.pendingPermissionForAgent(agentID); perm != nil {
 					slog.Debug("denying permission",
 						"permission_id", perm.ID,
 						"tool", perm.ToolName,
 					)
 					cmds = append(cmds, m.denyPermission(perm.ID))
-				} else if action := m.pendingActionForAgent(agentID); action != nil {
-					cmds = append(cmds, m.rejectAction(action.ID))
 				}
 			}
 
@@ -468,8 +459,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				slog.Debug("tui.Update: attaching to event stream")
 				cmds = append(cmds, m.attachToStream())
 			}
-			// Fetch staged actions for approval display
-			cmds = append(cmds, m.fetchStagedActions())
 			// Fetch stats for header display
 			cmds = append(cmds, m.fetchStats())
 		}
@@ -487,30 +476,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatView.SetEntries(msg.Entries)
 		}
 
-	case stagedActionsMsg:
-		if msg.Err != nil {
-			cmds = append(cmds, m.setError(msg.Err))
-		} else {
-			// Store all staged actions - filtering happens in pendingActionForAgent
-			m.stagedActions = msg.Actions
-			// Update chat view with pending action for current agent
-			m.chatView.SetPendingAction(m.pendingActionForAgent(m.chatView.AgentID()))
-			// Update attention indicators
-			m.updateNeedsAttention()
-		}
-
 	case statsMsg:
 		if msg.Err == nil && msg.Stats != nil {
 			// Only use stats for commit count - usage comes from usageUpdateMsg
 			m.header.SetCommitCount(msg.Stats.CommitCount)
-		}
-
-	case actionResultMsg:
-		if msg.Err != nil {
-			cmds = append(cmds, m.setError(msg.Err))
-		} else {
-			// Refresh staged actions after approve/reject
-			cmds = append(cmds, m.fetchStagedActions())
 		}
 
 	case permissionResultMsg:
@@ -750,24 +719,6 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 			// Update chat view if this is for the current agent
 			if event.AgentID == m.chatView.AgentID() {
 				m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(event.AgentID))
-			}
-			// Update attention indicators
-			m.updateNeedsAttention()
-		}
-
-	case "action_queued":
-		// A new staged action was queued
-		if event.StagedAction != nil {
-			slog.Debug("action_queued event",
-				"agent", event.AgentID,
-				"action_id", event.StagedAction.ID,
-				"type", event.StagedAction.Type,
-			)
-			// Add to our list of staged actions
-			m.stagedActions = append(m.stagedActions, *event.StagedAction)
-			// Update chat view if this is for the current agent
-			if event.AgentID == m.chatView.AgentID() {
-				m.chatView.SetPendingAction(m.pendingActionForAgent(event.AgentID))
 			}
 			// Update attention indicators
 			m.updateNeedsAttention()

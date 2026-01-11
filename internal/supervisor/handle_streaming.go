@@ -7,7 +7,6 @@ import (
 
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/daemon"
-	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/planner"
 )
 
@@ -111,31 +110,6 @@ func (s *Supervisor) handleAgentEvent(event agent.Event) {
 	if streamEvent != nil {
 		srv.Broadcast(streamEvent)
 	}
-}
-
-// handleActionQueued broadcasts action_queued events to attached clients.
-func (s *Supervisor) handleActionQueued(project string, action orchestrator.StagedAction) {
-	s.mu.RLock()
-	srv := s.server
-	s.mu.RUnlock()
-
-	if srv == nil {
-		return
-	}
-
-	srv.Broadcast(&daemon.StreamEvent{
-		Type:    "action_queued",
-		AgentID: action.AgentID,
-		Project: project,
-		StagedAction: &daemon.StagedAction{
-			ID:        action.ID,
-			AgentID:   action.AgentID,
-			Project:   project,
-			Type:      daemon.ActionType(action.Type),
-			Payload:   action.Payload,
-			CreatedAt: action.CreatedAt,
-		},
-	})
 }
 
 // broadcastChatEntry sends a chat entry to attached clients.

@@ -22,7 +22,6 @@ type ChatView struct {
 	project             string
 	viewport            viewport.Model
 	ready               bool
-	pendingAction       *daemon.StagedAction      // pending action awaiting approval
 	pendingPermission   *daemon.PermissionRequest // pending permission request
 	pendingUserQuestion *daemon.UserQuestion      // pending user question
 	questionSelected    int                       // index of selected option (0-based, per question)
@@ -60,11 +59,6 @@ func (v *ChatView) updateViewportSize() {
 	// Account for border (2 chars top/bottom, 2 chars left/right) and header (1 line)
 	contentWidth := v.width - 2
 	contentHeight := v.height - 2 - 1 // -1 for header
-
-	// Reserve space for pending action bar if present
-	if v.pendingAction != nil {
-		contentHeight -= 2 // 1 line for content + 1 line padding
-	}
 
 	// Reserve space for pending permission request if present
 	if v.pendingPermission != nil {
@@ -142,22 +136,6 @@ func (v *ChatView) AgentID() string {
 // Project returns the project name of the current agent.
 func (v *ChatView) Project() string {
 	return v.project
-}
-
-// SetPendingAction sets the pending action for this chat view.
-func (v *ChatView) SetPendingAction(action *daemon.StagedAction) {
-	hadAction := v.pendingAction != nil
-	hasAction := action != nil
-	v.pendingAction = action
-	// Recalculate viewport size if pending action state changed
-	if hadAction != hasAction {
-		v.updateViewportSize()
-	}
-}
-
-// HasPendingAction returns whether there's a pending action.
-func (v *ChatView) HasPendingAction() bool {
-	return v.pendingAction != nil
 }
 
 // SetPendingPermission sets the pending permission request for this chat view.
@@ -643,9 +621,6 @@ func (v ChatView) View() string {
 	// Viewport content
 	var content string
 	emptyHeight := v.height - 3
-	if v.pendingAction != nil {
-		emptyHeight -= 2
-	}
 	if v.pendingPermission != nil {
 		emptyHeight -= 2
 	}
@@ -671,14 +646,11 @@ func (v ChatView) View() string {
 	if v.abortConfirming {
 		parts = append(parts, v.renderAbortConfirmation())
 	} else if v.pendingUserQuestion != nil {
-		// User question takes priority over permission/action
+		// User question takes priority over permission
 		parts = append(parts, v.renderPendingUserQuestion())
 	} else if v.pendingPermission != nil {
-		// Add pending permission bar if present (takes priority over action)
+		// Add pending permission bar if present
 		parts = append(parts, v.renderPendingPermission())
-	} else if v.pendingAction != nil {
-		// Add pending action bar if present
-		parts = append(parts, v.renderPendingAction())
 	}
 
 	// Add input line with divider if present
@@ -714,29 +686,6 @@ func (v ChatView) View() string {
 	}
 
 	return borderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
-}
-
-// renderPendingAction renders the pending action approval bar.
-func (v ChatView) renderPendingAction() string {
-	if v.pendingAction == nil {
-		return ""
-	}
-
-	// Truncate payload for display
-	payload := v.pendingAction.Payload
-	maxLen := v.width - 30
-	if maxLen < 20 {
-		maxLen = 20
-	}
-	if len(payload) > maxLen {
-		payload = payload[:maxLen-3] + "..."
-	}
-
-	// Replace newlines with spaces for single-line display
-	payload = strings.ReplaceAll(payload, "\n", " ")
-
-	label := pendingActionLabelStyle.Render("⏸ Pending:")
-	return pendingActionStyle.Width(v.width - 4).Render(label + " " + payload)
 }
 
 // renderPendingPermission renders the pending permission request bar.

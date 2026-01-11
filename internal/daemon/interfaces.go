@@ -32,9 +32,6 @@ type TUIClient interface {
 	PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse, error)
 
 	// Approval operations
-	ListStagedActions(project string) (*StagedActionsResponse, error)
-	ApproveAction(actionID string) error
-	RejectAction(actionID, reason string) error
 	RespondPermission(id, behavior, message string, interrupt bool) error
 	RespondUserQuestion(id string, answers map[string]string) error
 

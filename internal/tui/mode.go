@@ -56,9 +56,6 @@ type ModeState struct {
 	// HasPendingPermission indicates if there's a permission request awaiting approval.
 	HasPendingPermission bool
 
-	// HasPendingAction indicates if there's a staged action awaiting approval.
-	HasPendingAction bool
-
 	// HasPendingUserQuestion indicates if there's a user question awaiting response.
 	HasPendingUserQuestion bool
 
@@ -182,15 +179,15 @@ func (s *ModeState) CancelAbort() error {
 }
 
 // SetPendingApprovals updates the pending approval state.
+// The second parameter (hasAction) is kept for API compatibility but ignored.
 func (s *ModeState) SetPendingApprovals(hasPermission, hasAction, hasUserQuestion bool) {
 	s.HasPendingPermission = hasPermission
-	s.HasPendingAction = hasAction
 	s.HasPendingUserQuestion = hasUserQuestion
 }
 
 // NeedsApproval returns true if there's any pending approval.
 func (s *ModeState) NeedsApproval() bool {
-	return s.HasPendingPermission || s.HasPendingAction || s.HasPendingUserQuestion
+	return s.HasPendingPermission || s.HasPendingUserQuestion
 }
 
 // EnterUserQuestionMode transitions to user question mode.

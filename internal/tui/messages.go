@@ -30,21 +30,10 @@ type agentChatHistoryMsg struct {
 	Err     error
 }
 
-// stagedActionsMsg contains pending actions that need user approval.
-type stagedActionsMsg struct {
-	Actions []daemon.StagedAction
-	Err     error
-}
-
 // statsMsg contains aggregated session statistics.
 type statsMsg struct {
 	Stats *daemon.StatsResponse
 	Err   error
-}
-
-// actionResultMsg is the result of approving/rejecting an action.
-type actionResultMsg struct {
-	Err error
 }
 
 // permissionResultMsg is the result of responding to a permission request.

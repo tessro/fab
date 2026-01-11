@@ -52,27 +52,11 @@ func (m *Model) pendingUserQuestionForAgent(agentID string) *daemon.UserQuestion
 	return nil
 }
 
-// pendingActionForAgent returns the first pending action for the given agent.
-func (m *Model) pendingActionForAgent(agentID string) *daemon.StagedAction {
-	if agentID == "" {
-		return nil
-	}
-	for i := range m.stagedActions {
-		if m.stagedActions[i].AgentID == agentID {
-			return &m.stagedActions[i]
-		}
-	}
-	return nil
-}
-
 // updateNeedsAttention rebuilds the map of agents that need user attention.
 func (m *Model) updateNeedsAttention() {
 	attention := make(map[string]bool)
 	for _, perm := range m.pendingPermissions {
 		attention[perm.AgentID] = true
-	}
-	for _, action := range m.stagedActions {
-		attention[action.AgentID] = true
 	}
 	for _, question := range m.pendingUserQuestions {
 		attention[question.AgentID] = true
@@ -130,7 +114,6 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 	}
 	m.chatView.SetAgent(agent.ID, agent.Project)
 	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
-	m.chatView.SetPendingAction(m.pendingActionForAgent(agent.ID))
 	m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(agent.ID))
 	return m.fetchAgentChatHistory(agent.ID, agent.Project)
 }

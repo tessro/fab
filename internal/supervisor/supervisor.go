@@ -185,12 +185,6 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	// Orchestrator
 	case daemon.MsgAgentDone:
 		return s.handleAgentDone(ctx, req)
-	case daemon.MsgListStagedActions:
-		return s.handleListStagedActions(ctx, req)
-	case daemon.MsgApproveAction:
-		return s.handleApproveAction(ctx, req)
-	case daemon.MsgRejectAction:
-		return s.handleRejectAction(ctx, req)
 
 	// Permission handling
 	case daemon.MsgPermissionRequest:

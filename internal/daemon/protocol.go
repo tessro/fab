@@ -44,11 +44,8 @@ const (
 	MsgAgentSendMessage MessageType = "agent.send_message"
 	MsgAgentChatHistory MessageType = "agent.chat_history" // Get chat history for an agent
 
-	// Orchestrator (agent signals and staged actions)
-	MsgAgentDone         MessageType = "agent.done"           // Agent signals task completion
-	MsgListStagedActions MessageType = "orchestrator.actions" // Get pending actions for TUI
-	MsgApproveAction     MessageType = "orchestrator.approve" // Approve a staged action
-	MsgRejectAction      MessageType = "orchestrator.reject"  // Reject/skip a staged action
+	// Orchestrator (agent signals)
+	MsgAgentDone MessageType = "agent.done" // Agent signals task completion
 
 	// Permission handling (Claude Code hook callbacks)
 	MsgPermissionRequest MessageType = "permission.request" // Hook requests permission decision
@@ -330,7 +327,7 @@ type AgentChatHistoryResponse struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type              string             `json:"type"` // "output", "state", "created", "deleted", "info", "permission_request", "user_question", "action_queued", "intervention", "manager_chat_entry", "manager_state"
+	Type              string             `json:"type"` // "output", "state", "created", "deleted", "info", "permission_request", "user_question", "intervention", "manager_chat_entry", "manager_state"
 	AgentID           string             `json:"agent_id"`
 	Project           string             `json:"project"`
 	Data              string             `json:"data,omitempty"`               // For output events
@@ -341,7 +338,6 @@ type StreamEvent struct {
 	ChatEntry         *ChatEntryDTO      `json:"chat_entry,omitempty"`         // For "chat_entry" events
 	PermissionRequest *PermissionRequest `json:"permission_request,omitempty"` // For "permission_request" events
 	UserQuestion      *UserQuestion      `json:"user_question,omitempty"`      // For "user_question" events
-	StagedAction      *StagedAction      `json:"staged_action,omitempty"`      // For "action_queued" events
 	Intervening       *bool              `json:"intervening,omitempty"`        // For "intervention" events (user is intervening)
 	ManagerState      string             `json:"manager_state,omitempty"`      // For "manager_state" events
 }
@@ -354,27 +350,6 @@ type ChatEntryDTO struct {
 	ToolInput  string `json:"tool_input,omitempty"`  // Tool input summary
 	ToolResult string `json:"tool_result,omitempty"` // Tool output
 	Timestamp  string `json:"timestamp"`             // RFC3339 format
-}
-
-// ActionType identifies the type of staged orchestrator action.
-type ActionType string
-
-const (
-	// ActionSendMessage sends a message to an agent.
-	ActionSendMessage ActionType = "send_message"
-
-	// ActionQuit sends /quit to gracefully end the agent session.
-	ActionQuit ActionType = "quit"
-)
-
-// StagedAction represents an orchestrator action pending user approval.
-type StagedAction struct {
-	ID        string     `json:"id"`
-	AgentID   string     `json:"agent_id"`
-	Project   string     `json:"project"`
-	Type      ActionType `json:"type"`
-	Payload   string     `json:"payload,omitempty"` // Action-specific data (e.g., message text)
-	CreatedAt time.Time  `json:"created_at"`
 }
 
 // AgentDoneRequest is the payload for agent.done requests.
@@ -391,27 +366,6 @@ type AgentDoneResponse struct {
 	BranchName string `json:"branch_name,omitempty"` // The branch that was processed
 	SHA        string `json:"sha,omitempty"`         // Commit SHA of merge commit (only if Merged is true)
 	MergeError string `json:"merge_error,omitempty"` // Conflict message if merge failed
-}
-
-// StagedActionsRequest is the payload for orchestrator.actions requests.
-type StagedActionsRequest struct {
-	Project string `json:"project,omitempty"` // Filter by project, empty = all
-}
-
-// StagedActionsResponse is the payload for orchestrator.actions responses.
-type StagedActionsResponse struct {
-	Actions []StagedAction `json:"actions"`
-}
-
-// ApproveActionRequest is the payload for orchestrator.approve requests.
-type ApproveActionRequest struct {
-	ActionID string `json:"action_id"`
-}
-
-// RejectActionRequest is the payload for orchestrator.reject requests.
-type RejectActionRequest struct {
-	ActionID string `json:"action_id"`
-	Reason   string `json:"reason,omitempty"` // Optional rejection reason
 }
 
 // PermissionRequest represents a tool permission request from Claude Code.

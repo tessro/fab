@@ -202,20 +202,6 @@ func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	}
 }
 
-// fetchStagedActions retrieves pending actions for user approval.
-func (m Model) fetchStagedActions() tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		resp, err := m.client.ListStagedActions("")
-		if err != nil {
-			return stagedActionsMsg{Err: err}
-		}
-		return stagedActionsMsg{Actions: resp.Actions}
-	}
-}
-
 // fetchStats retrieves aggregated session statistics.
 func (m Model) fetchStats() tea.Cmd {
 	return func() tea.Msg {
@@ -259,28 +245,6 @@ func (m Model) startPlanner(project, prompt string) tea.Cmd {
 			return planStartResultMsg{Err: err}
 		}
 		return planStartResultMsg{PlannerID: resp.ID, Project: resp.Project}
-	}
-}
-
-// approveAction approves a staged action.
-func (m Model) approveAction(actionID string) tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		err := m.client.ApproveAction(actionID)
-		return actionResultMsg{Err: err}
-	}
-}
-
-// rejectAction rejects a staged action.
-func (m Model) rejectAction(actionID string) tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		err := m.client.RejectAction(actionID, "")
-		return actionResultMsg{Err: err}
 	}
 }
 

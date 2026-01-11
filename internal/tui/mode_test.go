@@ -257,9 +257,10 @@ func TestModeState_PendingApprovals(t *testing.T) {
 		t.Error("expected NeedsApproval() to be true with pending permission")
 	}
 
+	// Second parameter (hasAction) is kept for API compatibility but ignored
 	state.SetPendingApprovals(false, true, false)
-	if !state.NeedsApproval() {
-		t.Error("expected NeedsApproval() to be true with pending action")
+	if state.NeedsApproval() {
+		t.Error("expected NeedsApproval() to be false (hasAction is ignored)")
 	}
 
 	state.SetPendingApprovals(false, false, true)

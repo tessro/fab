@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/tessro/fab/internal/daemon"
-	"github.com/tessro/fab/internal/orchestrator"
 )
 
 // handleAgentDone handles agent completion signals.
@@ -58,102 +57,6 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 	}
 
 	return successResponse(req, resp)
-}
-
-// handleListStagedActions returns all pending staged actions.
-func (s *Supervisor) handleListStagedActions(_ context.Context, req *daemon.Request) *daemon.Response {
-	var listReq daemon.StagedActionsRequest
-	if req.Payload != nil {
-		if err := unmarshalPayload(req.Payload, &listReq); err != nil {
-			return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
-		}
-	}
-
-	var actions []daemon.StagedAction
-
-	s.mu.RLock()
-	for name, orch := range s.orchestrators {
-		if listReq.Project != "" && listReq.Project != name {
-			continue
-		}
-
-		for _, a := range orch.Actions().List() {
-			actions = append(actions, daemon.StagedAction{
-				ID:        a.ID,
-				AgentID:   a.AgentID,
-				Project:   a.Project,
-				Type:      daemon.ActionType(a.Type),
-				Payload:   a.Payload,
-				CreatedAt: a.CreatedAt,
-			})
-		}
-	}
-	s.mu.RUnlock()
-
-	return successResponse(req, daemon.StagedActionsResponse{
-		Actions: actions,
-	})
-}
-
-// handleApproveAction approves and executes a staged action.
-func (s *Supervisor) handleApproveAction(_ context.Context, req *daemon.Request) *daemon.Response {
-	var approveReq daemon.ApproveActionRequest
-	if err := unmarshalPayload(req.Payload, &approveReq); err != nil {
-		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
-	}
-
-	if approveReq.ActionID == "" {
-		return errorResponse(req, "action ID required")
-	}
-
-	// Find the orchestrator with this action
-	s.mu.RLock()
-	var foundOrch *orchestrator.Orchestrator
-	for _, orch := range s.orchestrators {
-		if _, ok := orch.Actions().Get(approveReq.ActionID); ok {
-			foundOrch = orch
-			break
-		}
-	}
-	s.mu.RUnlock()
-
-	if foundOrch == nil {
-		return errorResponse(req, "action not found")
-	}
-
-	// Use the orchestrator's ApproveAction method which removes and executes
-	if err := foundOrch.ApproveAction(approveReq.ActionID); err != nil {
-		return errorResponse(req, fmt.Sprintf("failed to execute action: %v", err))
-	}
-
-	return successResponse(req, nil)
-}
-
-// handleRejectAction rejects a staged action without executing it.
-func (s *Supervisor) handleRejectAction(_ context.Context, req *daemon.Request) *daemon.Response {
-	var rejectReq daemon.RejectActionRequest
-	if err := unmarshalPayload(req.Payload, &rejectReq); err != nil {
-		return errorResponse(req, fmt.Sprintf("invalid payload: %v", err))
-	}
-
-	if rejectReq.ActionID == "" {
-		return errorResponse(req, "action ID required")
-	}
-
-	// Find the orchestrator with this action and reject it
-	s.mu.RLock()
-	for _, orch := range s.orchestrators {
-		if _, ok := orch.Actions().Get(rejectReq.ActionID); ok {
-			s.mu.RUnlock()
-			if err := orch.RejectAction(rejectReq.ActionID, rejectReq.Reason); err != nil {
-				return errorResponse(req, fmt.Sprintf("failed to reject action: %v", err))
-			}
-			return successResponse(req, nil)
-		}
-	}
-	s.mu.RUnlock()
-
-	return errorResponse(req, "action not found")
 }
 
 // handlePlannerDone handles completion signals from planner agents.

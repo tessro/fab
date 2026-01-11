@@ -359,11 +359,11 @@ func (s *Supervisor) handleAgentIdle(ctx context.Context, req *daemon.Request) *
 		)
 	}
 
-	// Queue kickstart to resume the agent (respects intervention detection and auto/manual mode)
+	// Execute kickstart to resume the agent (respects intervention detection)
 	info := a.Info()
 	if orch := s.getOrchestrator(info.Project); orch != nil {
-		if orch.QueueKickstart(a) {
-			slog.Debug("queued kickstart for idle agent",
+		if orch.ExecuteKickstart(a) {
+			slog.Debug("executed kickstart for idle agent",
 				"agent", idleReq.AgentID,
 				"project", info.Project,
 			)

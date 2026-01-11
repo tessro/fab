@@ -565,51 +565,6 @@ func (c *Client) AgentChatHistory(id string, limit int) (*AgentChatHistoryRespon
 	return decodePayload[AgentChatHistoryResponse](resp.Payload)
 }
 
-// ListStagedActions returns pending actions for user approval.
-func (c *Client) ListStagedActions(project string) (*StagedActionsResponse, error) {
-	resp, err := c.Send(&Request{
-		Type:    MsgListStagedActions,
-		Payload: StagedActionsRequest{Project: project},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Success {
-		return nil, NewServerError("list actions", resp.Error)
-	}
-	return decodePayload[StagedActionsResponse](resp.Payload)
-}
-
-// ApproveAction approves and executes a staged action.
-func (c *Client) ApproveAction(actionID string) error {
-	resp, err := c.Send(&Request{
-		Type:    MsgApproveAction,
-		Payload: ApproveActionRequest{ActionID: actionID},
-	})
-	if err != nil {
-		return err
-	}
-	if !resp.Success {
-		return NewServerError("approve action", resp.Error)
-	}
-	return nil
-}
-
-// RejectAction rejects a staged action without executing it.
-func (c *Client) RejectAction(actionID, reason string) error {
-	resp, err := c.Send(&Request{
-		Type:    MsgRejectAction,
-		Payload: RejectActionRequest{ActionID: actionID, Reason: reason},
-	})
-	if err != nil {
-		return err
-	}
-	if !resp.Success {
-		return NewServerError("reject action", resp.Error)
-	}
-	return nil
-}
-
 // RequestPermission sends a permission request and blocks until a response is received.
 // This is called by the fab hook command when Claude Code needs tool permission.
 // The method blocks until the TUI user approves or denies the request.

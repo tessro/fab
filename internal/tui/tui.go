@@ -66,9 +66,6 @@ type Model struct {
 	reconnectCount int
 	maxReconnects  int
 
-	// Staged actions pending approval (for selected agent)
-	stagedActions []daemon.StagedAction
-
 	// Pending permission requests (for selected agent)
 	pendingPermissions []daemon.PermissionRequest
 
@@ -162,7 +159,7 @@ func (m Model) View() string {
 	// Update help bar mode state
 	m.modeState.SetPendingApprovals(
 		m.pendingPermissionForAgent(m.chatView.AgentID()) != nil,
-		m.pendingActionForAgent(m.chatView.AgentID()) != nil,
+		false, // no more staged actions (removed manual mode)
 		m.pendingUserQuestionForAgent(m.chatView.AgentID()) != nil,
 	)
 	m.helpBar.SetModeState(m.modeState)
