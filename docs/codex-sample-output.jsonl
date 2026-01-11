@@ -1,0 +1,24 @@
+{"type":"thread.started","thread_id":"019bac20-11a2-7061-9708-dda3b7642ac3"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Creating a new file using shell echo**"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"printf '%s' 'Hello World' > hello.txt\"","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Created `hello.txt` with `Hello World`."}}
+{"type":"turn.completed","usage":{"input_tokens":8202,"cached_input_tokens":6400,"output_tokens":55}}
+{"type":"thread.started","thread_id":"019bac20-4c70-78d2-a452-e54fb16a161a"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Choosing file read/write method**"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat hello.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat hello.txt'","aggregated_output":"Hello World","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"reasoning","text":"**Creating uppercase file with shell command**"}}
+{"type":"item.started","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc \"cat hello.txt | tr '[:lower:]' '[:upper:]' > hello2.txt\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc \"cat hello.txt | tr '[:lower:]' '[:upper:]' > hello2.txt\"","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"agent_message","text":"Created `hello2.txt` with the uppercase content."}}
+{"type":"turn.completed","usage":{"input_tokens":12471,"cached_input_tokens":10496,"output_tokens":97}}
+{"type":"thread.started","thread_id":"019bac20-8890-7693-b6d0-7de3b8cdf653"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Using shell cat command**"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat nonexistent.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat nonexistent.txt'","aggregated_output":"cat: nonexistent.txt: No such file or directory\n","exit_code":1,"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"It fails with: `cat: nonexistent.txt: No such file or directory`."}}
+{"type":"turn.completed","usage":{"input_tokens":8208,"cached_input_tokens":6400,"output_tokens":53}}
