@@ -167,8 +167,9 @@ func (p *ProcessAgent) Start() error {
 	p.mu.Lock()
 
 	if p.state != StateStopped {
+		currentState := p.state
 		p.mu.Unlock()
-		log.Debug("ProcessAgent.Start: already running", "state", p.state)
+		log.Debug("ProcessAgent.Start: already running", "state", currentState)
 		return ErrAlreadyRunning
 	}
 
