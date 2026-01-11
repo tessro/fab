@@ -270,3 +270,37 @@ func TestWorktreePathForAgent(t *testing.T) {
 		t.Errorf("worktreePathForAgent = %q, want %q", path, expected)
 	}
 }
+
+func TestGetAgentBackend(t *testing.T) {
+	tests := []struct {
+		name         string
+		agentBackend string
+		want         string
+	}{
+		{
+			name:         "empty returns default",
+			agentBackend: "",
+			want:         DefaultAgentBackend,
+		},
+		{
+			name:         "claude explicit",
+			agentBackend: "claude",
+			want:         "claude",
+		},
+		{
+			name:         "codex explicit",
+			agentBackend: "codex",
+			want:         "codex",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.AgentBackend = tt.agentBackend
+			if got := p.GetAgentBackend(); got != tt.want {
+				t.Errorf("GetAgentBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

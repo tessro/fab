@@ -22,3 +22,25 @@ func TestGetLogLevel(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDefaultAgentBackend(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *GlobalConfig
+		want   string
+	}{
+		{"nil config", nil, "claude"},
+		{"empty config", &GlobalConfig{}, "claude"},
+		{"empty defaults", &GlobalConfig{Defaults: DefaultsConfig{}}, "claude"},
+		{"claude explicit", &GlobalConfig{Defaults: DefaultsConfig{AgentBackend: "claude"}}, "claude"},
+		{"codex explicit", &GlobalConfig{Defaults: DefaultsConfig{AgentBackend: "codex"}}, "codex"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.GetDefaultAgentBackend(); got != tt.want {
+				t.Errorf("GetDefaultAgentBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

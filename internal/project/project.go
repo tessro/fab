@@ -29,6 +29,7 @@ type Project struct {
 	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
 	Autostart      bool     // Start orchestration when daemon starts
 	PermissionsChecker string // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
+	AgentBackend   string   // Agent CLI backend: "claude" (default), "codex"
 	BaseDir        string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
@@ -204,6 +205,17 @@ func (p *Project) IsRunning() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.Running
+}
+
+// DefaultAgentBackend is the default agent CLI backend.
+const DefaultAgentBackend = "claude"
+
+// GetAgentBackend returns the configured agent backend, or the default ("claude").
+func (p *Project) GetAgentBackend() string {
+	if p.AgentBackend == "" {
+		return DefaultAgentBackend
+	}
+	return p.AgentBackend
 }
 
 // ManagerWorktreePath returns the path to the manager's worktree.

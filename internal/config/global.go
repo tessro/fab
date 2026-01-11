@@ -19,6 +19,15 @@ type GlobalConfig struct {
 
 	// LLMAuth contains LLM authorization settings.
 	LLMAuth LLMAuthConfig `toml:"llm_auth"`
+
+	// Defaults contains default values for project configuration.
+	Defaults DefaultsConfig `toml:"defaults"`
+}
+
+// DefaultsConfig contains default values for project configuration.
+type DefaultsConfig struct {
+	// AgentBackend is the default agent CLI backend ("claude" or "codex").
+	AgentBackend string `toml:"agent-backend"`
 }
 
 // ProvidersConfig contains API provider configurations.
@@ -122,4 +131,12 @@ func (c *GlobalConfig) GetLogLevel() string {
 		return c.LogLevel
 	}
 	return DefaultLogLevel
+}
+
+// GetDefaultAgentBackend returns the configured default agent backend or "claude".
+func (c *GlobalConfig) GetDefaultAgentBackend() string {
+	if c != nil && c.Defaults.AgentBackend != "" {
+		return c.Defaults.AgentBackend
+	}
+	return "claude"
 }

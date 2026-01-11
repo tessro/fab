@@ -38,6 +38,7 @@ type ProjectEntry struct {
 	AllowedAuthors     []string `toml:"allowed-authors,omitempty"`     // GitHub usernames allowed to create issues
 	Autostart          bool     `toml:"autostart,omitempty"`           // Start orchestration when daemon starts
 	PermissionsChecker string   `toml:"permissions-checker,omitempty"` // Permission checker: "manual" (default), "llm"
+	AgentBackend       string   `toml:"agent-backend,omitempty"`       // Agent CLI backend: "claude" (default), "codex"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 
@@ -49,6 +50,7 @@ type ProjectEntry struct {
 	LegacyIssueBackend       string   `toml:"issue_backend,omitempty"`
 	LegacyAllowedAuthors     []string `toml:"allowed_authors,omitempty"`
 	LegacyPermissionsChecker string   `toml:"permissions_checker,omitempty"`
+	LegacyAgentBackend       string   `toml:"agent_backend,omitempty"`
 }
 
 // coalesce returns the first non-empty string from the provided values.
@@ -168,6 +170,7 @@ func (r *Registry) load() error {
 		issueBackend := coalesce(entry.IssueBackend, entry.LegacyIssueBackend)
 		allowedAuthors := coalesceStringSlice(entry.AllowedAuthors, entry.LegacyAllowedAuthors)
 		permissionsChecker := coalesce(entry.PermissionsChecker, entry.LegacyPermissionsChecker)
+		agentBackend := coalesce(entry.AgentBackend, entry.LegacyAgentBackend)
 
 		// Detect old config format (has Path but no RemoteURL)
 		if entry.Path != "" && remoteURL == "" {
@@ -186,6 +189,7 @@ func (r *Registry) load() error {
 		}
 		p.Autostart = entry.Autostart
 		p.PermissionsChecker = permissionsChecker
+		p.AgentBackend = agentBackend
 		r.projects[entry.Name] = p
 	}
 
@@ -223,6 +227,7 @@ func (r *Registry) save() error {
 			AllowedAuthors:     p.AllowedAuthors,
 			Autostart:          p.Autostart,
 			PermissionsChecker: p.PermissionsChecker,
+			AgentBackend:       p.AgentBackend,
 		})
 	}
 
@@ -369,16 +374,17 @@ type ConfigKey string
 
 // Valid configuration keys.
 const (
-	ConfigKeyMaxAgents      ConfigKey = "max-agents"
-	ConfigKeyAutostart      ConfigKey = "autostart"
-	ConfigKeyIssueBackend   ConfigKey = "issue-backend"
-	ConfigKeyAllowedAuthors ConfigKey = "allowed-authors"
+	ConfigKeyMaxAgents          ConfigKey = "max-agents"
+	ConfigKeyAutostart          ConfigKey = "autostart"
+	ConfigKeyIssueBackend       ConfigKey = "issue-backend"
+	ConfigKeyAllowedAuthors     ConfigKey = "allowed-authors"
 	ConfigKeyPermissionsChecker ConfigKey = "permissions-checker"
+	ConfigKeyAgentBackend       ConfigKey = "agent-backend"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -420,6 +426,8 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 			checker = "manual"
 		}
 		return checker, nil
+	case ConfigKeyAgentBackend:
+		return p.GetAgentBackend(), nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -451,6 +459,7 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		string(ConfigKeyIssueBackend):       issueBackend,
 		string(ConfigKeyAllowedAuthors):     p.AllowedAuthors,
 		string(ConfigKeyPermissionsChecker): permissionsChecker,
+		string(ConfigKeyAgentBackend):       p.GetAgentBackend(),
 	}, nil
 }
 
@@ -503,6 +512,12 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			return errors.New("invalid value for permissions-checker: must be 'manual' or 'llm'")
 		}
 		p.PermissionsChecker = v
+	case ConfigKeyAgentBackend:
+		v := strings.ToLower(value)
+		if v != "claude" && v != "codex" {
+			return errors.New("invalid value for agent-backend: must be 'claude' or 'codex'")
+		}
+		p.AgentBackend = v
 	default:
 		return errors.New("invalid configuration key")
 	}
