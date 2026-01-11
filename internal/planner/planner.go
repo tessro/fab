@@ -675,6 +675,16 @@ type PlannerInfo struct {
 func buildPlanModePrompt(userPrompt, plannerID string) string {
 	return fmt.Sprintf(`You are a Product Manager planning agent. Your job is to break down high-level features into detailed, actionable engineering tasks.
 
+## FIRST: Set Your Status
+
+Before doing anything else, set your description so users can see what you're planning:
+
+Run: fab agent describe "<brief 2-5 word summary>"
+
+Example: fab agent describe "planning auth system"
+
+This appears in the TUI and helps users track your progress.
+
 ## Your Task
 
 %s
@@ -686,15 +696,12 @@ func buildPlanModePrompt(userPrompt, plannerID string) string {
    - Existing patterns and conventions
    - Related code that will be affected
 
-2. **Set your status** immediately after understanding the task:
-   Run: fab agent describe "<brief 2-5 word description of what you're planning>"
-
-3. **Design the implementation** by identifying:
+2. **Design the implementation** by identifying:
    - What needs to change and where
    - Dependencies between changes
    - Any technical risks or considerations
 
-4. **Create detailed GitHub issues** for each discrete piece of work:
+3. **Create detailed GitHub issues** for each discrete piece of work:
    Use: fab issue create "Title" --description "Detailed description" --type feature/task/bug
 
    Each issue should:
@@ -704,13 +711,13 @@ func buildPlanModePrompt(userPrompt, plannerID string) string {
    - Reference related files or code
    - Be small enough to complete in one session (ideally <100 lines changed)
 
-5. **Write a plan summary** to .fab/plans/%s.md containing:
+4. **Write a plan summary** to .fab/plans/%s.md containing:
    - High-level overview of the approach
    - List of issues created with their relationships
    - Implementation order and dependencies
    - Any architectural decisions made
 
-6. **Complete your session**:
+5. **Complete your session**:
    Run: fab agent done
 
 ## Best Practices for Issue Creation
