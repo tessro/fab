@@ -4,9 +4,7 @@ package agent
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -15,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/logging"
-	"github.com/tessro/fab/internal/plugin"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -91,6 +89,7 @@ type Agent struct {
 	Project   *project.Project  // Parent project
 	Worktree  *project.Worktree // Assigned worktree
 	StartedAt time.Time         // When the agent was created
+	Backend   backend.Backend   // CLI backend (e.g., ClaudeBackend)
 
 	// +checklocks:mu
 	State State // Current state
@@ -135,12 +134,19 @@ type Agent struct {
 }
 
 // New creates a new Agent in the Starting state with the default mode.
+// Uses ClaudeBackend by default.
 func New(id string, proj *project.Project, wt *project.Worktree) *Agent {
+	return NewWithBackend(id, proj, wt, &backend.ClaudeBackend{})
+}
+
+// NewWithBackend creates a new Agent with a custom backend.
+func NewWithBackend(id string, proj *project.Project, wt *project.Worktree, b backend.Backend) *Agent {
 	now := time.Now()
 	return &Agent{
 		ID:        id,
 		Project:   proj,
 		Worktree:  wt,
+		Backend:   b,
 		State:     StateStarting,
 		Mode:      DefaultMode,
 		StartedAt: now,
@@ -413,7 +419,7 @@ type AgentInfo struct {
 	UpdatedAt   time.Time
 }
 
-// Start spawns Claude Code with pipe-based I/O within the agent's worktree.
+// Start spawns the agent CLI with pipe-based I/O within the agent's worktree.
 // The agent must be in Starting state.
 // If initialPrompt is provided, it will be sent as the first message.
 func (a *Agent) Start(initialPrompt string) error {
@@ -435,79 +441,16 @@ func (a *Agent) Start(initialPrompt string) error {
 		workDir = a.Project.RepoDir()
 	}
 
-	// Get fab binary path for hook configuration
-	fabPath, err := os.Executable()
+	// Build command using the backend
+	cfg := backend.CommandConfig{
+		WorkDir:       workDir,
+		AgentID:       a.ID,
+		InitialPrompt: initialPrompt,
+	}
+	cmd, err := a.Backend.BuildCommand(cfg)
 	if err != nil {
-		fabPath = "fab" // Fall back to PATH lookup
+		return err
 	}
-
-	// Build settings with hooks that route to fab daemon
-	// Hook timeout matches our permission timeout (5 minutes) since hooks may
-	// block waiting for user input via the permission manager.
-	hookTimeoutSec := 5 * 60 // 5 minutes in seconds
-	settings := map[string]any{
-		"hooks": map[string]any{
-			"PreToolUse": []any{
-				map[string]any{
-					"matcher": "*",
-					"hooks": []any{
-						map[string]any{
-							"type":    "command",
-							"command": fabPath + " hook PreToolUse",
-							"timeout": hookTimeoutSec,
-						},
-					},
-				},
-			},
-			"PermissionRequest": []any{
-				map[string]any{
-					"matcher": "*",
-					"hooks": []any{
-						map[string]any{
-							"type":    "command",
-							"command": fabPath + " hook PermissionRequest",
-							"timeout": hookTimeoutSec,
-						},
-					},
-				},
-			},
-			"Stop": []any{
-				map[string]any{
-					"hooks": []any{
-						map[string]any{
-							"type":    "command",
-							"command": fabPath + " hook Stop",
-							"timeout": 10, // Short timeout for idle notification
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// NOTE: Permission rules are handled via the PreToolUse hook and
-	// ~/.config/fab/permissions.toml rather than inline Claude Code permissions.
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return fmt.Errorf("failed to marshal settings: %w", err)
-	}
-
-	// Build claude command with stream-json mode (no -p for multi-turn)
-	// --verbose is required when using --output-format stream-json
-	cmd := exec.Command("claude",
-		"--output-format", "stream-json",
-		"--input-format", "stream-json",
-		"--verbose",
-		"--permission-mode", "default",
-		"--plugin-dir", plugin.DefaultInstallDir(),
-		"--settings", string(settingsJSON))
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
-
-	// Set environment variable for agent identification
-	cmd.Env = append(os.Environ(), "FAB_AGENT_ID="+a.ID)
 
 	// Set up pipes
 	stdin, err := cmd.StdinPipe()
@@ -625,23 +568,11 @@ func (a *Agent) sendMessageLocked(content string) error {
 		return ErrProcessNotStarted
 	}
 
-	msg := InputMessage{
-		Type: "user",
-		Message: MessageBody{
-			Role:    "user",
-			Content: content,
-		},
-		SessionID:       "default",
-		ParentToolUseID: nil,
-	}
-
-	data, err := json.Marshal(msg)
+	data, err := a.Backend.FormatInputMessage(content, "default")
 	if err != nil {
 		return err
 	}
 
-	// Write JSON followed by newline
-	data = append(data, '\n')
 	_, err = a.stdin.Write(data)
 	return err
 }

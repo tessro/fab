@@ -225,3 +225,191 @@ func TestFlexContent_UnmarshalJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamMessage_ToChatEntries(t *testing.T) {
+	tests := []struct {
+		name      string
+		msg       *StreamMessage
+		wantCount int
+		wantRole  string
+		wantText  string
+	}{
+		{
+			name:      "nil message",
+			msg:       nil,
+			wantCount: 0,
+		},
+		{
+			name:      "no nested message",
+			msg:       &StreamMessage{Type: "system"},
+			wantCount: 0,
+		},
+		{
+			name: "text content",
+			msg: &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{Type: "text", Text: "Hello, world!"},
+					},
+				},
+			},
+			wantCount: 1,
+			wantRole:  "assistant",
+			wantText:  "Hello, world!",
+		},
+		{
+			name: "tool use",
+			msg: &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{Type: "tool_use", Name: "Bash", Input: json.RawMessage(`{"command":"ls"}`)},
+					},
+				},
+			},
+			wantCount: 1,
+			wantRole:  "tool",
+		},
+		{
+			name: "tool result",
+			msg: &StreamMessage{
+				Type: "user",
+				Message: &NestedMessage{
+					Role: "user",
+					Content: []ContentBlock{
+						{Type: "tool_result", Content: FlexContent("output here")},
+					},
+				},
+			},
+			wantCount: 1,
+			wantRole:  "tool",
+		},
+		{
+			name: "multiple blocks",
+			msg: &StreamMessage{
+				Type: "assistant",
+				Message: &NestedMessage{
+					Role: "assistant",
+					Content: []ContentBlock{
+						{Type: "text", Text: "Let me check"},
+						{Type: "tool_use", Name: "Bash", Input: json.RawMessage(`{"command":"pwd"}`)},
+					},
+				},
+			},
+			wantCount: 2,
+			wantRole:  "assistant",
+			wantText:  "Let me check",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entries := tt.msg.ToChatEntries()
+			if len(entries) != tt.wantCount {
+				t.Errorf("ToChatEntries() count = %d, want %d", len(entries), tt.wantCount)
+			}
+			if tt.wantCount > 0 && entries[0].Role != tt.wantRole {
+				t.Errorf("ToChatEntries()[0].Role = %q, want %q", entries[0].Role, tt.wantRole)
+			}
+			if tt.wantText != "" && entries[0].Content != tt.wantText {
+				t.Errorf("ToChatEntries()[0].Content = %q, want %q", entries[0].Content, tt.wantText)
+			}
+		})
+	}
+}
+
+func TestFormatToolInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		tool  string
+		input string
+		want  string
+	}{
+		{
+			name:  "Bash command",
+			tool:  "Bash",
+			input: `{"command":"ls -la"}`,
+			want:  "ls -la",
+		},
+		{
+			name:  "Read file",
+			tool:  "Read",
+			input: `{"file_path":"/tmp/test.txt"}`,
+			want:  "/tmp/test.txt",
+		},
+		{
+			name:  "Write file",
+			tool:  "Write",
+			input: `{"file_path":"/tmp/out.txt","content":"hello"}`,
+			want:  "/tmp/out.txt",
+		},
+		{
+			name:  "Edit file",
+			tool:  "Edit",
+			input: `{"file_path":"/tmp/edit.txt","old_string":"a","new_string":"b"}`,
+			want:  "/tmp/edit.txt",
+		},
+		{
+			name:  "Glob pattern",
+			tool:  "Glob",
+			input: `{"pattern":"**/*.go"}`,
+			want:  "**/*.go",
+		},
+		{
+			name:  "Glob with path",
+			tool:  "Glob",
+			input: `{"pattern":"*.go","path":"/src"}`,
+			want:  "*.go in /src",
+		},
+		{
+			name:  "Grep pattern",
+			tool:  "Grep",
+			input: `{"pattern":"TODO"}`,
+			want:  `"TODO"`,
+		},
+		{
+			name:  "Grep with path",
+			tool:  "Grep",
+			input: `{"pattern":"TODO","path":"/src"}`,
+			want:  `"TODO" in /src`,
+		},
+		{
+			name:  "Unknown tool",
+			tool:  "Custom",
+			input: `{"key":"value"}`,
+			want:  `key="value"`,
+		},
+		{
+			name:  "Long bash command truncated",
+			tool:  "Bash",
+			input: `{"command":"` + "echo 'this is a very long command that should definitely be truncated because it exceeds one hundred characters'" + `"}`,
+			want:  "echo 'this is a very long command that should definitely be truncated because it exceeds one hund...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatToolInput(tt.tool, json.RawMessage(tt.input))
+			if got != tt.want {
+				t.Errorf("FormatToolInput() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatToolInput_Empty(t *testing.T) {
+	got := FormatToolInput("Bash", nil)
+	if got != "" {
+		t.Errorf("FormatToolInput(nil) = %q, want empty string", got)
+	}
+}
+
+func TestFormatToolInput_InvalidJSON(t *testing.T) {
+	got := FormatToolInput("Bash", json.RawMessage(`{invalid`))
+	if got != "{invalid" {
+		t.Errorf("FormatToolInput(invalid) = %q, want raw input", got)
+	}
+}
