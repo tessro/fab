@@ -344,46 +344,123 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 func TestCodexBackend_FormatInputMessage(t *testing.T) {
 	b := &backend.CodexBackend{}
 
-	t.Run("basic message", func(t *testing.T) {
+	t.Run("returns error for stdin messages", func(t *testing.T) {
 		data, err := b.FormatInputMessage("hello world", "session-123")
+		if err == nil {
+			t.Fatal("FormatInputMessage() should return error")
+		}
+		if data != nil {
+			t.Errorf("FormatInputMessage() data = %v, want nil", data)
+		}
+		// Verify error message indicates why
+		if !strings.Contains(err.Error(), "exec resume") {
+			t.Errorf("error message should mention exec resume, got: %v", err)
+		}
+	})
+}
+
+func TestCodexBackend_BuildResumeCommand(t *testing.T) {
+	b := &backend.CodexBackend{}
+
+	t.Run("basic resume command", func(t *testing.T) {
+		cfg := backend.CommandConfig{
+			WorkDir:       "/tmp/test",
+			AgentID:       "test-agent",
+			InitialPrompt: "follow-up message",
+		}
+		cmd, err := b.BuildResumeCommand(cfg, "thread-123")
 		if err != nil {
-			t.Fatalf("FormatInputMessage() error = %v", err)
+			t.Fatalf("BuildResumeCommand() error = %v", err)
+		}
+		if cmd == nil {
+			t.Fatal("BuildResumeCommand() returned nil command")
+		}
+		if cmd.Dir != "/tmp/test" {
+			t.Errorf("BuildResumeCommand() Dir = %q, want %q", cmd.Dir, "/tmp/test")
 		}
 
-		// Should end with newline
-		if !strings.HasSuffix(string(data), "\n") {
-			t.Error("FormatInputMessage() should end with newline")
+		// Check args include resume and thread ID
+		args := strings.Join(cmd.Args, " ")
+		if !strings.Contains(args, "exec") {
+			t.Errorf("BuildResumeCommand() args should contain 'exec', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "resume") {
+			t.Errorf("BuildResumeCommand() args should contain 'resume', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "--json") {
+			t.Errorf("BuildResumeCommand() args should contain '--json', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "--full-auto") {
+			t.Errorf("BuildResumeCommand() args should contain '--full-auto', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "thread-123") {
+			t.Errorf("BuildResumeCommand() args should contain thread ID, got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "follow-up message") {
+			t.Errorf("BuildResumeCommand() args should contain prompt, got %v", cmd.Args)
+		}
+	})
+
+	t.Run("resume without prompt", func(t *testing.T) {
+		cfg := backend.CommandConfig{
+			WorkDir: "/tmp/test",
+			AgentID: "test-agent",
+		}
+		cmd, err := b.BuildResumeCommand(cfg, "thread-456")
+		if err != nil {
+			t.Fatalf("BuildResumeCommand() error = %v", err)
+		}
+		if cmd == nil {
+			t.Fatal("BuildResumeCommand() returned nil command")
 		}
 
-		// Parse and verify structure
-		var submission struct {
-			ID string `json:"id"`
-			Op struct {
-				Type  string `json:"type"`
-				Items []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"items"`
-			} `json:"op"`
+		// Verify thread ID is in args but no trailing prompt
+		found := false
+		for i, arg := range cmd.Args {
+			if arg == "thread-456" {
+				found = true
+				// Thread ID should be the last arg when no prompt
+				if i != len(cmd.Args)-1 {
+					t.Errorf("thread ID should be last arg when no prompt, got args: %v", cmd.Args)
+				}
+				break
+			}
 		}
-		if err := json.Unmarshal(data, &submission); err != nil {
-			t.Fatalf("failed to unmarshal: %v", err)
+		if !found {
+			t.Errorf("BuildResumeCommand() args should contain thread ID, got %v", cmd.Args)
+		}
+	})
+
+	t.Run("empty thread ID returns error", func(t *testing.T) {
+		cfg := backend.CommandConfig{
+			WorkDir: "/tmp/test",
+			AgentID: "test-agent",
+		}
+		_, err := b.BuildResumeCommand(cfg, "")
+		if err == nil {
+			t.Fatal("BuildResumeCommand() should return error for empty thread ID")
+		}
+	})
+
+	t.Run("environment includes FAB_AGENT_ID", func(t *testing.T) {
+		cfg := backend.CommandConfig{
+			WorkDir: "/tmp/test",
+			AgentID: "my-agent-123",
+		}
+		cmd, err := b.BuildResumeCommand(cfg, "thread-789")
+		if err != nil {
+			t.Fatalf("BuildResumeCommand() error = %v", err)
 		}
 
-		if submission.ID != "session-123" {
-			t.Errorf("ID = %q, want %q", submission.ID, "session-123")
+		found := false
+		for _, env := range cmd.Env {
+			if env == "FAB_AGENT_ID=my-agent-123" {
+				found = true
+				break
+			}
 		}
-		if submission.Op.Type != "user_input" {
-			t.Errorf("Op.Type = %q, want %q", submission.Op.Type, "user_input")
-		}
-		if len(submission.Op.Items) != 1 {
-			t.Fatalf("Items length = %d, want 1", len(submission.Op.Items))
-		}
-		if submission.Op.Items[0].Type != "text" {
-			t.Errorf("Items[0].Type = %q, want %q", submission.Op.Items[0].Type, "text")
-		}
-		if submission.Op.Items[0].Text != "hello world" {
-			t.Errorf("Items[0].Text = %q, want %q", submission.Op.Items[0].Text, "hello world")
+		if !found {
+			t.Error("BuildResumeCommand() env should include FAB_AGENT_ID")
 		}
 	})
 }

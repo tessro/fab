@@ -50,29 +50,32 @@ func (b *CodexBackend) ParseStreamMessage(line []byte) (*StreamMessage, error) {
 	return b.convertEvent(&event)
 }
 
-// FormatInputMessage formats a user message for Codex stdin.
-// Codex uses a submission queue protocol with id and op fields.
+// FormatInputMessage returns an error for Codex because it does not support
+// stdin messages during a session. Multi-turn conversations require using
+// `codex exec resume <thread-id>` to spawn a new process for follow-up messages.
 func (b *CodexBackend) FormatInputMessage(content string, sessionID string) ([]byte, error) {
-	submission := codexSubmission{
-		ID: sessionID,
-		Op: codexOp{
-			Type: "user_input",
-			Items: []codexInputItem{
-				{
-					Type: "text",
-					Text: content,
-				},
-			},
-		},
+	return nil, fmt.Errorf("codex backend does not support stdin messages; use exec resume instead")
+}
+
+// BuildResumeCommand creates an exec.Cmd for resuming a Codex session with a follow-up message.
+// Codex requires spawning `codex exec resume <thread-id> "<message>"` for multi-turn conversations.
+func (b *CodexBackend) BuildResumeCommand(cfg CommandConfig, threadID string) (*exec.Cmd, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID is required for resume")
 	}
 
-	data, err := json.Marshal(submission)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal codex submission: %w", err)
+	args := []string{"exec", "resume", "--json", "--full-auto", threadID}
+
+	// Add follow-up prompt if provided
+	if cfg.InitialPrompt != "" {
+		args = append(args, cfg.InitialPrompt)
 	}
 
-	// Add newline for JSONL format
-	return append(data, '\n'), nil
+	cmd := exec.Command("codex", args...)
+	cmd.Dir = cfg.WorkDir
+	cmd.Env = append(os.Environ(), "FAB_AGENT_ID="+cfg.AgentID)
+
+	return cmd, nil
 }
 
 // HookSettings returns CLI-specific hook configuration.
@@ -231,24 +234,6 @@ type codexUsage struct {
 	InputTokens       int `json:"input_tokens"`
 	CachedInputTokens int `json:"cached_input_tokens"`
 	OutputTokens      int `json:"output_tokens"`
-}
-
-// codexSubmission represents a submission to Codex stdin.
-type codexSubmission struct {
-	ID string   `json:"id"`
-	Op codexOp  `json:"op"`
-}
-
-// codexOp represents an operation in a submission.
-type codexOp struct {
-	Type  string           `json:"type"`
-	Items []codexInputItem `json:"items"`
-}
-
-// codexInputItem represents an input item in a submission.
-type codexInputItem struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
 }
 
 // Compile-time check that CodexBackend implements Backend.
