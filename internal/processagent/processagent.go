@@ -54,6 +54,10 @@ type Config struct {
 	// ProcessMessage is called for each parsed StreamMessage.
 	// Return true to stop the read loop early.
 	ProcessMessage func(msg *agent.StreamMessage) bool
+
+	// ParseMessage parses a JSONL line from stdout into a StreamMessage.
+	// If nil, uses the default Claude backend parser.
+	ParseMessage func(line []byte) (*agent.StreamMessage, error)
 }
 
 // ProcessAgent manages a Claude Code subprocess with pipe-based I/O.
@@ -435,8 +439,14 @@ func (p *ProcessAgent) runReadLoop() {
 			continue
 		}
 
-		// Parse stream message
-		msg, err := agent.ParseStreamMessage(line)
+		// Parse stream message using configured parser or default
+		var msg *agent.StreamMessage
+		var err error
+		if p.config.ParseMessage != nil {
+			msg, err = p.config.ParseMessage(line)
+		} else {
+			msg, err = agent.ParseStreamMessage(line)
+		}
 		if err != nil {
 			log.Warn("ProcessAgent.runReadLoop: parse error", "error", err, "line_num", lineCount)
 			continue

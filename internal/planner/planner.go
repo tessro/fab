@@ -98,6 +98,7 @@ func New(id, project, workDir, prompt string, b backend.Backend) *Planner {
 		ProcessMessage: func(msg *agent.StreamMessage) bool {
 			return p.processMessage(msg)
 		},
+		ParseMessage: b.ParseStreamMessage,
 	}
 
 	p.ProcessAgent = processagent.New(config)

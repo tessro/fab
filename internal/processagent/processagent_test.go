@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tessro/fab/internal/agent"
 )
 
 func TestNewProcessAgent(t *testing.T) {
@@ -185,4 +187,63 @@ func TestStartedAt(t *testing.T) {
 	if startedAt.Before(before) || startedAt.After(after) {
 		t.Errorf("StartedAt() = %v, want between %v and %v", startedAt, before, after)
 	}
+}
+
+func TestParseMessageCallback(t *testing.T) {
+	var parserCalled bool
+	var mu sync.Mutex
+
+	config := Config{
+		WorkDir:   t.TempDir(),
+		LogPrefix: "test",
+		BuildCommand: func() (*exec.Cmd, error) {
+			// Output a JSON line that will be parsed
+			return exec.Command("echo", `{"type":"test"}`), nil
+		},
+		ParseMessage: func(line []byte) (*agent.StreamMessage, error) {
+			mu.Lock()
+			parserCalled = true
+			mu.Unlock()
+			return nil, nil
+		},
+	}
+
+	p := New(config)
+	if err := p.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for process to complete and parse output
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	called := parserCalled
+	mu.Unlock()
+
+	if !called {
+		t.Error("expected ParseMessage callback to be called")
+	}
+}
+
+func TestParseMessageDefaultFallback(t *testing.T) {
+	// When ParseMessage is nil, should use default parser without panic
+	config := Config{
+		WorkDir:   t.TempDir(),
+		LogPrefix: "test",
+		BuildCommand: func() (*exec.Cmd, error) {
+			// Output valid Claude stream JSON
+			return exec.Command("echo", `{"type":"assistant","message":{"role":"assistant","content":[]}}`), nil
+		},
+		// ParseMessage is nil - should use default
+	}
+
+	p := New(config)
+	if err := p.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for process to complete - should not panic
+	time.Sleep(100 * time.Millisecond)
+
+	// If we get here without panic, the default fallback worked
 }

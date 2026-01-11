@@ -69,6 +69,7 @@ func New(workDir string, project string, b backend.Backend, allowedPatterns []st
 		BuildCommand: func() (*exec.Cmd, error) {
 			return m.buildCommand()
 		},
+		ParseMessage: b.ParseStreamMessage,
 	}
 
 	m.ProcessAgent = processagent.New(config)
