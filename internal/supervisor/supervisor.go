@@ -41,8 +41,8 @@ type Supervisor struct {
 	// +checklocks:mu
 	managers map[string]*manager.Manager
 
-	// Planner agents for implementation planning
-	// +checklocks:mu
+	// Planner agents for implementation planning.
+	// Safe for concurrent access via Manager's internal synchronization.
 	planners *planner.Manager
 
 	shutdownCh chan struct{} // Created at init, closed to signal shutdown
