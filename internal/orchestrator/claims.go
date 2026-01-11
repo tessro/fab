@@ -15,7 +15,8 @@ var (
 // Claims are held in memory and cleared on daemon restart.
 // All methods are safe for concurrent use.
 type ClaimRegistry struct {
-	mu     sync.RWMutex
+	mu sync.RWMutex
+	// +checklocks:mu
 	claims map[string]string // ticketID -> agentID
 }
 

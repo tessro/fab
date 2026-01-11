@@ -18,7 +18,8 @@ var (
 // UserQuestionManager tracks pending user questions with response channels.
 // The hook command blocks waiting for a response, which is sent via the channel.
 type UserQuestionManager struct {
-	mu      sync.RWMutex
+	mu sync.RWMutex
+	// +checklocks:mu
 	pending map[string]*pendingQuestion
 	timeout time.Duration
 }

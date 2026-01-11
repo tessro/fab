@@ -32,8 +32,10 @@ type Client struct {
 	reqID atomic.Uint64
 
 	// Event streaming via dedicated connection
-	eventMu   sync.Mutex
+	eventMu sync.Mutex
+	// +checklocks:eventMu
 	eventConn net.Conn
+	// +checklocks:eventMu
 	eventDone chan struct{}
 }
 

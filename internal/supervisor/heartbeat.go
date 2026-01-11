@@ -51,7 +51,8 @@ type HeartbeatMonitor struct {
 	timeout       time.Duration
 	killTimeout   time.Duration
 
-	mu       sync.RWMutex
+	mu sync.RWMutex
+	// +checklocks:mu
 	trackers map[string]*agentHeartbeat // agent ID -> tracker
 
 	stopCh chan struct{}
