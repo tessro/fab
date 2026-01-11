@@ -269,8 +269,8 @@ footer a:hover {
 .social-icons {
     display: flex;
     justify-content: center;
-    gap: 16px;
-    margin-top: 16px;
+    gap: 24px;
+    margin-top: 24px;
 }
 
 .social-icons a {
@@ -283,7 +283,8 @@ footer a:hover {
     border-radius: 50%;
     color: var(--subtext1);
     text-decoration: none;
-    transition: transform 0.2s, background-color 0.2s, color 0.2s;
+    opacity: 0.6;
+    transition: transform 0.2s, background-color 0.2s, color 0.2s, opacity 0.2s;
 }
 
 .social-icons a:hover {
@@ -291,6 +292,7 @@ footer a:hover {
     background-color: var(--surface1);
     color: var(--mauve);
     text-decoration: none;
+    opacity: 1;
 }
 
 /* Docs Page Styles */
