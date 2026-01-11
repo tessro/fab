@@ -3,6 +3,8 @@ package supervisor
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/orchestrator"
@@ -17,6 +19,12 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 
 	if doneReq.AgentID == "" {
 		return errorResponse(req, "agent_id is required")
+	}
+
+	// Check if this is a planner agent (agent ID starts with "plan:")
+	if strings.HasPrefix(doneReq.AgentID, "plan:") {
+		plannerID := strings.TrimPrefix(doneReq.AgentID, "plan:")
+		return s.handlePlannerDone(ctx, req, plannerID, doneReq.Error)
 	}
 
 	// Find the agent and its orchestrator
@@ -146,4 +154,41 @@ func (s *Supervisor) handleRejectAction(_ context.Context, req *daemon.Request) 
 	s.mu.RUnlock()
 
 	return errorResponse(req, "action not found")
+}
+
+// handlePlannerDone handles completion signals from planner agents.
+// It stops the planner and deletes it from the manager, triggering
+// the appropriate cleanup and TUI events.
+func (s *Supervisor) handlePlannerDone(_ context.Context, req *daemon.Request, plannerID, errMsg string) *daemon.Response {
+	p, err := s.planners.Get(plannerID)
+	if err != nil {
+		return errorResponse(req, fmt.Sprintf("planner not found: %s", plannerID))
+	}
+
+	// Log completion
+	if errMsg != "" {
+		slog.Warn("planner completed with error",
+			"planner", plannerID,
+			"project", p.Project(),
+			"error", errMsg,
+		)
+	} else {
+		slog.Info("planner completed successfully",
+			"planner", plannerID,
+			"project", p.Project(),
+		)
+	}
+
+	// Stop the planner gracefully
+	if err := s.planners.Stop(plannerID); err != nil {
+		slog.Warn("error stopping planner", "planner", plannerID, "error", err)
+		// Continue with deletion even if stop fails
+	}
+
+	// Delete the planner from manager (triggers EventDeleted for TUI)
+	if err := s.planners.Delete(plannerID); err != nil {
+		slog.Warn("error deleting planner", "planner", plannerID, "error", err)
+	}
+
+	return successResponse(req, daemon.AgentDoneResponse{})
 }
