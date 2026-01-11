@@ -196,6 +196,18 @@ func extractPlannerID(agentID string) string {
 	return agentID
 }
 
+// backendStyle returns the style for a backend name.
+func backendStyle(backend string) lipgloss.Style {
+	switch backend {
+	case "claude":
+		return agentBackendClaudeStyle
+	case "codex":
+		return agentBackendCodexStyle
+	default:
+		return lipgloss.NewStyle().Foreground(mutedColor)
+	}
+}
+
 // renderAgent renders a single agent row.
 func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) string {
 	isSelected := index == l.selected
@@ -232,6 +244,12 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	// Project name
 	projectStr := agentProjectStyle.Inherit(bgStyle).Render(agent.Project)
 
+	// Backend name (with color coding)
+	backendStr := ""
+	if agent.Backend != "" {
+		backendStr = backendStyle(agent.Backend).Inherit(bgStyle).Render(agent.Backend)
+	}
+
 	// Task (if any)
 	taskStr := ""
 	if agent.Task != "" {
@@ -248,6 +266,9 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 		idStr, " ",
 		projectStr,
 	)
+	if backendStr != "" {
+		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", backendStr)
+	}
 	if taskStr != "" {
 		left = lipgloss.JoinHorizontal(lipgloss.Center, left, " ", taskStr)
 	}
@@ -301,17 +322,19 @@ func (l AgentList) renderColumnHeader(width int) string {
 	// Column header labels styled with muted color
 	headerStyle := lipgloss.NewStyle().Foreground(mutedColor)
 
-	// Build header: " " (state placeholder) | AGENT | PROJECT
+	// Build header: " " (state placeholder) | AGENT | PROJECT | BACKEND
 	stateHeader := headerStyle.Render(" ") // Single space placeholder for state icon
 	agentHeader := headerStyle.Render("AGENT")
 	projectHeader := headerStyle.Render("PROJECT")
+	backendHeader := headerStyle.Render("BACKEND")
 	timeHeader := headerStyle.Render("TIME")
 
 	// Compose left part
 	left := lipgloss.JoinHorizontal(lipgloss.Center,
 		stateHeader, " ",
 		agentHeader, " ",
-		projectHeader,
+		projectHeader, " ",
+		backendHeader,
 	)
 
 	leftWidth := lipgloss.Width(left)

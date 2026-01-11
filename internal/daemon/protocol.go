@@ -162,6 +162,7 @@ type AgentStatus struct {
 	StartedAt   time.Time `json:"started_at"`
 	Task        string    `json:"task,omitempty"`        // Current task ID if known
 	Description string    `json:"description,omitempty"` // Human-readable description
+	Backend     string    `json:"backend,omitempty"`     // CLI backend name (e.g., "claude", "codex")
 }
 
 // ProjectAddRequest is the payload for project.add requests.

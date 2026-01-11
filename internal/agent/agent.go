@@ -393,6 +393,11 @@ func (a *Agent) Info() AgentInfo {
 		worktreePath = a.Worktree.Path
 	}
 
+	backendName := ""
+	if a.Backend != nil {
+		backendName = a.Backend.Name()
+	}
+
 	return AgentInfo{
 		ID:          a.ID,
 		Project:     projectName,
@@ -403,6 +408,7 @@ func (a *Agent) Info() AgentInfo {
 		Description: a.Description,
 		StartedAt:   a.StartedAt,
 		UpdatedAt:   a.UpdatedAt,
+		Backend:     backendName,
 	}
 }
 
@@ -417,6 +423,7 @@ type AgentInfo struct {
 	Description string
 	StartedAt   time.Time
 	UpdatedAt   time.Time
+	Backend     string // CLI backend name (e.g., "claude", "codex")
 }
 
 // Start spawns the agent CLI with pipe-based I/O within the agent's worktree.

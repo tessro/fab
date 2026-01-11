@@ -45,6 +45,7 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 				StartedAt:   mgr.StartedAt(),
 				Task:        "",
 				Description: "Manager",
+				Backend:     "claude", // Manager always uses Claude Code
 			})
 		}
 	}
@@ -60,6 +61,7 @@ func (s *Supervisor) handleAgentList(ctx context.Context, req *daemon.Request) *
 			StartedAt:   info.StartedAt,
 			Task:        info.Task,
 			Description: info.Description,
+			Backend:     info.Backend,
 		})
 	}
 

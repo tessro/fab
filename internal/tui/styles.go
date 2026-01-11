@@ -120,6 +120,13 @@ var (
 	agentDurationStyle = lipgloss.NewStyle().
 				Foreground(mutedColor)
 
+	// Backend styles - distinct color per backend
+	agentBackendClaudeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#60A5FA")) // Light blue for Claude
+
+	agentBackendCodexStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#34D399")) // Emerald for Codex
+
 	chatEmptyStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
 			Padding(1, 2)

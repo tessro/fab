@@ -136,6 +136,7 @@ func (m Model) fetchAgentList() tea.Cmd {
 					Worktree:    p.WorkDir,
 					StartedAt:   startedAt,
 					Description: "Planner",
+					Backend:     "claude", // Planners always use Claude Code
 				})
 			}
 		} else if err != nil {
