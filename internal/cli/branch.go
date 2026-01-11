@@ -126,9 +126,11 @@ func runBranchCleanup(cmd *cobra.Command, args []string) error {
 
 // getMergedFabBranches returns fab/* branches that have been merged to main.
 // If remote is true, returns remote branches (origin/fab/*), otherwise local (fab/*).
+// This function handles both regular merges and rebased merges by using git cherry
+// to detect branches where all commits have equivalent commits in main.
 func getMergedFabBranches(repoDir string, remote bool) ([]string, error) {
-	// Use git branch --merged to find merged branches
-	args := []string{"branch", "--merged", "origin/main"}
+	// List all branches matching fab/*
+	args := []string{"branch"}
 	if remote {
 		args = append(args, "-r")
 	}
@@ -150,20 +152,71 @@ func getMergedFabBranches(repoDir string, remote bool) ([]string, error) {
 		}
 
 		// Filter for fab/* branches
+		var isFabBranch bool
 		if remote {
-			// Remote branches are like "origin/fab/xxx"
-			if strings.HasPrefix(line, "origin/fab/") {
-				branches = append(branches, line)
-			}
+			isFabBranch = strings.HasPrefix(line, "origin/fab/")
 		} else {
-			// Local branches are like "fab/xxx"
-			if strings.HasPrefix(line, "fab/") {
-				branches = append(branches, line)
-			}
+			isFabBranch = strings.HasPrefix(line, "fab/")
+		}
+		if !isFabBranch {
+			continue
+		}
+
+		// Check if branch is merged using git cherry
+		// A branch is merged if all its commits have equivalents in main
+		if isBranchMerged(repoDir, line) {
+			branches = append(branches, line)
 		}
 	}
 
 	return branches, nil
+}
+
+// isBranchMerged checks if a branch has been merged to origin/main.
+// It uses git cherry to detect commits that have equivalent commits in main,
+// which handles both regular merges and rebased merges.
+func isBranchMerged(repoDir, branch string) bool {
+	// Get the merge base between the branch and main
+	mergeBaseCmd := exec.Command("git", "merge-base", branch, "origin/main")
+	mergeBaseCmd.Dir = repoDir
+	mergeBaseOutput, err := mergeBaseCmd.Output()
+	if err != nil {
+		return false
+	}
+	mergeBase := strings.TrimSpace(string(mergeBaseOutput))
+	if mergeBase == "" {
+		return false
+	}
+
+	// Use git cherry to find commits not yet in main
+	// Commits with "+" prefix are NOT in main
+	// Commits with "-" prefix have equivalent commits in main
+	// If there are no "+" commits, the branch is merged
+	cherryCmd := exec.Command("git", "cherry", "origin/main", branch, mergeBase)
+	cherryCmd.Dir = repoDir
+	cherryOutput, err := cherryCmd.Output()
+	if err != nil {
+		return false
+	}
+
+	// If output is empty, branch has no unique commits (already at merge base)
+	output := strings.TrimSpace(string(cherryOutput))
+	if output == "" {
+		return true
+	}
+
+	// Check if any commits are not yet in main (have "+" prefix)
+	cherryScanner := bufio.NewScanner(strings.NewReader(output))
+	for cherryScanner.Scan() {
+		line := cherryScanner.Text()
+		if strings.HasPrefix(line, "+ ") {
+			// Found a commit not in main
+			return false
+		}
+	}
+
+	// All commits have equivalents in main
+	return true
 }
 
 func init() {
