@@ -52,6 +52,9 @@ type Planner struct {
 	// Initial prompt for the planning task
 	prompt string
 
+	// Compiled plan prompt (includes instructions + user prompt)
+	planPrompt string
+
 	// Backend for CLI command building
 	backend backend.Backend
 
@@ -72,15 +75,16 @@ type Planner struct {
 
 // New creates a new planner.
 func New(id, project, workDir, prompt string, b backend.Backend) *Planner {
-	p := &Planner{
-		id:      id,
-		project: project,
-		prompt:  prompt,
-		backend: b,
-	}
-
 	// Build the plan prompt
 	planPrompt := buildPlanModePrompt(prompt, id)
+
+	p := &Planner{
+		id:         id,
+		project:    project,
+		prompt:     prompt,
+		planPrompt: planPrompt,
+		backend:    b,
+	}
 
 	config := processagent.Config{
 		WorkDir:       workDir,
@@ -169,10 +173,13 @@ func (p *Planner) buildCommand() (*exec.Cmd, error) {
 	// Build command using backend
 	// FAB_AGENT_ID uses "plan:" prefix to match TUI agent ID format and enable
 	// permission handling (including LLM auth) via the standard agent flow.
+	// InitialPrompt is passed to the backend so it can be included as a command-line
+	// argument for backends that require it (e.g., Codex).
 	return p.backend.BuildCommand(backend.CommandConfig{
-		WorkDir:   p.WorkDir(),
-		AgentID:   "plan:" + p.id,
-		PluginDir: plugin.DefaultInstallDir(),
+		WorkDir:       p.WorkDir(),
+		AgentID:       "plan:" + p.id,
+		InitialPrompt: p.planPrompt,
+		PluginDir:     plugin.DefaultInstallDir(),
 	})
 }
 
