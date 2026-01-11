@@ -38,7 +38,7 @@ func TestRegistry_Add(t *testing.T) {
 	}
 
 	// Add project
-	p, err := r.Add(remoteURL, "myproject", 0, false)
+	p, err := r.Add(remoteURL, "myproject", 0, false, "")
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -75,11 +75,11 @@ func TestRegistry_AddDuplicate(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0, false); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0, false, ""); err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0, false); err != ErrProjectExists {
+	if _, err := r.Add(remoteURL, "myproject", 0, false, ""); err != ErrProjectExists {
 		t.Errorf("second Add() error = %v, want ErrProjectExists", err)
 	}
 }
@@ -93,7 +93,7 @@ func TestRegistry_AddEmptyURL(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add("", "test", 0, false); err != ErrInvalidRemoteURL {
+	if _, err := r.Add("", "test", 0, false, ""); err != ErrInvalidRemoteURL {
 		t.Errorf("Add() error = %v, want ErrInvalidRemoteURL", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestRegistry_AddDefaultName(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	p, err := r.Add(remoteURL, "", 0, false)
+	p, err := r.Add(remoteURL, "", 0, false, "")
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRegistry_Remove(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 0, false); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 0, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -165,7 +165,7 @@ func TestRegistry_Get(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 5, false); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 5, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -206,10 +206,10 @@ func TestRegistry_List(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add("git@github.com:user/project1.git", "project1", 0, false); err != nil {
+	if _, err := r.Add("git@github.com:user/project1.git", "project1", 0, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	if _, err := r.Add("git@github.com:user/project2.git", "project2", 0, false); err != nil {
+	if _, err := r.Add("git@github.com:user/project2.git", "project2", 0, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -229,7 +229,7 @@ func TestRegistry_Update(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r.Add(remoteURL, "myproject", 3, false); err != nil {
+	if _, err := r.Add(remoteURL, "myproject", 3, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -255,7 +255,7 @@ func TestRegistry_Persistence(t *testing.T) {
 		t.Fatalf("NewWithPath() error = %v", err)
 	}
 
-	if _, err := r1.Add(remoteURL, "myproject", 7, false); err != nil {
+	if _, err := r1.Add(remoteURL, "myproject", 7, false, ""); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -460,7 +460,7 @@ max-agents = 2
 	}
 
 	// Add a new project (this triggers save)
-	_, err = r.Add("git@github.com:user/new-project.git", "new-project", 3, false)
+	_, err = r.Add("git@github.com:user/new-project.git", "new-project", 3, false, "")
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -545,6 +545,83 @@ max-agents = 1
 	// Verify project update was saved
 	if !strings.Contains(configStr, `max-agents = 5`) {
 		t.Errorf("Config should contain max-agents = 5, got:\n%s", configStr)
+	}
+}
+
+func TestRegistry_AddWithBackend(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	remoteURL := "git@github.com:user/myproject.git"
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Add project with backend
+	p, err := r.Add(remoteURL, "myproject", 0, false, "codex")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if p.AgentBackend != "codex" {
+		t.Errorf("AgentBackend = %q, want %q", p.AgentBackend, "codex")
+	}
+
+	// Verify persistence
+	r2, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	p2, err := r2.Get("myproject")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if p2.AgentBackend != "codex" {
+		t.Errorf("Persisted AgentBackend = %q, want %q", p2.AgentBackend, "codex")
+	}
+}
+
+func TestRegistry_AddInvalidBackend(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	remoteURL := "git@github.com:user/myproject.git"
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Try to add project with invalid backend
+	_, err = r.Add(remoteURL, "myproject", 0, false, "invalid-backend")
+	if err == nil {
+		t.Error("Add() should return error for invalid backend")
+	}
+	if !strings.Contains(err.Error(), "invalid backend") {
+		t.Errorf("Error message should mention invalid backend, got: %v", err)
+	}
+}
+
+func TestRegistry_AddBackendCaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+	remoteURL := "git@github.com:user/myproject.git"
+
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Add project with uppercase backend - should be normalized
+	p, err := r.Add(remoteURL, "myproject", 0, false, "CLAUDE")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if p.AgentBackend != "claude" {
+		t.Errorf("AgentBackend = %q, want %q (lowercase)", p.AgentBackend, "claude")
 	}
 }
 

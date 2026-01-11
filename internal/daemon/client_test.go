@@ -388,7 +388,7 @@ func TestClient_ProjectOperations(t *testing.T) {
 	defer c.Close()
 
 	t.Run("add", func(t *testing.T) {
-		result, err := c.ProjectAdd("/path/to/test", "test-proj", 3, false)
+		result, err := c.ProjectAdd("/path/to/test", "test-proj", 3, false, "")
 		if err != nil {
 			t.Fatalf("project add: %v", err)
 		}

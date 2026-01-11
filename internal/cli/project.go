@@ -20,6 +20,7 @@ var projectCmd = &cobra.Command{
 var projectAddName string
 var projectAddMaxAgents int
 var projectAddAutostart bool
+var projectAddBackend string
 
 var projectAddCmd = &cobra.Command{
 	Use:   "add <path>",
@@ -85,7 +86,7 @@ var projectConfigShowCmd = &cobra.Command{
 var projectConfigGetCmd = &cobra.Command{
 	Use:   "get <project> <key>",
 	Short: "Get a configuration value",
-	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend, permissions-checker",
+	Long:  "Get a single configuration value for a project.\n\nValid keys: max-agents, autostart, issue-backend, permissions-checker, agent-backend",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runProjectConfigGet,
 }
@@ -93,7 +94,7 @@ var projectConfigGetCmd = &cobra.Command{
 var projectConfigSetCmd = &cobra.Command{
 	Use:   "set <project> <key> <value>",
 	Short: "Set a configuration value",
-	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents           Maximum concurrent agents (1-100)\n  autostart            Start orchestration when daemon starts (true/false)\n  issue-backend        Issue backend type (tk/gh/github)\n  permissions-checker  Permission authorization method (manual/llm)",
+	Long:  "Set a single configuration value for a project.\n\nValid keys:\n  max-agents           Maximum concurrent agents (1-100)\n  autostart            Start orchestration when daemon starts (true/false)\n  issue-backend        Issue backend type (tk/gh/github)\n  permissions-checker  Permission authorization method (manual/llm)\n  agent-backend        Agent CLI backend (claude/codex)",
 	Args:  cobra.ExactArgs(3),
 	RunE:  runProjectConfigSet,
 }
@@ -135,7 +136,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	client := MustConnect()
 	defer client.Close()
 
-	result, err := client.ProjectAdd(remoteURL, projectAddName, projectAddMaxAgents, projectAddAutostart)
+	result, err := client.ProjectAdd(remoteURL, projectAddName, projectAddMaxAgents, projectAddAutostart, projectAddBackend)
 	if err != nil {
 		return fmt.Errorf("add project: %w", err)
 	}
@@ -146,6 +147,9 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Max agents: %d\n", result.MaxAgents)
 	if projectAddAutostart {
 		fmt.Println("   Autostart: enabled")
+	}
+	if projectAddBackend != "" {
+		fmt.Printf("   Backend: %s\n", projectAddBackend)
 	}
 
 	return nil
@@ -183,13 +187,13 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tREMOTE\tAGENTS\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tBACKEND\tAGENTS\tSTATUS\tREMOTE")
 	for _, p := range result.Projects {
 		status := "stopped"
 		if p.Running {
 			status = "running"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", p.Name, p.RemoteURL, p.MaxAgents, status)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", p.Name, p.Backend, p.MaxAgents, status, p.RemoteURL)
 	}
 	_ = w.Flush()
 
@@ -327,6 +331,7 @@ func runProjectConfigShow(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(w, "  autostart:\t%v\n", result.Config["autostart"])
 	_, _ = fmt.Fprintf(w, "  issue-backend:\t%v\n", result.Config["issue-backend"])
 	_, _ = fmt.Fprintf(w, "  permissions-checker:\t%v\n", result.Config["permissions-checker"])
+	_, _ = fmt.Fprintf(w, "  agent-backend:\t%v\n", result.Config["agent-backend"])
 	_ = w.Flush()
 
 	return nil
@@ -368,6 +373,7 @@ func init() {
 	projectAddCmd.Flags().StringVarP(&projectAddName, "name", "n", "", "Project name (default: directory name)")
 	projectAddCmd.Flags().IntVarP(&projectAddMaxAgents, "max-agents", "m", 3, "Maximum concurrent agents")
 	projectAddCmd.Flags().BoolVar(&projectAddAutostart, "autostart", false, "Start orchestration when daemon starts")
+	projectAddCmd.Flags().StringVarP(&projectAddBackend, "backend", "b", "", "Agent backend (claude/codex, default: claude)")
 
 	projectStartCmd.Flags().BoolVarP(&projectStartAll, "all", "a", false, "Start all projects")
 	projectStopCmd.Flags().BoolVarP(&projectStopAll, "all", "a", false, "Stop all projects")

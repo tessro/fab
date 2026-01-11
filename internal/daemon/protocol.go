@@ -171,6 +171,7 @@ type ProjectAddRequest struct {
 	Name      string `json:"name,omitempty"`       // Optional override
 	MaxAgents int    `json:"max_agents,omitempty"` // Default: 3
 	Autostart bool   `json:"autostart,omitempty"`  // Start orchestration when daemon starts
+	Backend   string `json:"backend,omitempty"`    // Agent backend (claude/codex)
 }
 
 // ProjectAddResponse is the payload for project.add responses.
@@ -198,6 +199,7 @@ type ProjectInfo struct {
 	RemoteURL string `json:"remote_url"`
 	MaxAgents int    `json:"max_agents"`
 	Running   bool   `json:"running"`
+	Backend   string `json:"backend"` // Agent backend (claude/codex)
 }
 
 // ProjectSetRequest is the payload for project.set requests.

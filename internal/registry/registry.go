@@ -243,7 +243,7 @@ func (r *Registry) save() error {
 
 // Add registers a new project.
 // If name is empty, it defaults to the repository name from the URL.
-func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*project.Project, error) {
+func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool, backend string) (*project.Project, error) {
 	// Validate remote URL
 	if err := configPkg.ValidateRemoteURL(remoteURL); err != nil {
 		return nil, ErrInvalidRemoteURL
@@ -269,6 +269,14 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*
 		return nil, err
 	}
 
+	// Validate and normalize backend
+	if backend != "" {
+		backend = strings.ToLower(backend)
+		if backend != "claude" && backend != "codex" {
+			return nil, errors.New("invalid backend: must be 'claude' or 'codex'")
+		}
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -280,6 +288,7 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool) (*
 	p := project.NewProject(name, remoteURL)
 	p.MaxAgents = maxAgents
 	p.Autostart = autostart
+	p.AgentBackend = backend
 	p.BaseDir = r.projectBaseDir // Empty unless set for testing
 	r.projects[name] = p
 

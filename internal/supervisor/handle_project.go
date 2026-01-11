@@ -22,7 +22,7 @@ func (s *Supervisor) handleProjectAdd(ctx context.Context, req *daemon.Request) 
 	}
 
 	// Register project in config first (validates and generates name)
-	proj, err := s.registry.Add(addReq.RemoteURL, addReq.Name, addReq.MaxAgents, addReq.Autostart)
+	proj, err := s.registry.Add(addReq.RemoteURL, addReq.Name, addReq.MaxAgents, addReq.Autostart, addReq.Backend)
 	if err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to add project: %v", err))
 	}
@@ -94,6 +94,7 @@ func (s *Supervisor) handleProjectList(ctx context.Context, req *daemon.Request)
 			RemoteURL: p.RemoteURL,
 			MaxAgents: p.MaxAgents,
 			Running:   p.IsRunning(),
+			Backend:   p.GetAgentBackend(),
 		})
 	}
 
@@ -161,7 +162,7 @@ func (s *Supervisor) handleProjectConfigGet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(getReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker)", getReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker, agent-backend)", getReq.Key))
 	}
 
 	value, err := s.registry.GetConfigValue(getReq.Name, registry.ConfigKey(getReq.Key))
@@ -191,7 +192,7 @@ func (s *Supervisor) handleProjectConfigSet(ctx context.Context, req *daemon.Req
 	}
 
 	if !registry.IsValidConfigKey(setReq.Key) {
-		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker)", setReq.Key))
+		return errorResponse(req, fmt.Sprintf("invalid config key: %s (valid keys: max-agents, autostart, issue-backend, permissions-checker, agent-backend)", setReq.Key))
 	}
 
 	if err := s.registry.SetConfigValue(setReq.Name, registry.ConfigKey(setReq.Key), setReq.Value); err != nil {
