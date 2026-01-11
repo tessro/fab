@@ -892,6 +892,18 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		}
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
 
+	case "planner_info":
+		// Update planner description in the list
+		tuiAgentID := plannerAgentID(event.AgentID)
+		agents := m.agentList.Agents()
+		for i := range agents {
+			if agents[i].ID == tuiAgentID {
+				agents[i].Description = event.Description
+				m.agentList.SetAgents(agents)
+				break
+			}
+		}
+
 	case "planner_deleted":
 		// A planner was deleted - remove from list
 		tuiAgentID := plannerAgentID(event.AgentID)

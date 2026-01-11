@@ -178,12 +178,13 @@ func (s *Supervisor) handlePlanList(_ context.Context, req *daemon.Request) *dae
 			startedAt = info.StartedAt.Format(time.RFC3339)
 		}
 		statuses = append(statuses, daemon.PlannerStatus{
-			ID:        info.ID,
-			Project:   info.Project,
-			State:     string(info.State),
-			WorkDir:   info.WorkDir,
-			StartedAt: startedAt,
-			PlanFile:  info.PlanFile,
+			ID:          info.ID,
+			Project:     info.Project,
+			State:       string(info.State),
+			WorkDir:     info.WorkDir,
+			StartedAt:   startedAt,
+			PlanFile:    info.PlanFile,
+			Description: info.Description,
 		})
 	}
 

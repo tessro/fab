@@ -637,12 +637,13 @@ type PlanListResponse struct {
 
 // PlannerStatus contains planner agent status info.
 type PlannerStatus struct {
-	ID        string `json:"id"`
-	Project   string `json:"project"`
-	State     string `json:"state"` // "stopped", "starting", "running", "stopping"
-	WorkDir   string `json:"workdir"`
-	StartedAt string `json:"started_at"` // RFC3339 format
-	PlanFile  string `json:"plan_file,omitempty"` // Path to generated plan (if complete)
+	ID          string `json:"id"`
+	Project     string `json:"project"`
+	State       string `json:"state"` // "stopped", "starting", "running", "stopping"
+	WorkDir     string `json:"workdir"`
+	StartedAt   string `json:"started_at"` // RFC3339 format
+	PlanFile    string `json:"plan_file,omitempty"`   // Path to generated plan (if complete)
+	Description string `json:"description,omitempty"` // User-set description
 }
 
 // PlanSendMessageRequest is the payload for plan.send_message requests.

@@ -193,6 +193,8 @@ func (m *PlannerModel) handleStreamEvent(event *daemon.StreamEvent) {
 		}
 	case "planner_state":
 		// Could update a status indicator
+	case "planner_info":
+		// Description changed - could update a status indicator if needed
 	case "plan_complete":
 		if event.AgentID == m.plannerID {
 			m.planComplete = true

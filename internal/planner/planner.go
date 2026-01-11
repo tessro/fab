@@ -63,6 +63,8 @@ type Planner struct {
 	// Callback for plan completion
 	// +checklocks:mu
 	onPlanComplete func(planFile string)
+	// +checklocks:mu
+	onInfoChange func()
 }
 
 // New creates a new planner.
@@ -114,8 +116,14 @@ func (p *Planner) PlanFile() string {
 // SetDescription sets the planner's description.
 func (p *Planner) SetDescription(desc string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.description = desc
+	callback := p.onInfoChange
+	p.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock
+	if callback != nil {
+		callback()
+	}
 }
 
 // OnPlanComplete sets a callback for when the plan is complete.
@@ -123,6 +131,13 @@ func (p *Planner) OnPlanComplete(fn func(planFile string)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onPlanComplete = fn
+}
+
+// OnInfoChange sets a callback for when the description changes.
+func (p *Planner) OnInfoChange(fn func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onInfoChange = fn
 }
 
 // Start spawns the planner Claude Code instance in plan mode.

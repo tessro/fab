@@ -21,6 +21,7 @@ type EventType string
 const (
 	EventCreated      EventType = "created"
 	EventStateChanged EventType = "state_changed"
+	EventInfoChanged  EventType = "info_changed"
 	EventDeleted      EventType = "deleted"
 	EventPlanComplete EventType = "plan_complete"
 )
@@ -107,6 +108,19 @@ func (m *Manager) CreateWithID(id, project, workDir, prompt string) (*Planner, e
 			Type:     EventPlanComplete,
 			Planner:  p,
 			PlanFile: planFile,
+		})
+	})
+
+	// Register info change callback to emit events when description changes
+	p.OnInfoChange(func() {
+		slog.Debug("planner info changed",
+			"planner", p.ID(),
+			"project", project,
+			"description", p.Info().Description,
+		)
+		m.emit(Event{
+			Type:    EventInfoChanged,
+			Planner: p,
 		})
 	})
 
