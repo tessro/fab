@@ -4,64 +4,40 @@
 package manager
 
 import (
-	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"os/exec"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/tessro/fab/internal/agent"
-	"github.com/tessro/fab/internal/logging"
 	"github.com/tessro/fab/internal/plugin"
+	"github.com/tessro/fab/internal/processagent"
 )
 
-// Errors returned by manager operations.
+// Re-export errors from processagent for backward compatibility.
 var (
-	ErrAlreadyRunning  = errors.New("manager agent is already running")
-	ErrNotRunning      = errors.New("manager agent is not running")
-	ErrProcessNotFound = errors.New("manager process not found")
-	ErrShuttingDown    = errors.New("manager agent is shutting down")
+	ErrAlreadyRunning  = processagent.ErrAlreadyRunning
+	ErrNotRunning      = processagent.ErrNotRunning
+	ErrProcessNotFound = processagent.ErrProcessNotFound
+	ErrShuttingDown    = processagent.ErrShuttingDown
 )
 
 // StopTimeout is the duration to wait for graceful shutdown.
-const StopTimeout = 5 * time.Second
+const StopTimeout = processagent.StopTimeout
 
 // State represents the manager agent state.
-type State string
+type State = processagent.State
 
 const (
-	StateStopped  State = "stopped"
-	StateStarting State = "starting"
-	StateRunning  State = "running"
-	StateStopping State = "stopping"
+	StateStopped  = processagent.StateStopped
+	StateStarting = processagent.StateStarting
+	StateRunning  = processagent.StateRunning
+	StateStopping = processagent.StateStopping
 )
 
 // Manager is the manager agent that coordinates user interaction for a project.
 type Manager struct {
-	mu sync.RWMutex
-
-	// +checklocks:mu
-	state State
-	// +checklocks:mu
-	cmd *exec.Cmd
-	// +checklocks:mu
-	stdin io.WriteCloser
-	// +checklocks:mu
-	stdout io.ReadCloser
-	// +checklocks:mu
-	startedAt time.Time
-
-	// Chat history for TUI display
-	history *agent.ChatHistory
-
-	// Working directory for the manager (the project's worktree)
-	workDir string
+	*processagent.ProcessAgent
 
 	// Project name this manager belongs to
 	project string
@@ -69,16 +45,6 @@ type Manager struct {
 	// AllowedPatterns are Bash command patterns allowed without prompting.
 	// Uses fab pattern syntax (e.g., "fab:*" for prefix match).
 	allowedPatterns []string
-
-	// Callbacks
-	// +checklocks:mu
-	onStateChange func(old, new State)
-	// +checklocks:mu
-	onEntry func(entry agent.ChatEntry)
-
-	// Read loop control
-	readLoopStop chan struct{}
-	readLoopDone chan struct{}
 }
 
 // New creates a new manager agent for a project.
@@ -87,13 +53,21 @@ type Manager struct {
 // allowedPatterns specifies Bash command patterns that are allowed without prompting.
 // Uses fab pattern syntax (e.g., "fab:*" for prefix match).
 func New(workDir string, project string, allowedPatterns []string) *Manager {
-	return &Manager{
-		state:           StateStopped,
-		workDir:         workDir,
+	m := &Manager{
 		project:         project,
 		allowedPatterns: allowedPatterns,
-		history:         agent.NewChatHistory(agent.DefaultChatHistorySize),
 	}
+
+	config := processagent.Config{
+		WorkDir:   workDir,
+		LogPrefix: "manager",
+		BuildCommand: func() (*exec.Cmd, error) {
+			return m.buildCommand()
+		},
+	}
+
+	m.ProcessAgent = processagent.New(config)
+	return m
 }
 
 // Project returns the project name this manager belongs to.
@@ -101,62 +75,58 @@ func (m *Manager) Project() string {
 	return m.project
 }
 
-// WorkDir returns the working directory for the manager.
-func (m *Manager) WorkDir() string {
-	return m.workDir
+// Start spawns the manager Claude Code instance.
+func (m *Manager) Start() error {
+	return m.ProcessAgent.Start()
 }
 
-// State returns the current manager state.
-func (m *Manager) State() State {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.state
+// Stop gracefully stops the manager agent.
+func (m *Manager) Stop() error {
+	return m.ProcessAgent.Stop()
 }
 
-// IsRunning returns true if the manager is running.
-func (m *Manager) IsRunning() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.state == StateRunning || m.state == StateStarting
+// StopWithTimeout stops the manager with a custom timeout.
+func (m *Manager) StopWithTimeout(timeout time.Duration) error {
+	return m.ProcessAgent.StopWithTimeout(timeout)
 }
 
-// StartedAt returns when the manager was started.
-func (m *Manager) StartedAt() time.Time {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.startedAt
+// SendMessage sends a user message to the manager.
+func (m *Manager) SendMessage(content string) error {
+	return m.ProcessAgent.SendMessage(content)
 }
 
-// History returns the chat history.
-func (m *Manager) History() *agent.ChatHistory {
-	return m.history
-}
-
-// OnStateChange sets a callback for state changes.
-func (m *Manager) OnStateChange(fn func(old, new State)) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.onStateChange = fn
-}
-
-// OnEntry sets a callback for chat entries.
-func (m *Manager) OnEntry(fn func(entry agent.ChatEntry)) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.onEntry = fn
-}
-
-// setState changes the state and calls the callback.
-func (m *Manager) setState(new State) {
-	m.mu.Lock()
-	old := m.state
-	m.state = new
-	callback := m.onStateChange
-	m.mu.Unlock()
-
-	if callback != nil && old != new {
-		callback(old, new)
+// buildCommand creates the exec.Cmd for the Claude Code process.
+func (m *Manager) buildCommand() (*exec.Cmd, error) {
+	// Get fab binary path for the system prompt
+	fabPath, err := os.Executable()
+	if err != nil {
+		fabPath = "fab"
 	}
+
+	// Build system prompt that makes the manager project-aware
+	systemPrompt := buildManagerSystemPrompt(fabPath, m.project)
+
+	// Build settings with allowed tools based on configured patterns
+	settings := m.buildSettings()
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return nil, fmt.Errorf("marshal settings: %w", err)
+	}
+
+	// Build claude command
+	cmd := exec.Command("claude",
+		"--output-format", "stream-json",
+		"--input-format", "stream-json",
+		"--verbose",
+		"--permission-mode", "default",
+		"--plugin-dir", plugin.DefaultInstallDir(),
+		"--settings", string(settingsJSON),
+		"-p", systemPrompt)
+
+	// Set environment
+	cmd.Env = append(os.Environ(), "FAB_MANAGER=1")
+
+	return cmd, nil
 }
 
 // buildSettings creates the Claude Code settings with allowed tool permissions.
@@ -212,271 +182,6 @@ func convertPatternToClaudeCode(pattern string) string {
 
 	// Exact match
 	return fmt.Sprintf("Bash(%s)", pattern)
-}
-
-// Start spawns the manager Claude Code instance.
-func (m *Manager) Start() error {
-	m.mu.Lock()
-
-	if m.state != StateStopped {
-		m.mu.Unlock()
-		return ErrAlreadyRunning
-	}
-
-	m.state = StateStarting
-	m.startedAt = time.Now()
-
-	// Clear history for fresh session
-	m.history = agent.NewChatHistory(agent.DefaultChatHistorySize)
-
-	// Ensure work directory exists
-	if err := os.MkdirAll(m.workDir, 0755); err != nil {
-		m.state = StateStopped
-		m.mu.Unlock()
-		return fmt.Errorf("create work dir: %w", err)
-	}
-
-	// Get fab binary path for the system prompt
-	fabPath, err := os.Executable()
-	if err != nil {
-		fabPath = "fab"
-	}
-
-	// Build system prompt that makes the manager project-aware
-	systemPrompt := buildManagerSystemPrompt(fabPath, m.project)
-
-	// Build settings with allowed tools based on configured patterns
-	settings := m.buildSettings()
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		m.state = StateStopped
-		m.mu.Unlock()
-		return fmt.Errorf("marshal settings: %w", err)
-	}
-
-	// Build claude command
-	cmd := exec.Command("claude",
-		"--output-format", "stream-json",
-		"--input-format", "stream-json",
-		"--verbose",
-		"--permission-mode", "default",
-		"--plugin-dir", plugin.DefaultInstallDir(),
-		"--settings", string(settingsJSON),
-		"-p", systemPrompt)
-	cmd.Dir = m.workDir
-
-	// Set environment
-	cmd.Env = append(os.Environ(), "FAB_MANAGER=1")
-
-	// Set up pipes
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		m.state = StateStopped
-		m.mu.Unlock()
-		return fmt.Errorf("stdin pipe: %w", err)
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		stdin.Close()
-		m.state = StateStopped
-		m.mu.Unlock()
-		return fmt.Errorf("stdout pipe: %w", err)
-	}
-
-	// Start the process
-	if err := cmd.Start(); err != nil {
-		stdin.Close()
-		stdout.Close()
-		m.state = StateStopped
-		m.mu.Unlock()
-		return fmt.Errorf("start process: %w", err)
-	}
-
-	m.cmd = cmd
-	m.stdin = stdin
-	m.stdout = stdout
-
-	// Create read loop channels
-	m.readLoopStop = make(chan struct{})
-	m.readLoopDone = make(chan struct{})
-
-	m.mu.Unlock()
-
-	// Start read loop
-	go m.runReadLoop()
-
-	m.setState(StateRunning)
-	return nil
-}
-
-// Stop gracefully stops the manager agent.
-func (m *Manager) Stop() error {
-	return m.StopWithTimeout(StopTimeout)
-}
-
-// StopWithTimeout stops the manager with a custom timeout.
-func (m *Manager) StopWithTimeout(timeout time.Duration) error {
-	m.mu.Lock()
-
-	if m.state == StateStopped {
-		m.mu.Unlock()
-		return ErrNotRunning
-	}
-
-	if m.state == StateStopping {
-		m.mu.Unlock()
-		return ErrShuttingDown
-	}
-
-	m.state = StateStopping
-
-	// Signal read loop to stop
-	if m.readLoopStop != nil {
-		close(m.readLoopStop)
-	}
-
-	// Close pipes
-	if m.stdin != nil {
-		m.stdin.Close()
-		m.stdin = nil
-	}
-	if m.stdout != nil {
-		m.stdout.Close()
-		m.stdout = nil
-	}
-
-	cmd := m.cmd
-	m.cmd = nil
-	m.mu.Unlock()
-
-	if cmd == nil || cmd.Process == nil {
-		m.setState(StateStopped)
-		return nil
-	}
-
-	// Try graceful termination
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		_ = cmd.Wait()
-		m.setState(StateStopped)
-		return nil
-	}
-
-	// Wait with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		// Clean exit
-	case <-time.After(timeout):
-		slog.Debug("manager did not exit gracefully, sending SIGKILL", "timeout", timeout)
-		_ = cmd.Process.Kill()
-		<-done
-	}
-
-	m.setState(StateStopped)
-	return nil
-}
-
-// SendMessage sends a user message to the manager.
-func (m *Manager) SendMessage(content string) error {
-	m.mu.RLock()
-	stdin := m.stdin
-	state := m.state
-	m.mu.RUnlock()
-
-	if state != StateRunning {
-		return ErrNotRunning
-	}
-
-	if stdin == nil {
-		return ErrProcessNotFound
-	}
-
-	msg := agent.InputMessage{
-		Type: "user",
-		Message: agent.MessageBody{
-			Role:    "user",
-			Content: content,
-		},
-		SessionID: "default",
-	}
-
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	data = append(data, '\n')
-	_, err = stdin.Write(data)
-	return err
-}
-
-// runReadLoop reads and parses output from Claude Code.
-func (m *Manager) runReadLoop() {
-	defer logging.LogPanic("manager-read-loop", nil)
-	defer close(m.readLoopDone)
-
-	m.mu.RLock()
-	stdout := m.stdout
-	m.mu.RUnlock()
-
-	if stdout == nil {
-		return
-	}
-
-	scanner := bufio.NewScanner(stdout)
-
-	for scanner.Scan() {
-		select {
-		case <-m.readLoopStop:
-			return
-		default:
-		}
-
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		// Parse stream message
-		msg, err := agent.ParseStreamMessage(line)
-		if err != nil {
-			slog.Warn("manager readloop: parse error", "error", err)
-			continue
-		}
-
-		if msg == nil {
-			continue
-		}
-
-		// Convert to chat entries
-		entries := msg.ToChatEntries()
-		for _, entry := range entries {
-			m.history.Add(entry)
-
-			// Call entry callback
-			m.mu.RLock()
-			callback := m.onEntry
-			m.mu.RUnlock()
-
-			if callback != nil {
-				callback(entry)
-			}
-		}
-	}
-
-	// Scanner finished - process likely exited
-	m.mu.RLock()
-	wasRunning := m.state == StateRunning
-	m.mu.RUnlock()
-
-	if wasRunning {
-		m.setState(StateStopped)
-	}
 }
 
 // buildManagerSystemPrompt creates the system prompt for the manager agent.
