@@ -2,6 +2,7 @@ package processagent
 
 import (
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 )
@@ -60,8 +61,11 @@ func TestOnStateChangeCallback(t *testing.T) {
 
 	p := New(config)
 
+	var mu sync.Mutex
 	var stateChanges []struct{ old, new State }
 	p.OnStateChange(func(old, new State) {
+		mu.Lock()
+		defer mu.Unlock()
 		stateChanges = append(stateChanges, struct{ old, new State }{old, new})
 	})
 
@@ -74,19 +78,25 @@ func TestOnStateChangeCallback(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have at least one state change (stopped -> running)
-	if len(stateChanges) == 0 {
+	mu.Lock()
+	numChanges := len(stateChanges)
+	changesCopy := make([]struct{ old, new State }, numChanges)
+	copy(changesCopy, stateChanges)
+	mu.Unlock()
+
+	if numChanges == 0 {
 		t.Error("expected at least one state change callback")
 	}
 
 	foundStarting := false
-	for _, change := range stateChanges {
+	for _, change := range changesCopy {
 		if change.old == StateStarting && change.new == StateRunning {
 			foundStarting = true
 			break
 		}
 	}
 	if !foundStarting {
-		t.Errorf("expected starting -> running transition, got %v", stateChanges)
+		t.Errorf("expected starting -> running transition, got %v", changesCopy)
 	}
 }
 
