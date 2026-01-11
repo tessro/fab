@@ -133,11 +133,9 @@ var (
 
 	// Input line styles (no border - docked inside chat pane)
 	inputLineStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1E1E1E")).
 			Padding(0, 1)
 
 	inputLineFocusedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#2D1F4E")). // Purple-tinted background when focused
 				Padding(0, 1)
 
 	// Input mode indicator style (shown on divider line)
