@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fab - Coding Agent Supervisor</title>
+    <meta name="description" content="A coding agent supervisor that manages multiple Claude Code instances across projects with automatic task orchestration.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <nav>
+                <a href="/" class="logo">fab</a>
+                <div class="nav-links">
+                    <a href="/start">Get Started</a>
+                    <a href="https://github.com/tessro/fab" target="_blank" rel="noopener">GitHub</a>
+                </div>
+            </nav>
+        </header>
+
+        <main>
+            <section class="hero">
+                <h1>Ship <span class="counter" id="feature-counter">42</span> features while you sleep</h1>
+                <p class="tagline">A coding agent supervisor that orchestrates multiple Claude Code instances in parallel. Let agents claim tasks, write code, and merge PRs autonomously.</p>
+                <div class="cta-buttons">
+                    <a href="/start" class="btn btn-primary">Get Started</a>
+                    <a href="https://github.com/tessro/fab" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+                </div>
+            </section>
+
+            <section class="features">
+                <div class="feature">
+                    <span class="feature-icon">🤖</span>
+                    <h3>Multi-agent Orchestration</h3>
+                    <p>Run multiple Claude Code agents in parallel across different projects</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🌲</span>
+                    <h3>Elastic Worktree Pool</h3>
+                    <p>Each agent gets its own git worktree, scaling from 1-100 agents per project</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🎫</span>
+                    <h3>Pluggable Issue Backends</h3>
+                    <p>Automatic task assignment from tk or GitHub Issues</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🛡️</span>
+                    <h3>Strong Permission Controls</h3>
+                    <p>TOML-based rule engine with LLM authorization for autonomous operation</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">📺</span>
+                    <h3>Interactive TUI</h3>
+                    <p>Monitor and interact with all agents from a single terminal interface</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">✅</span>
+                    <h3>Done Detection</h3>
+                    <p>Recognizes when agents complete tasks and recycles them for new work</p>
+                </div>
+            </section>
+
+            <section class="demo">
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <span class="terminal-dot red"></span>
+                        <span class="terminal-dot yellow"></span>
+                        <span class="terminal-dot green"></span>
+                    </div>
+                    <pre class="terminal-body"><code><span class="prompt">$</span> fab server start
+<span class="output">🚌 fab daemon started</span>
+
+<span class="prompt">$</span> fab project add git@github.com:user/repo.git --name myproject
+<span class="output">🚌 Added project myproject</span>
+
+<span class="prompt">$</span> fab project start myproject
+<span class="output">🚌 Started orchestration for myproject</span>
+
+<span class="prompt">$</span> fab tui
+<span class="comment"># Watch agents claim tasks and ship features ✨</span></code></pre>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Built by <a href="https://x.com/ptr" target="_blank" rel="noopener">@ptr</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Animated counter that ticks upward like an odometer
+        const counter = document.getElementById('feature-counter');
+        let count = 42;
+
+        function tick() {
+            count++;
+            counter.textContent = count;
+
+            // Random interval between 0.8-3 seconds for snappier feel
+            const nextTick = 800 + Math.random() * 2200;
+            setTimeout(tick, nextTick);
+        }
+
+        // Start ticking after a short delay
+        setTimeout(tick, 1500);
+    </script>
+</body>
+</html>

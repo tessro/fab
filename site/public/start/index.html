@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Started - fab</title>
+    <meta name="description" content="Get started with fab - install and configure your coding agent supervisor in minutes.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <nav>
+                <a href="/" class="logo">fab</a>
+                <div class="nav-links">
+                    <a href="/start">Get Started</a>
+                    <a href="https://github.com/tessro/fab" target="_blank" rel="noopener">GitHub</a>
+                </div>
+            </nav>
+        </header>
+
+        <main class="docs">
+            <h1>Get Started</h1>
+
+            <section class="doc-section">
+                <h2>Installation</h2>
+
+                <h3>With Go</h3>
+                <pre><code>go install github.com/tessro/fab/cmd/fab@latest</code></pre>
+
+                <h3>From Source</h3>
+                <pre><code>git clone https://github.com/tessro/fab
+cd fab
+go build -o fab ./cmd/fab</code></pre>
+            </section>
+
+            <section class="doc-section">
+                <h2>Quick Start</h2>
+
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <div class="step-content">
+                        <h3>Start the daemon</h3>
+                        <pre><code>fab server start</code></pre>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <div class="step-content">
+                        <h3>Add a project</h3>
+                        <pre><code><span class="comment"># From a local path</span>
+fab project add /path/to/your/project --name myproject --max-agents 3
+
+<span class="comment"># Or from a git URL</span>
+fab project add git@github.com:user/repo.git --name myproject</code></pre>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <div class="step-content">
+                        <h3>Configure permissions <span class="optional">(optional)</span></h3>
+                        <p>Enable autonomous mode with LLM-based authorization:</p>
+                        <pre><code>fab project config set myproject permissions-checker llm</code></pre>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <div class="step-content">
+                        <h3>Start orchestration</h3>
+                        <pre><code>fab project start myproject</code></pre>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">5</span>
+                    <div class="step-content">
+                        <h3>Watch agents work</h3>
+                        <pre><code>fab tui</code></pre>
+                        <p>The TUI shows all running agents, their current tasks, and lets you interact with them in real-time.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="doc-section">
+                <h2>Configuration</h2>
+                <p>Global config lives at <code>~/.config/fab/config.toml</code>:</p>
+                <pre><code><span class="comment"># Logging level: debug, info, warn, error</span>
+log_level = "info"
+
+<span class="comment"># API Provider Configuration</span>
+[providers.anthropic]
+api-key = "sk-ant-..."  <span class="comment"># Or use ANTHROPIC_API_KEY env var</span>
+
+<span class="comment"># LLM Authorization Settings</span>
+[llm_auth]
+provider = "anthropic"
+model = "claude-haiku-4-5"</code></pre>
+            </section>
+
+            <section class="doc-section">
+                <h2>Issue Backends</h2>
+                <p>fab can pull tasks from different issue tracking systems:</p>
+
+                <h3>GitHub Issues</h3>
+                <pre><code>fab project config set myproject issue-backend gh</code></pre>
+
+                <h3>tk (ticket)</h3>
+                <pre><code>fab project config set myproject issue-backend tk</code></pre>
+            </section>
+
+            <section class="doc-section">
+                <h2>Next Steps</h2>
+                <ul>
+                    <li>Read the full <a href="https://github.com/tessro/fab#readme" target="_blank" rel="noopener">documentation on GitHub</a></li>
+                    <li>Check out the <a href="https://github.com/tessro/fab/blob/main/ARCHITECTURE.md" target="_blank" rel="noopener">architecture guide</a></li>
+                    <li>Questions? <a href="https://x.com/ptr" target="_blank" rel="noopener">Talk to Tess</a></li>
+                </ul>
+            </section>
+        </main>
+
+        <footer>
+            <p>Built by <a href="https://x.com/ptr" target="_blank" rel="noopener">@ptr</a></p>
+        </footer>
+    </div>
+</body>
+</html>
