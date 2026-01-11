@@ -152,6 +152,7 @@ var (
 	chatUserStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // green
 	chatToolStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // gray
 	chatResultStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // gray
+	chatTimeStyle      = lipgloss.NewStyle().Foreground(mutedColor)           // gray, muted
 
 	chatViewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).

@@ -149,3 +149,56 @@ func TestFormatMatchCount(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatTime(t *testing.T) {
+	tests := []struct {
+		name      string
+		timestamp string
+		want      string
+	}{
+		{
+			name:      "valid RFC3339 morning",
+			timestamp: "2024-01-15T09:30:00Z",
+			want:      "9:30 AM",
+		},
+		{
+			name:      "valid RFC3339 afternoon",
+			timestamp: "2024-01-15T14:45:00Z",
+			want:      "2:45 PM",
+		},
+		{
+			name:      "valid RFC3339 midnight",
+			timestamp: "2024-01-15T00:00:00Z",
+			want:      "12:00 AM",
+		},
+		{
+			name:      "valid RFC3339 noon",
+			timestamp: "2024-01-15T12:00:00Z",
+			want:      "12:00 PM",
+		},
+		{
+			name:      "valid RFC3339 with timezone",
+			timestamp: "2024-01-15T14:45:00-05:00",
+			want:      "2:45 PM",
+		},
+		{
+			name:      "empty timestamp",
+			timestamp: "",
+			want:      "",
+		},
+		{
+			name:      "invalid timestamp",
+			timestamp: "not-a-date",
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatTime(tt.timestamp)
+			if got != tt.want {
+				t.Errorf("formatTime(%q) = %q, want %q", tt.timestamp, got, tt.want)
+			}
+		})
+	}
+}

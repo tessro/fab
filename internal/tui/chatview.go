@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -386,6 +387,18 @@ func (v *ChatView) updateContent() {
 	v.viewport.SetContent(content)
 }
 
+// formatTime formats an RFC3339 timestamp as "1:23 PM" or returns empty string on error.
+func formatTime(timestamp string) string {
+	if timestamp == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return ""
+	}
+	return t.Format("3:04 PM")
+}
+
 // renderEntry renders a single chat entry to a string.
 // lastToolName is the most recent tool name seen, used for tool_result entries.
 func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) string {
@@ -395,20 +408,33 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) s
 		contentWidth = 20
 	}
 
+	// Format the timestamp
+	timeStr := formatTime(entry.Timestamp)
+	var timePrefix string
+	if timeStr != "" {
+		timePrefix = chatTimeStyle.Render(timeStr) + " "
+	}
+
 	switch entry.Role {
 	case "assistant":
 		prefix := "Claude: "
 		prefixLen := len(prefix)
+		if timeStr != "" {
+			prefixLen += len(timeStr) + 1 // +1 for space
+		}
 		// Wrap content, accounting for prefix on first line
 		wrapped := wrapText(entry.Content, contentWidth-prefixLen, prefixLen)
-		return chatAssistantStyle.Render(prefix) + wrapped
+		return timePrefix + chatAssistantStyle.Render(prefix) + wrapped
 
 	case "user":
 		prefix := "You: "
 		prefixLen := len(prefix)
+		if timeStr != "" {
+			prefixLen += len(timeStr) + 1 // +1 for space
+		}
 		// Wrap content, accounting for prefix on first line
 		wrapped := wrapText(entry.Content, contentWidth-prefixLen, prefixLen)
-		return chatUserStyle.Render(prefix) + wrapped
+		return timePrefix + chatUserStyle.Render(prefix) + wrapped
 
 	case "tool":
 		var parts []string
