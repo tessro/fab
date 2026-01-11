@@ -4,7 +4,7 @@ import "context"
 
 // IssueReader provides read-only access to issues.
 type IssueReader interface {
-	// Name returns the backend identifier (e.g., "tk", "linear").
+	// Name returns the backend identifier (e.g., "tk", "github").
 	Name() string
 
 	// Get retrieves an issue by ID.

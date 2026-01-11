@@ -19,7 +19,7 @@ var issueProject string
 var issueCmd = &cobra.Command{
 	Use:   "issue",
 	Short: "Manage project issues",
-	Long:  "Commands for managing issues using the configured backend (tk, linear, etc.).",
+	Long:  "Commands for managing issues using the configured backend (tk, github, etc.).",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Resolve project context before any subcommand
 		resolved, err := issue.ResolveProject(issueProject)

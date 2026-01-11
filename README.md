@@ -6,7 +6,7 @@ A coding agent supervisor that manages multiple Claude Code instances across pro
 
 - 🤖 **Multi-agent orchestration** - Run multiple Claude Code agents in parallel across different projects
 - 🌲 **Elastic worktree pool** - Each agent gets its own git worktree; pool size scales from 1-100 agents per project
-- 🎫 **Pluggable issue backends** - Automatic task assignment from tk, GitHub Issues, or Linear
+- 🎫 **Pluggable issue backends** - Automatic task assignment from tk or GitHub Issues
 - ✅ **Done detection** - Recognizes when agents complete tasks and recycles them for new work
 - 📺 **Interactive TUI** - Monitor and interact with all agents from a single terminal interface
 - 🛡️ **Strong permission controls** - TOML-based rule engine with pattern matching for fine-grained access control
@@ -166,7 +166,7 @@ model = "claude-haiku-4-5"
 |-----|--------|-------------|
 | `max-agents` | 1-100 | Maximum concurrent agents (default: 3) |
 | `autostart` | true/false | Start orchestration when daemon starts |
-| `issue-backend` | tk/gh/github/linear | Issue tracking system |
+| `issue-backend` | tk/gh/github | Issue tracking system |
 | `permissions-checker` | manual/llm | Permission authorization method |
 
 Example:

@@ -34,7 +34,7 @@ type ProjectEntry struct {
 	Name               string   `toml:"name"`
 	RemoteURL          string   `toml:"remote-url"`
 	MaxAgents          int      `toml:"max-agents,omitempty"`
-	IssueBackend       string   `toml:"issue-backend,omitempty"`       // "tk" (default), "linear", "github", "gh"
+	IssueBackend       string   `toml:"issue-backend,omitempty"`       // "tk" (default), "github", "gh"
 	AllowedAuthors     []string `toml:"allowed-authors,omitempty"`     // GitHub usernames allowed to create issues
 	Autostart          bool     `toml:"autostart,omitempty"`           // Start orchestration when daemon starts
 	PermissionsChecker string   `toml:"permissions-checker,omitempty"` // Permission checker: "manual" (default), "llm"
@@ -482,8 +482,8 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 		p.Autostart = autostart
 	case ConfigKeyIssueBackend:
 		v := strings.ToLower(value)
-		if v != "tk" && v != "linear" && v != "github" && v != "gh" {
-			return errors.New("invalid value for issue-backend: must be 'tk', 'linear', 'github', or 'gh'")
+		if v != "tk" && v != "github" && v != "gh" {
+			return errors.New("invalid value for issue-backend: must be 'tk', 'github', or 'gh'")
 		}
 		p.IssueBackend = v
 	case ConfigKeyAllowedAuthors:

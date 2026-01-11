@@ -25,7 +25,7 @@ type Project struct {
 	Name           string   // Unique identifier (e.g., "myapp")
 	RemoteURL      string   // Git remote URL (e.g., "git@github.com:user/repo.git")
 	MaxAgents      int      // Max concurrent agents (default: 3)
-	IssueBackend   string   // Issue backend type: "tk" (default), "linear", "github", "gh"
+	IssueBackend   string   // Issue backend type: "tk" (default), "github", "gh"
 	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
 	Autostart      bool     // Start orchestration when daemon starts
 	PermissionsChecker string // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
