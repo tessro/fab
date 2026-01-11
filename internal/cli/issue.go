@@ -168,6 +168,7 @@ var (
 	issueCreateType        string
 	issueCreatePriority    int
 	issueCreateCommit      bool
+	issueCreateDependsOn   []string
 )
 
 var issueCreateCmd = &cobra.Command{
@@ -187,10 +188,11 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	params := issue.CreateParams{
-		Title:       title,
-		Description: issueCreateDescription,
-		Type:        issueCreateType,
-		Priority:    issueCreatePriority,
+		Title:        title,
+		Description:  issueCreateDescription,
+		Type:         issueCreateType,
+		Priority:     issueCreatePriority,
+		Dependencies: issueCreateDependsOn,
 	}
 
 	iss, err := backend.Create(context.Background(), params)
@@ -342,6 +344,7 @@ func init() {
 	issueCreateCmd.Flags().StringVar(&issueCreateType, "type", "task", "Issue type (task, bug, feature, chore)")
 	issueCreateCmd.Flags().IntVar(&issueCreatePriority, "priority", 1, "Issue priority (0=low, 1=medium, 2=high)")
 	issueCreateCmd.Flags().BoolVar(&issueCreateCommit, "commit", false, "Commit and push changes immediately")
+	issueCreateCmd.Flags().StringSliceVar(&issueCreateDependsOn, "depends-on", nil, "Issue IDs this issue depends on (comma-separated)")
 
 	// update flags
 	issueUpdateCmd.Flags().StringVarP(&issueUpdateStatus, "status", "s", "", "New status (open, closed, blocked)")

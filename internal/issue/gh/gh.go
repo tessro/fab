@@ -86,6 +86,16 @@ type ghAuthor struct {
 func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue.Issue, error) {
 	args := []string{"issue", "create", "--repo", b.nwo, "--title", params.Title, "--body", params.Description}
 
+	// Add type label
+	issueType := params.Type
+	if issueType == "" {
+		issueType = "task"
+	}
+	args = append(args, "--label", "type:"+issueType)
+
+	// Add priority label
+	args = append(args, "--label", fmt.Sprintf("priority:%d", params.Priority))
+
 	// Run gh issue create and get the issue URL
 	out, err := b.runGH(ctx, args...)
 	if err != nil {
@@ -97,6 +107,15 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 	num, err := parseIssueNumberFromURL(strings.TrimSpace(out))
 	if err != nil {
 		return nil, fmt.Errorf("parse created issue: %w", err)
+	}
+
+	// Set up dependencies using GitHub sub-issues
+	// The new issue becomes a sub-issue of each dependency (parent)
+	for _, depID := range params.Dependencies {
+		if err := b.addSubIssue(ctx, depID, strconv.Itoa(num)); err != nil {
+			// Log warning but don't fail the create
+			fmt.Fprintf(issue.Stderr, "warning: failed to add dependency %s: %v\n", depID, err)
+		}
 	}
 
 	return b.Get(ctx, strconv.Itoa(num))
@@ -115,7 +134,14 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 		return nil, fmt.Errorf("parse issue: %w", err)
 	}
 
-	return b.toIssue(&gh), nil
+	iss := b.toIssue(&gh)
+
+	// Fetch parent issue (dependency) if this issue is a sub-issue
+	if parent, err := b.getParentIssue(ctx, id); err == nil && parent != "" {
+		iss.Dependencies = []string{parent}
+	}
+
+	return iss, nil
 }
 
 // List returns issues matching the filter.
@@ -273,7 +299,7 @@ func (b *Backend) Close(ctx context.Context, id string) error {
 	return err
 }
 
-// Ready returns open issues that are not blocked and authored by allowed users.
+// Ready returns open issues that are not blocked, have no open dependencies, and are authored by allowed users.
 func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 	// Fetch raw issues to access author info for filtering
 	args := []string{"issue", "list", "--repo", b.nwo, "--json",
@@ -295,7 +321,13 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 		allowedSet[strings.ToLower(author)] = true
 	}
 
-	// Filter: not blocked + authored by allowed user
+	// Build a set of open issue numbers for dependency checking
+	openIssues := make(map[string]bool, len(ghIssues))
+	for _, gh := range ghIssues {
+		openIssues[strconv.Itoa(gh.Number)] = true
+	}
+
+	// Filter: not blocked + authored by allowed user + no open dependencies
 	ready := make([]*issue.Issue, 0, len(ghIssues))
 	for _, gh := range ghIssues {
 		iss := b.toIssue(&gh)
@@ -308,6 +340,13 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 		// Skip issues not authored by allowed users
 		if len(allowedSet) > 0 && !allowedSet[strings.ToLower(gh.Author.Login)] {
 			continue
+		}
+
+		// Check if this issue has an open parent (dependency)
+		// If it's a sub-issue of an open issue, it's not ready
+		parent, err := b.getParentIssue(ctx, strconv.Itoa(gh.Number))
+		if err == nil && parent != "" && openIssues[parent] {
+			continue // Has open dependency, not ready
 		}
 
 		ready = append(ready, iss)
@@ -424,3 +463,47 @@ func parseIssueNumberFromURL(url string) (int, error) {
 	}
 	return strconv.Atoi(matches[1])
 }
+
+// addSubIssue adds childNum as a sub-issue of parentNum using GitHub's REST API.
+// This creates a dependency: child depends on parent (parent must complete first).
+func (b *Backend) addSubIssue(ctx context.Context, parentNum, childNum string) error {
+	// First, get the internal ID of the child issue (not the node_id)
+	childID, err := b.getIssueID(ctx, childNum)
+	if err != nil {
+		return fmt.Errorf("get child issue ID: %w", err)
+	}
+
+	// Use the REST API to add the sub-issue
+	// POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues
+	endpoint := fmt.Sprintf("repos/%s/issues/%s/sub_issues", b.nwo, parentNum)
+	cmd := exec.CommandContext(ctx, "gh", "api", endpoint, "-X", "POST", "-f", fmt.Sprintf("sub_issue_id=%d", childID))
+	cmd.Dir = b.repoDir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("add sub-issue: %w: %s", err, stderr.String())
+	}
+	return nil
+}
+
+// getIssueID retrieves the internal numeric ID for an issue (not the node_id).
+func (b *Backend) getIssueID(ctx context.Context, issueNum string) (int64, error) {
+	endpoint := fmt.Sprintf("repos/%s/issues/%s", b.nwo, issueNum)
+	out, err := b.runGH(ctx, "api", endpoint, "--jq", ".id")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(strings.TrimSpace(out), 10, 64)
+}
+
+// getParentIssue retrieves the parent issue number if this issue is a sub-issue.
+func (b *Backend) getParentIssue(ctx context.Context, issueNum string) (string, error) {
+	// Query the issue's parent using the REST API
+	endpoint := fmt.Sprintf("repos/%s/issues/%s", b.nwo, issueNum)
+	out, err := b.runGH(ctx, "api", endpoint, "--jq", ".parent.number // empty")
+	if err != nil {
+		return "", nil // No parent or API error, treat as no dependency
+	}
+	return strings.TrimSpace(out), nil
+}
+
