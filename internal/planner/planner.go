@@ -4,7 +4,6 @@
 package planner
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/plugin"
 	"github.com/tessro/fab/internal/processagent"
 )
@@ -52,6 +52,9 @@ type Planner struct {
 	// Initial prompt for the planning task
 	prompt string
 
+	// Backend for CLI command building
+	backend backend.Backend
+
 	// Plan file path (set when ExitPlanMode is detected)
 	// +checklocks:mu
 	planFile string
@@ -68,11 +71,12 @@ type Planner struct {
 }
 
 // New creates a new planner.
-func New(id, project, workDir, prompt string) *Planner {
+func New(id, project, workDir, prompt string, b backend.Backend) *Planner {
 	p := &Planner{
 		id:      id,
 		project: project,
 		prompt:  prompt,
+		backend: b,
 	}
 
 	// Build the plan prompt
@@ -160,57 +164,16 @@ func (p *Planner) SendMessage(content string) error {
 	return p.ProcessAgent.SendMessage(content)
 }
 
-// buildCommand creates the exec.Cmd for the Claude Code process.
+// buildCommand creates the exec.Cmd for the CLI process using the backend.
 func (p *Planner) buildCommand() (*exec.Cmd, error) {
-	// Get fab binary path for hooks
-	fabPath, err := os.Executable()
-	if err != nil {
-		fabPath = "fab"
-	}
-
-	// Build settings with hooks that route to fab daemon
-	hookTimeoutSec := 5 * 60 // 5 minutes in seconds
-	settings := map[string]interface{}{
-		"hooks": map[string]interface{}{
-			"PreToolUse": []interface{}{
-				map[string]interface{}{
-					"matcher": "*",
-					"hooks": []interface{}{
-						map[string]interface{}{
-							"type":    "command",
-							"command": fabPath + " hook PreToolUse",
-							"timeout": hookTimeoutSec,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return nil, fmt.Errorf("marshal settings: %w", err)
-	}
-
-	// Build claude command
-	// NOTE: Do not use -p flag with --input-format stream-json.
-	// The prompt must be sent via stdin as a JSON message after starting.
-	cmd := exec.Command("claude",
-		"--output-format", "stream-json",
-		"--input-format", "stream-json",
-		"--verbose",
-		"--permission-mode", "default",
-		"--plugin-dir", plugin.DefaultInstallDir(),
-		"--settings", string(settingsJSON))
-
-	// Set environment
+	// Build command using backend
 	// FAB_AGENT_ID uses "plan:" prefix to match TUI agent ID format and enable
 	// permission handling (including LLM auth) via the standard agent flow.
-	cmd.Env = append(os.Environ(),
-		"FAB_AGENT_ID=plan:"+p.id,
-	)
-
-	return cmd, nil
+	return p.backend.BuildCommand(backend.CommandConfig{
+		WorkDir:   p.WorkDir(),
+		AgentID:   "plan:" + p.id,
+		PluginDir: plugin.DefaultInstallDir(),
+	})
 }
 
 // processMessage handles stream messages for planner-specific logic.

@@ -12,6 +12,11 @@ import (
 // ClaudeBackend implements the Backend interface for Claude Code CLI.
 type ClaudeBackend struct{}
 
+// NewClaudeBackend creates a new Claude Code backend.
+func NewClaudeBackend() *ClaudeBackend {
+	return &ClaudeBackend{}
+}
+
 // Verify ClaudeBackend implements Backend interface.
 var _ Backend = (*ClaudeBackend)(nil)
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tessro/fab/internal/agent"
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/planner"
 )
@@ -67,7 +68,7 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 
 		// Create the planner with the specific ID
 		log.Debug("handlePlanStart: creating planner instance")
-		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt)
+		p, err := s.planners.CreateWithID(plannerID, projectName, workDir, startReq.Prompt, backend.NewClaudeBackend())
 		if err != nil {
 			log.Error("handlePlanStart: failed to create planner", "error", err)
 			_ = proj.DeletePlannerWorktree(plannerID)
@@ -104,7 +105,7 @@ func (s *Supervisor) handlePlanStart(_ context.Context, req *daemon.Request) *da
 
 	// Create the planner
 	log.Debug("handlePlanStart: creating planner instance", "workdir", workDir)
-	p, err := s.planners.Create(projectName, workDir, startReq.Prompt)
+	p, err := s.planners.Create(projectName, workDir, startReq.Prompt, backend.NewClaudeBackend())
 	if err != nil {
 		log.Error("handlePlanStart: failed to create planner", "error", err)
 		return errorResponse(req, fmt.Sprintf("failed to create planner: %v", err))

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/event"
 	"github.com/tessro/fab/internal/id"
 )
@@ -74,14 +75,16 @@ func (m *Manager) GenerateID() string {
 // Create creates a new planning agent.
 // workDir is the directory the planner will work in.
 // prompt is the planning task to work on.
-func (m *Manager) Create(project, workDir, prompt string) (*Planner, error) {
-	return m.CreateWithID(id.Generate(), project, workDir, prompt)
+// b is the backend to use for CLI command building.
+func (m *Manager) Create(project, workDir, prompt string, b backend.Backend) (*Planner, error) {
+	return m.CreateWithID(id.Generate(), project, workDir, prompt, b)
 }
 
 // CreateWithID creates a new planning agent with a specific ID.
 // This is useful when the ID must be known before creation (e.g., for worktree naming).
-func (m *Manager) CreateWithID(id, project, workDir, prompt string) (*Planner, error) {
-	p := New(id, project, workDir, prompt)
+// b is the backend to use for CLI command building.
+func (m *Manager) CreateWithID(plannerID, project, workDir, prompt string, b backend.Backend) (*Planner, error) {
+	p := New(plannerID, project, workDir, prompt, b)
 
 	// Register state change callback
 	p.OnStateChange(func(old, new State) {
@@ -125,11 +128,11 @@ func (m *Manager) CreateWithID(id, project, workDir, prompt string) (*Planner, e
 	})
 
 	m.mu.Lock()
-	m.planners[id] = p
+	m.planners[plannerID] = p
 	m.mu.Unlock()
 
 	slog.Info("planner created",
-		"planner", id,
+		"planner", plannerID,
 		"project", project,
 		"workdir", workDir,
 	)

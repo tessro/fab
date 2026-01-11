@@ -13,6 +13,16 @@ func TestClaudeBackend_Name(t *testing.T) {
 	}
 }
 
+func TestClaudeBackend_NewClaudeBackend(t *testing.T) {
+	b := NewClaudeBackend()
+	if b == nil {
+		t.Fatal("NewClaudeBackend() returned nil")
+	}
+	if got := b.Name(); got != "claude" {
+		t.Errorf("NewClaudeBackend().Name() = %q, want %q", got, "claude")
+	}
+}
+
 func TestClaudeBackend_BuildCommand(t *testing.T) {
 	b := &ClaudeBackend{}
 
