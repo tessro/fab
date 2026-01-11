@@ -266,6 +266,33 @@ footer a:hover {
     text-decoration: underline;
 }
 
+.social-icons {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.social-icons a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background-color: var(--surface0);
+    border-radius: 50%;
+    color: var(--subtext1);
+    text-decoration: none;
+    transition: transform 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.social-icons a:hover {
+    transform: translateY(-2px);
+    background-color: var(--surface1);
+    color: var(--mauve);
+    text-decoration: none;
+}
+
 /* Docs Page Styles */
 .docs {
     padding: 40px 0 80px;
