@@ -1,10 +1,10 @@
 # 🚌 fab
 
-A coding agent supervisor that manages multiple Claude Code instances across projects with automatic task orchestration.
+A coding agent supervisor that manages multiple Claude Code or Codex instances across projects with automatic task orchestration.
 
 ## Features
 
-- 🤖 **Multi-agent orchestration** - Run multiple Claude Code agents in parallel across different projects
+- 🤖 **Multi-agent orchestration** - Run multiple Claude Code or Codex agents in parallel across different projects
 - 🌲 **Elastic worktree pool** - Each agent gets its own git worktree; pool size scales from 1-100 agents per project
 - 🎫 **Pluggable issue backends** - Automatic task assignment from tk or GitHub Issues
 - ✅ **Done detection** - Recognizes when agents complete tasks and recycles them for new work
