@@ -40,26 +40,7 @@ type TUIClient interface {
 	Stats(project string) (*StatsResponse, error)
 }
 
-// ManagerModeClient defines the minimal interface for manager mode TUI.
-type ManagerModeClient interface {
-	Close() error
-	StreamEvents(projects []string) (<-chan EventResult, error)
-	ManagerSendMessage(project, content string) error
-	ManagerChatHistory(project string, limit int) (*ManagerChatHistoryResponse, error)
-	ManagerClearHistory(project string) error
-}
-
-// PlannerModeClient defines the minimal interface for planner mode TUI.
-type PlannerModeClient interface {
-	Close() error
-	StreamEvents(projects []string) (<-chan EventResult, error)
-	PlanSendMessage(id, content string) error
-	PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse, error)
-}
-
 // Compile-time assertions to verify Client implements all interfaces.
 var (
-	_ TUIClient         = (*Client)(nil)
-	_ ManagerModeClient = (*Client)(nil)
-	_ PlannerModeClient = (*Client)(nil)
+	_ TUIClient = (*Client)(nil)
 )

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/tessro/fab/internal/tui"
 )
 
 var managerCmd = &cobra.Command{
@@ -96,41 +95,10 @@ var managerClearCmd = &cobra.Command{
 	},
 }
 
-var managerChatCmd = &cobra.Command{
-	Use:   "chat <project>",
-	Short: "Open interactive chat with the manager agent for a project",
-	Long:  "Opens the TUI in manager mode for interactive conversation with the project's manager agent.",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		project := args[0]
-
-		client := MustConnect()
-
-		// Check if manager is running, start if not
-		status, err := client.ManagerStatus(project)
-		if err != nil {
-			client.Close()
-			return fmt.Errorf("get status: %w", err)
-		}
-
-		if !status.Running {
-			if err := client.ManagerStart(project); err != nil {
-				client.Close()
-				return fmt.Errorf("start manager: %w", err)
-			}
-			fmt.Printf("🚌 Manager agent started for project %s\n", project)
-		}
-
-		// Run TUI in manager mode
-		return tui.RunManagerMode(client, project)
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerStartCmd)
 	managerCmd.AddCommand(managerStopCmd)
 	managerCmd.AddCommand(managerStatusCmd)
 	managerCmd.AddCommand(managerClearCmd)
-	managerCmd.AddCommand(managerChatCmd)
 }

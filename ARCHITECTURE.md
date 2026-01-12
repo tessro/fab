@@ -63,7 +63,6 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 | `fab plan <prompt>` | Start a planning agent |
 | `fab plan list` | List planning agents |
 | `fab plan stop <id>` | Stop a planning agent |
-| `fab plan chat <id>` | Send message to a planner |
 | **Other** | |
 | `fab claims` | List active ticket claims |
 | `fab branch cleanup` | Clean up merged branches |

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tessro/fab/internal/tui"
 )
 
 var planProject string
@@ -28,7 +27,7 @@ Planning agents:
 - Run in a worktree if --project is specified
 - Are not subject to max-agents limit
 
-Use 'fab tui' or 'fab plan chat <id>' to interact with the planning agent.
+Use 'fab tui' to interact with the planning agent.
 
 Examples:
   fab plan "Add user authentication"
@@ -66,7 +65,7 @@ func runPlan(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("   Working directory: %s\n", resp.WorkDir)
 	fmt.Println()
-	fmt.Printf("Use 'fab tui' or 'fab plan chat %s' to interact with the agent.\n", resp.ID)
+	fmt.Printf("Use 'fab tui' to interact with the agent.\n")
 
 	client.Close()
 	return nil
@@ -142,27 +141,10 @@ var planStopCmd = &cobra.Command{
 	},
 }
 
-var planChatCmd = &cobra.Command{
-	Use:   "chat <id>",
-	Short: "Open interactive chat with a planning agent",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
-
-		client := MustConnect()
-
-		// Launch main TUI with the planner selected
-		return tui.RunWithClient(client, &tui.TUIOptions{
-			InitialAgentID: tui.PlannerAgentIDPrefix + id,
-		})
-	},
-}
-
 func init() {
 	planCmd.Flags().StringVarP(&planProject, "project", "p", "", "Run in project worktree")
 	planCmd.AddCommand(planListCmd)
 	planCmd.AddCommand(planStopCmd)
-	planCmd.AddCommand(planChatCmd)
 
 	planListCmd.Flags().StringVarP(&planProject, "project", "p", "", "Filter by project")
 

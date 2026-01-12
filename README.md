@@ -112,7 +112,6 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab plan [prompt]` | Start a planning agent |
 | `fab plan --project <name> [prompt]` | Plan in a project worktree |
 | `fab plan list` | List planning agents |
-| `fab plan chat <id>` | Chat with a planning agent |
 | `fab plan stop <id>` | Stop a planning agent |
 
 ### Other
@@ -245,8 +244,8 @@ fab plan "Add user authentication with OAuth"
 # Plan within a specific project's worktree
 fab plan --project myapp "Implement dark mode"
 
-# Chat with the planning agent
-fab plan chat abc123
+# Interact with planning agents in the TUI
+fab tui
 ```
 
 Planning agents:
