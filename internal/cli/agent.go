@@ -46,7 +46,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tTASK\tDESCRIPTION\tAGE")
+	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tBACKEND\tTASK\tDESCRIPTION\tAGE")
 
 	for _, a := range resp.Agents {
 		age := formatDuration(time.Since(a.StartedAt))
@@ -62,7 +62,11 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		if len(desc) > 40 {
 			desc = desc[:37] + "..."
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, task, desc, age)
+		backend := a.Backend
+		if backend == "" {
+			backend = "-"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, backend, task, desc, age)
 	}
 
 	_ = w.Flush()

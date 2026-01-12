@@ -284,6 +284,7 @@ func (s *Supervisor) handlePlannerEvent(event planner.Event) {
 			AgentID:   info.ID,
 			Project:   info.Project,
 			StartedAt: info.StartedAt.Format(time.RFC3339),
+			Backend:   info.Backend,
 		}
 	case planner.EventStateChanged:
 		info := event.Planner.Info()

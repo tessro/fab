@@ -20,6 +20,7 @@ type ChatView struct {
 	focused             bool
 	agentID             string
 	project             string
+	backend             string // CLI backend name (e.g., "claude", "codex")
 	viewport            viewport.Model
 	ready               bool
 	pendingPermission   *daemon.PermissionRequest // pending permission request
@@ -111,10 +112,11 @@ func (v *ChatView) IsFocused() bool {
 }
 
 // SetAgent sets the currently viewed agent.
-func (v *ChatView) SetAgent(agentID, project string) {
+func (v *ChatView) SetAgent(agentID, project, backend string) {
 	if v.agentID != agentID {
 		v.agentID = agentID
 		v.project = project
+		v.backend = backend
 		v.entries = make([]daemon.ChatEntryDTO, 0)
 		v.updateContent()
 	}
@@ -124,6 +126,7 @@ func (v *ChatView) SetAgent(agentID, project string) {
 func (v *ChatView) ClearAgent() {
 	v.agentID = ""
 	v.project = ""
+	v.backend = ""
 	v.entries = make([]daemon.ChatEntryDTO, 0)
 	v.updateContent()
 }
@@ -395,7 +398,16 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) s
 
 	switch entry.Role {
 	case "assistant":
-		prefix := "Claude: "
+		// Use backend name for prefix, capitalize first letter
+		backendName := v.backend
+		if backendName == "" {
+			backendName = "claude"
+		}
+		// Capitalize first letter
+		if len(backendName) > 0 {
+			backendName = strings.ToUpper(backendName[:1]) + backendName[1:]
+		}
+		prefix := backendName + ": "
 		prefixLen := len(prefix)
 		if timeStr != "" {
 			prefixLen += len(timeStr) + 1 // +1 for space

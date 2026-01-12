@@ -112,7 +112,7 @@ func (m *Model) selectCurrentAgent() tea.Cmd {
 	if agent == nil {
 		return nil
 	}
-	m.chatView.SetAgent(agent.ID, agent.Project)
+	m.chatView.SetAgent(agent.ID, agent.Project, agent.Backend)
 	m.chatView.SetPendingPermission(m.pendingPermissionForAgent(agent.ID))
 	m.chatView.SetPendingUserQuestion(m.pendingUserQuestionForAgent(agent.ID))
 	return m.fetchAgentChatHistory(agent.ID, agent.Project)

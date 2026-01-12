@@ -52,7 +52,7 @@ type plannerInputMsg struct {
 // NewPlannerModel creates a new planner TUI model.
 func NewPlannerModel(client daemon.PlannerModeClient, plannerID string) PlannerModel {
 	chatView := NewChatView()
-	chatView.SetAgent(plannerID, "plan")
+	chatView.SetAgent(plannerID, "plan", "claude") // Default to Claude, updated when planner info is fetched
 
 	return PlannerModel{
 		plannerID: plannerID,

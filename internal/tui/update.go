@@ -801,12 +801,17 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 			}
 		}
 		tuiAgentID := plannerAgentID(event.AgentID)
+		backend := event.Backend
+		if backend == "" {
+			backend = "claude" // Default if not set
+		}
 		agents = append(agents, daemon.AgentStatus{
 			ID:          tuiAgentID,
 			Project:     event.Project,
 			State:       "starting",
 			StartedAt:   startedAt,
 			Description: "Planner",
+			Backend:     backend,
 		})
 		m.agentList.SetAgents(agents)
 		m.header.SetAgentCounts(len(agents), countRunning(agents))

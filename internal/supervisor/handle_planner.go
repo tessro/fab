@@ -195,6 +195,7 @@ func (s *Supervisor) handlePlanList(_ context.Context, req *daemon.Request) *dae
 			StartedAt:   startedAt,
 			PlanFile:    info.PlanFile,
 			Description: info.Description,
+			Backend:     info.Backend,
 		})
 	}
 

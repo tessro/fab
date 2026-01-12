@@ -54,7 +54,7 @@ type managerClearHistoryMsg struct {
 // NewManagerModel creates a new manager TUI model.
 func NewManagerModel(client daemon.ManagerModeClient, project string) ManagerModel {
 	chatView := NewChatView()
-	chatView.SetAgent("manager", project)
+	chatView.SetAgent("manager", project, "claude") // Manager always uses Claude
 
 	return ManagerModel{
 		chatView:  chatView,

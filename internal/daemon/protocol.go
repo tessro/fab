@@ -335,6 +335,7 @@ type StreamEvent struct {
 	StartedAt         string             `json:"started_at,omitempty"`         // For created events (RFC3339)
 	Task              string             `json:"task,omitempty"`               // For "info" events (issue/ticket ID)
 	Description       string             `json:"description,omitempty"`        // For "info" events (agent description)
+	Backend           string             `json:"backend,omitempty"`            // For "created", "planner_created" events
 	ChatEntry         *ChatEntryDTO      `json:"chat_entry,omitempty"`         // For "chat_entry" events
 	PermissionRequest *PermissionRequest `json:"permission_request,omitempty"` // For "permission_request" events
 	UserQuestion      *UserQuestion      `json:"user_question,omitempty"`      // For "user_question" events
@@ -608,6 +609,7 @@ type PlannerStatus struct {
 	StartedAt   string `json:"started_at"` // RFC3339 format
 	PlanFile    string `json:"plan_file,omitempty"`   // Path to generated plan (if complete)
 	Description string `json:"description,omitempty"` // User-set description
+	Backend     string `json:"backend,omitempty"`     // CLI backend name (e.g., "claude", "codex")
 }
 
 // PlanSendMessageRequest is the payload for plan.send_message requests.

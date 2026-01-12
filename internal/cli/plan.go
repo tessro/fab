@@ -90,7 +90,7 @@ var planListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tDESCRIPTION\tAGE\tPLAN FILE")
+		_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tBACKEND\tDESCRIPTION\tAGE\tPLAN FILE")
 
 		for _, p := range resp.Planners {
 			startedAt, _ := time.Parse(time.RFC3339, p.StartedAt)
@@ -111,7 +111,11 @@ var planListCmd = &cobra.Command{
 			if len(desc) > 40 {
 				desc = desc[:37] + "..."
 			}
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, project, p.State, desc, age, planFile)
+			backend := p.Backend
+			if backend == "" {
+				backend = "-"
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, project, p.State, backend, desc, age, planFile)
 		}
 
 		_ = w.Flush()

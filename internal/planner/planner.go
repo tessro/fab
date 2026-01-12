@@ -258,6 +258,11 @@ func (p *Planner) Info() PlannerInfo {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	backendName := ""
+	if p.backend != nil {
+		backendName = p.backend.Name()
+	}
+
 	return PlannerInfo{
 		ID:          p.id,
 		Project:     p.project,
@@ -266,6 +271,7 @@ func (p *Planner) Info() PlannerInfo {
 		StartedAt:   p.StartedAt(),
 		PlanFile:    p.planFile,
 		Description: p.description,
+		Backend:     backendName,
 	}
 }
 
@@ -278,6 +284,7 @@ type PlannerInfo struct {
 	StartedAt   time.Time
 	PlanFile    string
 	Description string
+	Backend     string // CLI backend name (e.g., "claude", "codex")
 }
 
 // buildPlanModePrompt creates the prompt for the planning agent.

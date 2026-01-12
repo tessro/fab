@@ -129,6 +129,10 @@ func (m Model) fetchAgentList() tea.Cmd {
 				}
 				agentID := plannerAgentID(p.ID)
 				slog.Debug("tui.fetchAgentList: adding planner to list", "planner_id", p.ID, "agent_id", agentID)
+				backend := p.Backend
+				if backend == "" {
+					backend = "claude" // Default if not set
+				}
 				agents = append(agents, daemon.AgentStatus{
 					ID:          agentID,
 					Project:     p.Project,
@@ -136,7 +140,7 @@ func (m Model) fetchAgentList() tea.Cmd {
 					Worktree:    p.WorkDir,
 					StartedAt:   startedAt,
 					Description: "Planner",
-					Backend:     "claude", // Planners always use Claude Code
+					Backend:     backend,
 				})
 			}
 		} else if err != nil {
