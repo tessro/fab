@@ -382,6 +382,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fetch fresh agent list after reconnection
 			cmds = append(cmds, m.fetchAgentList())
 			cmds = append(cmds, m.waitForEvent())
+			// If an agent is currently selected, refetch its history
+			// This handles daemon restart where in-memory history was lost
+			if currentAgent := m.chatView.AgentID(); currentAgent != "" {
+				slog.Debug("reconnect: refetching history for current agent", "agent_id", currentAgent)
+				cmds = append(cmds, m.fetchAgentChatHistory(currentAgent, m.chatView.Project()))
+			}
 		} else {
 			slog.Debug("reconnection failed", "err", msg.Err, "attempt", m.reconnectCount+1)
 			m.reconnectCount++

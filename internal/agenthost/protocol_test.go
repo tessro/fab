@@ -407,6 +407,109 @@ func TestErrorResponse(t *testing.T) {
 	}
 }
 
+func TestHistoryRequestEncodeDecode(t *testing.T) {
+	tests := []struct {
+		name string
+		req  HistoryRequest
+	}{
+		{
+			name: "empty limit",
+			req:  HistoryRequest{},
+		},
+		{
+			name: "with limit",
+			req:  HistoryRequest{Limit: 100},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.req)
+			if err != nil {
+				t.Fatalf("failed to marshal: %v", err)
+			}
+
+			var decoded HistoryRequest
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatalf("failed to unmarshal: %v", err)
+			}
+
+			if decoded.Limit != tt.req.Limit {
+				t.Errorf("limit mismatch: got %d, want %d", decoded.Limit, tt.req.Limit)
+			}
+		})
+	}
+}
+
+func TestHistoryResponseEncodeDecode(t *testing.T) {
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+
+	resp := HistoryResponse{
+		AgentID: "abc123",
+		Entries: []HistoryEntry{
+			{
+				Role:      "user",
+				Content:   "Hello",
+				Timestamp: timestamp,
+			},
+			{
+				Role:      "assistant",
+				Content:   "Hi there!",
+				Timestamp: timestamp,
+			},
+			{
+				Role:       "tool",
+				ToolName:   "Read",
+				ToolInput:  "/path/to/file",
+				ToolResult: "file contents",
+				Timestamp:  timestamp,
+			},
+		},
+		Offset: 2048,
+		Total:  3,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded HistoryResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.AgentID != resp.AgentID {
+		t.Errorf("agent_id mismatch: got %q, want %q", decoded.AgentID, resp.AgentID)
+	}
+	if decoded.Offset != resp.Offset {
+		t.Errorf("offset mismatch: got %d, want %d", decoded.Offset, resp.Offset)
+	}
+	if decoded.Total != resp.Total {
+		t.Errorf("total mismatch: got %d, want %d", decoded.Total, resp.Total)
+	}
+	if len(decoded.Entries) != len(resp.Entries) {
+		t.Fatalf("entries count mismatch: got %d, want %d", len(decoded.Entries), len(resp.Entries))
+	}
+
+	// Verify entries
+	for i, entry := range decoded.Entries {
+		expected := resp.Entries[i]
+		if entry.Role != expected.Role {
+			t.Errorf("entry[%d].role mismatch: got %q, want %q", i, entry.Role, expected.Role)
+		}
+		if entry.Content != expected.Content {
+			t.Errorf("entry[%d].content mismatch: got %q, want %q", i, entry.Content, expected.Content)
+		}
+		if entry.ToolName != expected.ToolName {
+			t.Errorf("entry[%d].tool_name mismatch: got %q, want %q", i, entry.ToolName, expected.ToolName)
+		}
+		if entry.Timestamp != expected.Timestamp {
+			t.Errorf("entry[%d].timestamp mismatch: got %q, want %q", i, entry.Timestamp, expected.Timestamp)
+		}
+	}
+}
+
 func TestMessageTypeConstants(t *testing.T) {
 	// Verify message types use consistent naming pattern
 	types := []struct {
@@ -418,6 +521,7 @@ func TestMessageTypeConstants(t *testing.T) {
 		{MsgHostList, "host.list"},
 		{MsgHostAttach, "host.attach"},
 		{MsgHostDetach, "host.detach"},
+		{MsgHostHistory, "host.history"},
 		{MsgHostSend, "host.send"},
 		{MsgHostStop, "host.stop"},
 	}

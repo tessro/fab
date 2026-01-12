@@ -44,6 +44,9 @@ const (
 	MsgHostAttach MessageType = "host.attach" // Attach to agent output stream
 	MsgHostDetach MessageType = "host.detach" // Detach from agent output stream
 
+	// History retrieval
+	MsgHostHistory MessageType = "host.history" // Retrieve buffered chat history
+
 	// Agent communication
 	MsgHostSend MessageType = "host.send" // Send input to the agent
 
@@ -117,6 +120,30 @@ type AttachRequest struct {
 type AttachResponse struct {
 	AgentID      string `json:"agent_id"`      // Agent being attached to
 	StreamOffset int64  `json:"stream_offset"` // Current stream position
+}
+
+// HistoryRequest is the payload for host.history requests.
+type HistoryRequest struct {
+	Limit int `json:"limit,omitempty"` // Maximum entries to return (0 = all)
+}
+
+// HistoryEntry represents a single chat history entry.
+// This mirrors daemon.ChatEntryDTO but is specific to the agent host protocol.
+type HistoryEntry struct {
+	Role       string `json:"role"`                  // assistant, user, tool
+	Content    string `json:"content,omitempty"`     // Message content
+	ToolName   string `json:"tool_name,omitempty"`   // For tool calls
+	ToolInput  string `json:"tool_input,omitempty"`  // Tool input data
+	ToolResult string `json:"tool_result,omitempty"` // Tool result data
+	Timestamp  string `json:"timestamp"`             // RFC3339 timestamp
+}
+
+// HistoryResponse is the payload for host.history responses.
+type HistoryResponse struct {
+	AgentID string         `json:"agent_id"`        // Agent ID
+	Entries []HistoryEntry `json:"entries"`         // Chat history entries
+	Offset  int64          `json:"offset"`          // Stream offset at time of response
+	Total   int            `json:"total,omitempty"` // Total entries available (before limit)
 }
 
 // StreamEvent is sent to attached clients when agent output occurs.

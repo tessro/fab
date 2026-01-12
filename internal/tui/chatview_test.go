@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/tessro/fab/internal/daemon"
+)
 
 func TestSummarizeToolResult(t *testing.T) {
 	tests := []struct {
@@ -200,5 +204,147 @@ func TestFormatTime(t *testing.T) {
 				t.Errorf("formatTime(%q) = %q, want %q", tt.timestamp, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestChatViewSetEntriesMerge(t *testing.T) {
+	// Test that SetEntries properly merges historical entries with streaming entries
+	// that arrived during the history fetch. This is critical for reconnection logic.
+
+	tests := []struct {
+		name           string
+		existing       []daemon.ChatEntryDTO // entries already in chat view (from streaming)
+		history        []daemon.ChatEntryDTO // entries fetched from history API
+		wantCount      int
+		wantLastRole   string
+		wantLastTime   string
+	}{
+		{
+			name:     "empty history keeps existing streaming entries",
+			existing: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "hello", Timestamp: "2024-01-15T10:00:00Z"},
+			},
+			history:      []daemon.ChatEntryDTO{},
+			wantCount:    1,
+			wantLastRole: "user",
+			wantLastTime: "2024-01-15T10:00:00Z",
+		},
+		{
+			name:     "history replaces older streaming entries",
+			existing: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "old streaming entry", Timestamp: "2024-01-15T09:00:00Z"},
+			},
+			history: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "history entry 1", Timestamp: "2024-01-15T10:00:00Z"},
+				{Role: "assistant", Content: "history entry 2", Timestamp: "2024-01-15T10:01:00Z"},
+			},
+			wantCount:    2,
+			wantLastRole: "assistant",
+			wantLastTime: "2024-01-15T10:01:00Z",
+		},
+		{
+			name:     "streaming entries newer than history are preserved",
+			existing: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "old", Timestamp: "2024-01-15T09:00:00Z"},
+				{Role: "assistant", Content: "new streaming", Timestamp: "2024-01-15T10:05:00Z"},
+			},
+			history: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "history entry 1", Timestamp: "2024-01-15T10:00:00Z"},
+				{Role: "assistant", Content: "history entry 2", Timestamp: "2024-01-15T10:01:00Z"},
+			},
+			wantCount:    3, // 2 history + 1 newer streaming
+			wantLastRole: "assistant",
+			wantLastTime: "2024-01-15T10:05:00Z",
+		},
+		{
+			name:     "multiple newer streaming entries preserved",
+			existing: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "old", Timestamp: "2024-01-15T09:00:00Z"},
+				{Role: "assistant", Content: "streaming 1", Timestamp: "2024-01-15T10:05:00Z"},
+				{Role: "user", Content: "streaming 2", Timestamp: "2024-01-15T10:06:00Z"},
+			},
+			history: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "history entry", Timestamp: "2024-01-15T10:00:00Z"},
+			},
+			wantCount:    3, // 1 history + 2 newer streaming
+			wantLastRole: "user",
+			wantLastTime: "2024-01-15T10:06:00Z",
+		},
+		{
+			name:         "empty existing with history loads all",
+			existing:     []daemon.ChatEntryDTO{},
+			history: []daemon.ChatEntryDTO{
+				{Role: "user", Content: "history 1", Timestamp: "2024-01-15T10:00:00Z"},
+				{Role: "assistant", Content: "history 2", Timestamp: "2024-01-15T10:01:00Z"},
+			},
+			wantCount:    2,
+			wantLastRole: "assistant",
+			wantLastTime: "2024-01-15T10:01:00Z",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cv := NewChatView()
+			// Initialize viewport with a size
+			cv.SetSize(80, 24)
+			cv.SetAgent("test-agent", "test-project", "claude")
+
+			// Add existing entries (simulating streaming entries)
+			for _, e := range tt.existing {
+				cv.AppendEntry(e)
+			}
+
+			// Set history entries (simulating reconnect fetch)
+			cv.SetEntries(tt.history)
+
+			// Verify results
+			if len(cv.entries) != tt.wantCount {
+				t.Errorf("entry count = %d, want %d", len(cv.entries), tt.wantCount)
+			}
+
+			if tt.wantCount > 0 {
+				last := cv.entries[len(cv.entries)-1]
+				if last.Role != tt.wantLastRole {
+					t.Errorf("last entry role = %q, want %q", last.Role, tt.wantLastRole)
+				}
+				if last.Timestamp != tt.wantLastTime {
+					t.Errorf("last entry timestamp = %q, want %q", last.Timestamp, tt.wantLastTime)
+				}
+			}
+		})
+	}
+}
+
+func TestChatViewSetEntriesPreservesOrder(t *testing.T) {
+	// Verify that merged entries maintain chronological order
+	cv := NewChatView()
+	cv.SetSize(80, 24)
+	cv.SetAgent("test-agent", "test-project", "claude")
+
+	// Add streaming entries - one older than history, two newer
+	cv.AppendEntry(daemon.ChatEntryDTO{Role: "user", Content: "very old", Timestamp: "2024-01-15T08:00:00Z"})
+	cv.AppendEntry(daemon.ChatEntryDTO{Role: "assistant", Content: "streaming new 1", Timestamp: "2024-01-15T10:05:00Z"})
+	cv.AppendEntry(daemon.ChatEntryDTO{Role: "user", Content: "streaming new 2", Timestamp: "2024-01-15T10:06:00Z"})
+
+	// Set history
+	history := []daemon.ChatEntryDTO{
+		{Role: "user", Content: "history 1", Timestamp: "2024-01-15T10:00:00Z"},
+		{Role: "assistant", Content: "history 2", Timestamp: "2024-01-15T10:01:00Z"},
+		{Role: "user", Content: "history 3", Timestamp: "2024-01-15T10:02:00Z"},
+	}
+	cv.SetEntries(history)
+
+	// Should have: 3 history + 2 newer streaming = 5 entries
+	if len(cv.entries) != 5 {
+		t.Errorf("entry count = %d, want 5", len(cv.entries))
+	}
+
+	// Verify order by checking content
+	expected := []string{"history 1", "history 2", "history 3", "streaming new 1", "streaming new 2"}
+	for i, want := range expected {
+		if cv.entries[i].Content != want {
+			t.Errorf("entry[%d].Content = %q, want %q", i, cv.entries[i].Content, want)
+		}
 	}
 }
