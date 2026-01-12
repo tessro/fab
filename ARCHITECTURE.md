@@ -234,6 +234,8 @@ Permission requests flow through the `fab hook` command, which the Claude Code p
 
 ## IPC Protocol
 
+### Daemon Protocol
+
 Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
 
 **Message categories:**
@@ -248,6 +250,79 @@ Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
 - Planning: `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history`
 - Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`
 - Stats: `stats`, `claim.list`, `commit.list`
+
+### Agent Host Protocol
+
+Each agent runs in a host process with its own Unix socket at `~/.fab/hosts/<agent-id>.sock`.
+This allows the daemon to restart and reattach to running agents.
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                           fab daemon                                   │
+│                                                                        │
+│  fab.sock ◄──────────────────────────────────────────────────────┐    │
+│      │                                                            │    │
+│      ▼                                                            │    │
+│  Supervisor ──────► Orchestrator                                  │    │
+│                          │                                        │    │
+└──────────────────────────┼────────────────────────────────────────┘    │
+                           │                                             │
+                           ▼                                             │
+     ┌─────────────────────────────────────────────────────┐            │
+     │              Agent Host Process                      │            │
+     │                                                      │            │
+     │  hosts/<id>.sock ◄───────────────────────────────────┼────────────┘
+     │       │                                              │
+     │       ▼                                              │
+     │  ┌──────────────────────────────────────┐           │
+     │  │         Claude Code                  │           │
+     │  │         (subprocess)                 │           │
+     │  └──────────────────────────────────────┘           │
+     └─────────────────────────────────────────────────────┘
+```
+
+**Protocol version:** 1.0 (defined in `internal/agenthost/protocol.go`)
+
+**Message types:**
+- Host management: `host.ping`, `host.status`
+- Agent listing: `host.list`
+- Stream management: `host.attach`, `host.detach`
+- Agent communication: `host.send`
+- Lifecycle control: `host.stop`
+
+**Request/Response envelope:**
+```json
+// Request
+{
+  "type": "host.ping",
+  "id": "req-123",
+  "payload": { ... }
+}
+
+// Response
+{
+  "type": "host.ping",
+  "id": "req-123",
+  "success": true,
+  "payload": { ... }
+}
+```
+
+**Stream events** (sent to attached clients):
+```json
+{
+  "type": "output",
+  "agent_id": "abc123",
+  "offset": 1024,
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": "..."
+}
+```
+
+**Socket path resolution:**
+1. `FAB_AGENT_HOST_SOCKET_PATH` environment variable (exact path)
+2. `FAB_DIR/hosts/<agent-id>.sock` (base dir override)
+3. `~/.fab/hosts/<agent-id>.sock` (default)
 
 ## Directory Structure
 
@@ -278,6 +353,8 @@ fab/
 │   │   ├── permissions.go       # Permission request handling
 │   │   ├── questions.go         # User question handling
 │   │   └── errors.go            # Error types
+│   ├── agenthost/               # Agent host process protocol
+│   │   └── protocol.go          # Agent host IPC message types
 │   ├── supervisor/              # Request handler
 │   │   ├── supervisor.go        # Main handler implementation
 │   │   ├── handle_*.go          # Per-category handlers

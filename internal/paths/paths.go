@@ -23,6 +23,9 @@ const (
 
 	// EnvPIDPath overrides the PID file path directly.
 	EnvPIDPath = "FAB_PID_PATH"
+
+	// EnvAgentHostSocketPath overrides the agent host socket path directly.
+	EnvAgentHostSocketPath = "FAB_AGENT_HOST_SOCKET_PATH"
 )
 
 // BaseDir returns the fab base directory (~/.fab by default).
@@ -142,4 +145,30 @@ func PlanPath(planID string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, planID+".md"), nil
+}
+
+// AgentHostsDir returns the directory containing agent host sockets.
+// (~/.fab/hosts by default, or FAB_DIR/hosts).
+func AgentHostsDir() (string, error) {
+	base, err := BaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "hosts"), nil
+}
+
+// AgentHostSocketPath returns the socket path for a specific agent host.
+// Precedence: FAB_AGENT_HOST_SOCKET_PATH > FAB_DIR/hosts/<agentID>.sock > ~/.fab/hosts/<agentID>.sock
+//
+// The agentID parameter identifies which agent's host socket to return.
+// Each agent host runs as a separate process with its own socket.
+func AgentHostSocketPath(agentID string) (string, error) {
+	if path := os.Getenv(EnvAgentHostSocketPath); path != "" {
+		return path, nil
+	}
+	dir, err := AgentHostsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, agentID+".sock"), nil
 }
