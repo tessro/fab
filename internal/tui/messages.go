@@ -36,6 +36,12 @@ type statsMsg struct {
 	Err   error
 }
 
+// commitListMsg contains recent commits for the recent work section.
+type commitListMsg struct {
+	Commits []daemon.CommitInfo
+	Err     error
+}
+
 // permissionResultMsg is the result of responding to a permission request.
 type permissionResultMsg struct {
 	Err error

@@ -47,11 +47,12 @@ type Model struct {
 	modeState ModeState
 
 	// Components
-	header    Header
-	agentList AgentList
-	chatView  ChatView
-	inputLine InputLine
-	helpBar   HelpBar
+	header     Header
+	agentList  AgentList
+	recentWork RecentWork
+	chatView   ChatView
+	inputLine  InputLine
+	helpBar    HelpBar
 
 	// Daemon client for IPC
 	client   daemon.TUIClient
@@ -101,6 +102,7 @@ func New() Model {
 	return Model{
 		header:         NewHeader(),
 		agentList:      agentList,
+		recentWork:     NewRecentWork(),
 		chatView:       NewChatView(),
 		inputLine:      NewInputLine(),
 		helpBar:        NewHelpBar(),
@@ -165,11 +167,15 @@ func (m Model) View() string {
 	m.helpBar.SetModeState(m.modeState)
 	status := m.helpBar.View()
 
-	// Two-pane layout: agent list (left) | chat view (right)
+	// Left pane: agent list (70%) + recent work (30%)
 	agentList := m.agentList.View()
+	recentWork := m.recentWork.View()
+	leftPane := lipgloss.JoinVertical(lipgloss.Left, agentList, recentWork)
+
+	// Right pane: chat view
 	chatView := m.chatView.View()
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, chatView)
 
 	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
 }

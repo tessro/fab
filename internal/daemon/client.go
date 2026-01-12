@@ -654,6 +654,21 @@ func (c *Client) Stats(project string) (*StatsResponse, error) {
 	return decodePayload[StatsResponse](resp.Payload)
 }
 
+// CommitList retrieves recent commits.
+func (c *Client) CommitList(project string, limit int) (*CommitListResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgCommitList,
+		Payload: CommitListRequest{Project: project, Limit: limit},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, NewServerError("commit list", resp.Error)
+	}
+	return decodePayload[CommitListResponse](resp.Payload)
+}
+
 // ListPendingPermissions returns pending permission requests awaiting user approval.
 func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse, error) {
 	resp, err := c.Send(&Request{

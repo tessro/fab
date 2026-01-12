@@ -220,6 +220,21 @@ func (m Model) fetchStats() tea.Cmd {
 	}
 }
 
+// fetchCommits retrieves recent commits for the recent work section.
+func (m Model) fetchCommits() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		resp, err := m.client.CommitList("", 20) // Get up to 20 recent commits
+		if err != nil {
+			slog.Debug("tui.fetchCommits: CommitList failed", "error", err)
+			return commitListMsg{Err: err}
+		}
+		return commitListMsg{Commits: resp.Commits}
+	}
+}
+
 // fetchProjectsForPlan retrieves the list of projects for plan mode.
 func (m Model) fetchProjectsForPlan() tea.Cmd {
 	return func() tea.Msg {

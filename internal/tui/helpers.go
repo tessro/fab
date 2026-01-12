@@ -140,11 +140,22 @@ func (m *Model) updateLayout() {
 		contentHeight = 1
 	}
 
-	// Split width: 38% agent list, 62% chat view
+	// Split width: 38% left pane, 62% chat view
 	listWidth := m.width * 38 / 100
 	chatWidth := m.width - listWidth
 
-	m.agentList.SetSize(listWidth, contentHeight)
+	// Split left pane height: 70% agent list, 30% recent work
+	agentListHeight := contentHeight * 70 / 100
+	recentWorkHeight := contentHeight - agentListHeight
+	if agentListHeight < 3 {
+		agentListHeight = 3
+	}
+	if recentWorkHeight < 3 {
+		recentWorkHeight = 3
+	}
+
+	m.agentList.SetSize(listWidth, agentListHeight)
+	m.recentWork.SetSize(listWidth, recentWorkHeight)
 	m.chatView.SetSize(chatWidth, contentHeight)
 	m.helpBar.SetWidth(m.width)
 

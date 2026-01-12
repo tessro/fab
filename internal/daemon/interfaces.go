@@ -38,6 +38,7 @@ type TUIClient interface {
 	// Project/Stats operations
 	ProjectList() (*ProjectListResponse, error)
 	Stats(project string) (*StatsResponse, error)
+	CommitList(project string, limit int) (*CommitListResponse, error)
 }
 
 // Compile-time assertions to verify Client implements all interfaces.

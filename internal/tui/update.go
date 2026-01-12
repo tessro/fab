@@ -459,8 +459,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				slog.Debug("tui.Update: attaching to event stream")
 				cmds = append(cmds, m.attachToStream())
 			}
-			// Fetch stats for header display
+			// Fetch stats for header display and commits for recent work
 			cmds = append(cmds, m.fetchStats())
+			cmds = append(cmds, m.fetchCommits())
 		}
 
 	case agentInputMsg:
@@ -480,6 +481,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err == nil && msg.Stats != nil {
 			// Only use stats for commit count - usage comes from usageUpdateMsg
 			m.header.SetCommitCount(msg.Stats.CommitCount)
+		}
+
+	case commitListMsg:
+		if msg.Err == nil {
+			m.recentWork.SetCommits(msg.Commits)
 		}
 
 	case permissionResultMsg:
@@ -579,11 +585,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fetchUsage())
 		}
 
-		// Refresh daemon stats every 30 seconds for commit count
+		// Refresh daemon stats every 30 seconds for commit count and recent work
 		m.statsRefreshTick++
 		if m.statsRefreshTick >= 300 && m.connState == connectionConnected {
 			m.statsRefreshTick = 0
 			cmds = append(cmds, m.fetchStats())
+			cmds = append(cmds, m.fetchCommits())
 		}
 
 	case usageUpdateMsg:
