@@ -165,6 +165,7 @@ func TestOrchestrator_KickstartPromptContent(t *testing.T) {
 		"fab agent claim",
 		"fab agent done",
 		"fab issue close",
+		"local worktree (unmerged)",
 	}
 
 	for _, phrase := range expectedPhrases {
