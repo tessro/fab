@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,7 +16,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage fab agents",
-	Long:  "Commands for managing Claude Code agents (work agents and planning agents).",
+	Long:  "Commands for managing Claude Code agents.",
 }
 
 var agentListProject string
@@ -254,22 +255,16 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Plan agent subcommand
+// Agent plan subcommand for managing planning agents
 var agentPlanProject string
 
 var agentPlanCmd = &cobra.Command{
-	Use:   "plan",
-	Short: "Manage planning agents",
-	Long:  "Commands for starting and managing planning agents.",
-}
-
-var agentPlanStartCmd = &cobra.Command{
-	Use:   "start <prompt>",
+	Use:   "plan [prompt]",
 	Short: "Start a planning agent",
 	Long: `Start a planning agent in plan mode to create implementation plans.
 
 The planning agent will explore the codebase, design an implementation approach,
-and write the plan to .fab/plans/<agent-id>.md when complete.
+and write the plan via 'fab plan write' when complete.
 
 Planning agents:
 - Are visible in the TUI
@@ -280,30 +275,44 @@ Planning agents:
 Use 'fab tui' to interact with the planning agent.
 
 Examples:
-  fab agent plan start "Add user authentication"
-  fab agent plan start --project myapp "Implement dark mode"
+  fab agent plan "Add user authentication"
+  fab agent plan --project myapp "Implement dark mode"
 `,
-	Args: cobra.MinimumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		prompt := strings.Join(args, " ")
+	RunE: runAgentPlan,
+}
 
-		client := MustConnect()
-		defer client.Close()
+func runAgentPlan(cmd *cobra.Command, args []string) error {
+	// Get prompt from args
+	var prompt string
+	if len(args) > 0 {
+		prompt = strings.Join(args, " ")
+	} else {
+		return fmt.Errorf("prompt is required: fab agent plan \"your planning task\"")
+	}
 
-		resp, err := client.PlanStart(agentPlanProject, prompt)
-		if err != nil {
-			return fmt.Errorf("start planner: %w", err)
-		}
+	slog.Debug("plan: connecting to daemon")
+	client := MustConnect()
+	defer client.Close()
+	slog.Debug("plan: connected to daemon")
 
-		fmt.Printf("🚌 Planning agent started (ID: %s)\n", resp.ID)
-		if resp.Project != "" {
-			fmt.Printf("   Project: %s\n", resp.Project)
-		}
-		fmt.Printf("   Working directory: %s\n", resp.WorkDir)
-		fmt.Println()
-		fmt.Printf("Use 'fab tui' to interact with the agent.\n")
-		return nil
-	},
+	// Start the planning agent
+	slog.Debug("plan: sending PlanStart request", "project", agentPlanProject, "prompt_len", len(prompt))
+	resp, err := client.PlanStart(agentPlanProject, prompt)
+	if err != nil {
+		slog.Error("plan: PlanStart failed", "error", err)
+		return fmt.Errorf("start planner: %w", err)
+	}
+	slog.Debug("plan: PlanStart succeeded", "id", resp.ID, "project", resp.Project, "workdir", resp.WorkDir)
+
+	fmt.Printf("🚌 Planning agent started (ID: %s)\n", resp.ID)
+	if resp.Project != "" {
+		fmt.Printf("   Project: %s\n", resp.Project)
+	}
+	fmt.Printf("   Working directory: %s\n", resp.WorkDir)
+	fmt.Println()
+	fmt.Printf("Use 'fab tui' to interact with the agent.\n")
+
+	return nil
 }
 
 var agentPlanListCmd = &cobra.Command{
@@ -341,6 +350,7 @@ var agentPlanListCmd = &cobra.Command{
 			if desc == "" {
 				desc = "-"
 			}
+			// Truncate long descriptions for display
 			if len(desc) > 40 {
 				desc = desc[:37] + "..."
 			}
@@ -391,12 +401,11 @@ func init() {
 
 	agentCmd.AddCommand(agentDescribeCmd)
 
-	// Plan agent subcommands
-	agentPlanStartCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Run in project worktree")
-	agentPlanListCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Filter by project")
-	agentPlanCmd.AddCommand(agentPlanStartCmd)
+	// Agent plan subcommands
+	agentPlanCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Run in project worktree")
 	agentPlanCmd.AddCommand(agentPlanListCmd)
 	agentPlanCmd.AddCommand(agentPlanStopCmd)
+	agentPlanListCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Filter by project")
 	agentCmd.AddCommand(agentPlanCmd)
 
 	rootCmd.AddCommand(agentCmd)

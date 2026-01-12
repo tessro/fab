@@ -124,3 +124,22 @@ func PIDPath() string {
 	}
 	return filepath.Join(base, "fab.pid")
 }
+
+// PlansDir returns the plans directory (~/.fab/plans by default).
+// When FAB_DIR is set, returns FAB_DIR/plans.
+func PlansDir() (string, error) {
+	base, err := BaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "plans"), nil
+}
+
+// PlanPath returns the path to a specific plan file.
+func PlanPath(planID string) (string, error) {
+	dir, err := PlansDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, planID+".md"), nil
+}

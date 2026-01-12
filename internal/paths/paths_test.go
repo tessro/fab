@@ -283,3 +283,48 @@ func TestPIDPath(t *testing.T) {
 		}
 	})
 }
+
+func TestPlansDir(t *testing.T) {
+	t.Run("default uses home directory", func(t *testing.T) {
+		os.Unsetenv(EnvFabDir)
+		defer os.Unsetenv(EnvFabDir)
+
+		dir, err := PlansDir()
+		if err != nil {
+			t.Fatalf("PlansDir() error = %v", err)
+		}
+		home, _ := os.UserHomeDir()
+		expected := filepath.Join(home, ".fab", "plans")
+		if dir != expected {
+			t.Errorf("PlansDir() = %q, want %q", dir, expected)
+		}
+	})
+
+	t.Run("FAB_DIR override", func(t *testing.T) {
+		os.Setenv(EnvFabDir, "/tmp/fab-test")
+		defer os.Unsetenv(EnvFabDir)
+
+		dir, err := PlansDir()
+		if err != nil {
+			t.Fatalf("PlansDir() error = %v", err)
+		}
+		expected := "/tmp/fab-test/plans"
+		if dir != expected {
+			t.Errorf("PlansDir() = %q, want %q", dir, expected)
+		}
+	})
+}
+
+func TestPlanPath(t *testing.T) {
+	os.Setenv(EnvFabDir, "/tmp/fab-test")
+	defer os.Unsetenv(EnvFabDir)
+
+	path, err := PlanPath("abc123")
+	if err != nil {
+		t.Fatalf("PlanPath() error = %v", err)
+	}
+	expected := "/tmp/fab-test/plans/abc123.md"
+	if path != expected {
+		t.Errorf("PlanPath() = %q, want %q", path, expected)
+	}
+}
