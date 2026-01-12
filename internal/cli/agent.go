@@ -47,14 +47,10 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tBACKEND\tTASK\tDESCRIPTION\tAGE")
+	_, _ = fmt.Fprintln(w, " \tID\tPROJECT\tBACKEND\tDESCRIPTION\tAGE")
 
 	for _, a := range resp.Agents {
 		age := formatDuration(time.Since(a.StartedAt))
-		task := a.Task
-		if task == "" {
-			task = "-"
-		}
 		desc := a.Description
 		if desc == "" {
 			desc = "-"
@@ -67,11 +63,34 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		if backend == "" {
 			backend = "-"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Project, a.State, backend, task, desc, age)
+		icon := stateIcon(a.State)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", icon, a.ID, a.Project, backend, desc, age)
 	}
 
 	_ = w.Flush()
 	return nil
+}
+
+// stateIcon returns an icon for the agent state.
+func stateIcon(state string) string {
+	switch state {
+	case "starting":
+		return "○"
+	case "running":
+		return "●"
+	case "idle":
+		return "○"
+	case "done":
+		return "✓"
+	case "error":
+		return "✗"
+	case "stopped":
+		return "○"
+	case "stopping":
+		return "○"
+	default:
+		return "?"
+	}
 }
 
 func formatDuration(d time.Duration) string {
@@ -333,7 +352,7 @@ var agentPlanListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tBACKEND\tDESCRIPTION\tAGE\tPLAN FILE")
+		_, _ = fmt.Fprintln(w, " \tID\tPROJECT\tBACKEND\tDESCRIPTION\tAGE")
 
 		for _, p := range resp.Planners {
 			startedAt, _ := time.Parse(time.RFC3339, p.StartedAt)
@@ -341,10 +360,6 @@ var agentPlanListCmd = &cobra.Command{
 			project := p.Project
 			if project == "" {
 				project = "-"
-			}
-			planFile := p.PlanFile
-			if planFile == "" {
-				planFile = "-"
 			}
 			desc := p.Description
 			if desc == "" {
@@ -358,7 +373,8 @@ var agentPlanListCmd = &cobra.Command{
 			if backend == "" {
 				backend = "-"
 			}
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, project, p.State, backend, desc, age, planFile)
+			icon := stateIcon(p.State)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", icon, p.ID, project, backend, desc, age)
 		}
 
 		_ = w.Flush()
