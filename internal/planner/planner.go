@@ -325,6 +325,8 @@ This appears in the TUI and helps users track your progress.
 
 ## Instructions
 
+**Important context**: Work happens in unmerged worktrees without PR numbers. Plans and issues should reference local diffs and issue IDs only. Avoid instructions that require PR numbers or links—these are not available until after work is merged.
+
 1. **Explore the codebase** thoroughly to understand:
    - Project structure and architecture
    - Existing patterns and conventions
