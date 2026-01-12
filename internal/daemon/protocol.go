@@ -498,12 +498,13 @@ type CommitListResponse struct {
 
 // CommitInfo describes a merged commit.
 type CommitInfo struct {
-	SHA      string `json:"sha"`
-	Branch   string `json:"branch"`
-	AgentID  string `json:"agent_id"`
-	TaskID   string `json:"task_id,omitempty"`
-	Project  string `json:"project"`
-	MergedAt string `json:"merged_at"` // RFC3339 format
+	SHA         string `json:"sha"`
+	Branch      string `json:"branch"`
+	AgentID     string `json:"agent_id"`
+	TaskID      string `json:"task_id,omitempty"`
+	Description string `json:"description,omitempty"` // Agent description at time of merge
+	Project     string `json:"project"`
+	MergedAt    string `json:"merged_at"` // RFC3339 format
 }
 
 // StatsRequest is the payload for stats requests.

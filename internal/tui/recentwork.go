@@ -78,8 +78,8 @@ func (r RecentWork) renderCommit(commit daemon.CommitInfo, width int) string {
 		contentWidth = 1
 	}
 
-	// Build the display: checkmark + task/branch info
-	// Format: "✓ #123 project" or "✓ branch-name project" if no task
+	// Build the display: checkmark + task/branch info + description
+	// Format: "✓ #123 project description" or "✓ branch-name project description"
 	checkmark := recentWorkCheckStyle.Render("✓")
 
 	// Task ID or branch name
@@ -98,7 +98,7 @@ func (r RecentWork) renderCommit(commit daemon.CommitInfo, width int) string {
 	// Project name
 	project := recentWorkProjectStyle.Render(commit.Project)
 
-	// Compose left part
+	// Compose left part (without description first)
 	left := lipgloss.JoinHorizontal(lipgloss.Center,
 		checkmark, " ",
 		identifier, " ",
@@ -130,14 +130,28 @@ func (r RecentWork) renderCommit(commit daemon.CommitInfo, width int) string {
 		}
 	}
 
+	// Add description if present and space available
+	var description string
+	if commit.Description != "" {
+		remaining := contentWidth - leftWidth - 1 // -1 for space before description
+		if remaining > 5 {                        // Only show if meaningful space available
+			desc := commit.Description
+			if len(desc) > remaining {
+				desc = desc[:remaining-1] + "…"
+			}
+			description = " " + recentWorkDescriptionStyle.Render(desc)
+		}
+	}
+
 	// Pad to full width
+	leftWidth = lipgloss.Width(left + description)
 	spacerWidth := contentWidth - leftWidth
 	if spacerWidth < 0 {
 		spacerWidth = 0
 	}
 	spacer := strings.Repeat(" ", spacerWidth)
 
-	row := left + spacer
+	row := left + description + spacer
 
 	// Apply row styling with full width
 	return recentWorkRowStyle.Width(width).Render(row)

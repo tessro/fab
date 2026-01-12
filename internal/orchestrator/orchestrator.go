@@ -379,13 +379,20 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 		result.SHA = mergeResult.SHA
 		slog.Info("merged agent branch to main", "agent", agentID, "branch", mergeResult.BranchName, "sha", mergeResult.SHA)
 
+		// Get agent description before deletion
+		var description string
+		if a, err := o.agents.Get(agentID); err == nil {
+			description = a.GetDescription()
+		}
+
 		// Record the commit
 		o.commits.Add(CommitRecord{
-			SHA:      mergeResult.SHA,
-			Branch:   mergeResult.BranchName,
-			AgentID:  agentID,
-			TaskID:   taskID,
-			MergedAt: time.Now(),
+			SHA:         mergeResult.SHA,
+			Branch:      mergeResult.BranchName,
+			AgentID:     agentID,
+			TaskID:      taskID,
+			Description: description,
+			MergedAt:    time.Now(),
 		})
 
 		_ = o.agents.Stop(agentID)

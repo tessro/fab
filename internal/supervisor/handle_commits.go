@@ -35,12 +35,13 @@ func (s *Supervisor) handleCommitList(_ context.Context, req *daemon.Request) *d
 
 		for _, r := range records {
 			commits = append(commits, daemon.CommitInfo{
-				SHA:      r.SHA,
-				Branch:   r.Branch,
-				AgentID:  r.AgentID,
-				TaskID:   r.TaskID,
-				Project:  name,
-				MergedAt: r.MergedAt.Format(time.RFC3339),
+				SHA:         r.SHA,
+				Branch:      r.Branch,
+				AgentID:     r.AgentID,
+				TaskID:      r.TaskID,
+				Description: r.Description,
+				Project:     name,
+				MergedAt:    r.MergedAt.Format(time.RFC3339),
 			})
 		}
 	}

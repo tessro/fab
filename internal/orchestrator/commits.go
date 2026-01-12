@@ -19,6 +19,9 @@ type CommitRecord struct {
 	// TaskID is the ticket the agent was working on, if known.
 	TaskID string
 
+	// Description is the agent's description at the time of merge.
+	Description string
+
 	// MergedAt is when the merge occurred.
 	MergedAt time.Time
 }

@@ -240,4 +240,7 @@ var (
 
 	recentWorkProjectStyle = lipgloss.NewStyle().
 				Foreground(primaryColor)
+
+	recentWorkDescriptionStyle = lipgloss.NewStyle().
+					Foreground(mutedColor)
 )
