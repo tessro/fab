@@ -112,7 +112,7 @@ func createGitRepo(t *testing.T, baseDir, name string) (string, string) {
 	if err := os.MkdirAll(localDir, 0755); err != nil {
 		t.Fatalf("failed to create local dir: %v", err)
 	}
-	runGit(t, localDir, "init")
+	runGit(t, localDir, "init", "-b", "main")
 	runGit(t, localDir, "config", "user.email", "test@example.com")
 	runGit(t, localDir, "config", "user.name", "Test User")
 	runGit(t, localDir, "remote", "add", "origin", remoteURL)
