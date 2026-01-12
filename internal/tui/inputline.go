@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // maxHistorySize limits the number of entries stored in history.
@@ -34,6 +35,9 @@ func NewInputLine() InputLine {
 	ta.SetHeight(1)
 	// Remove default enter key behavior - we'll handle it ourselves
 	ta.KeyMap.InsertNewline.SetEnabled(false)
+	// Remove background styling from the cursor line
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
 	return InputLine{
 		input:        ta,
 		historyIndex: -1,
