@@ -25,8 +25,9 @@
 
         <main>
             <section class="hero">
+                <p class="beep-beep">beep beep</p>
                 <h1>Ship <span class="counter" id="feature-counter">42</span> features while you sleep</h1>
-                <p class="tagline">A coding agent supervisor that orchestrates multiple Claude Code or Codex instances in parallel. Let agents claim tasks, write code, and merge PRs autonomously.</p>
+                <p class="tagline">Hop aboard the fabulous agent bus. Orchestrate a swarm of coding agents that claim tasks, write code, and merge PRs—all while you catch some z's.</p>
                 <div class="cta-buttons">
                     <a href="/start" class="btn btn-primary">Get Started</a>
                     <a href="https://github.com/tessro/fab" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
@@ -83,13 +84,13 @@
 <span class="output">🚌 Started orchestration for myproject</span>
 
 <span class="prompt">$</span> fab tui
-<span class="comment"># Watch agents claim tasks and ship features ✨</span></code></pre>
+<span class="comment"># Sit back and watch the magic happen ✨</span></code></pre>
                 </div>
             </section>
         </main>
 
         <footer>
-            <p>made with ❤️ by <a href="https://tessro.ai" target="_blank" rel="noopener">@tessro</a></p>
+            <p>made with ❤️ and too much ☕ by <a href="https://tessro.ai" target="_blank" rel="noopener">@tessro</a></p>
             <div class="social-icons">
                 <a href="https://x.com/ptr" target="_blank" rel="noopener" aria-label="X (Twitter)">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -118,6 +119,8 @@
         function tick() {
             count++;
             counter.textContent = count;
+            counter.classList.add('tick');
+            setTimeout(() => counter.classList.remove('tick'), 150);
 
             // Random interval between 0.8-3 seconds for snappier feel
             const nextTick = 800 + Math.random() * 2200;

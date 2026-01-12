@@ -72,6 +72,17 @@ nav {
 
 .logo::before {
     content: '🚌 ';
+    display: inline-block;
+}
+
+.logo:hover::before {
+    animation: wiggle 0.5s ease-in-out;
+}
+
+@keyframes wiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-5deg); }
+    75% { transform: rotate(5deg); }
 }
 
 .nav-links {
@@ -96,6 +107,15 @@ nav {
     padding: 80px 0 60px;
 }
 
+.beep-beep {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--overlay1);
+    letter-spacing: 0.15em;
+    text-transform: lowercase;
+    margin-bottom: 12px;
+}
+
 .hero h1 {
     font-size: 2.75rem;
     font-weight: 700;
@@ -110,11 +130,21 @@ nav {
     display: inline-block;
     min-width: 2.5ch;
     text-align: center;
-    transition: transform 0.1s;
+    transition: transform 0.15s ease-out;
 }
 
 .counter:hover {
     transform: scale(1.05);
+}
+
+.counter.tick {
+    animation: tick 0.15s ease-out;
+}
+
+@keyframes tick {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
 }
 
 .tagline {
