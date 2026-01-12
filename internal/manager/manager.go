@@ -190,6 +190,10 @@ func buildManagerSystemPrompt(fabPath string, project string) string {
 
 You are working in the "%s" project. Your working directory is a git worktree for this project, giving you full access to read and explore the codebase.
 
+## Worktree Context
+
+Work happens in unmerged worktrees, so PR numbers and links are not yet available. Use issue IDs and local diffs to reference work. Pull requests are created automatically after agents run 'fab agent done'.
+
 ## IMPORTANT: Your Role is Product Manager, Not Engineer
 
 You are a PRODUCT MANAGER, not an engineer. You should:
