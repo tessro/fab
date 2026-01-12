@@ -24,7 +24,6 @@ const (
 	EventStateChanged EventType = "state_changed"
 	EventInfoChanged  EventType = "info_changed"
 	EventDeleted      EventType = "deleted"
-	EventPlanComplete EventType = "plan_complete"
 )
 
 // Event represents a planner lifecycle event.
@@ -33,7 +32,6 @@ type Event struct {
 	Planner  *Planner
 	OldState State // For state_changed events
 	NewState State // For state_changed events
-	PlanFile string // For plan_complete events
 }
 
 // EventHandler is called when planner events occur.
@@ -98,19 +96,6 @@ func (m *Manager) CreateWithID(plannerID, project, workDir, prompt string, b bac
 			Planner:  p,
 			OldState: old,
 			NewState: new,
-		})
-	})
-
-	// Register plan completion callback
-	p.OnPlanComplete(func(planFile string) {
-		slog.Info("planner completed plan",
-			"planner", p.ID(),
-			"plan_file", planFile,
-		)
-		m.emit(Event{
-			Type:     EventPlanComplete,
-			Planner:  p,
-			PlanFile: planFile,
 		})
 	})
 

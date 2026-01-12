@@ -1,14 +1,11 @@
 // Package planner provides planning agents for creating implementation plans.
 // Planning agents are specialized Claude Code instances that run in plan mode
-// and write their plans to .fab/plans/ when they exit via ExitPlanMode.
+// and write their plans explicitly via 'fab plan write'.
 package planner
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -58,17 +55,10 @@ type Planner struct {
 	// Backend for CLI command building
 	backend backend.Backend
 
-	// Plan file path (set when ExitPlanMode is detected)
-	// +checklocks:mu
-	planFile string
-
 	// User-set description for the planner
 	// +checklocks:mu
 	description string
 
-	// Callback for plan completion
-	// +checklocks:mu
-	onPlanComplete func(planFile string)
 	// +checklocks:mu
 	onInfoChange func()
 }
@@ -118,13 +108,6 @@ func (p *Planner) Project() string {
 	return p.project
 }
 
-// PlanFile returns the path to the plan file, if generated.
-func (p *Planner) PlanFile() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.planFile
-}
-
 // SetDescription sets the planner's description.
 func (p *Planner) SetDescription(desc string) {
 	p.mu.Lock()
@@ -136,13 +119,6 @@ func (p *Planner) SetDescription(desc string) {
 	if callback != nil {
 		callback()
 	}
-}
-
-// OnPlanComplete sets a callback for when the plan is complete.
-func (p *Planner) OnPlanComplete(fn func(planFile string)) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.onPlanComplete = fn
 }
 
 // OnInfoChange sets a callback for when the description changes.
@@ -203,70 +179,8 @@ func (p *Planner) buildResumeCommand(threadID, message string) (*exec.Cmd, error
 // processMessage handles stream messages for planner-specific logic.
 // Returns true if the read loop should stop.
 func (p *Planner) processMessage(msg *agent.StreamMessage) bool {
-	// Check for ExitPlanMode tool use
-	if msg.Message != nil {
-		for _, block := range msg.Message.Content {
-			if block.Type == "tool_use" && block.Name == "ExitPlanMode" {
-				slog.Info("planner detected ExitPlanMode", "planner", p.id)
-				p.handleExitPlanMode()
-			}
-		}
-	}
+	// No special handling needed - planners write plans explicitly via fab plan write
 	return false // Continue reading
-}
-
-// handleExitPlanMode is called when ExitPlanMode tool use is detected.
-// It writes the plan to a file and notifies the callback.
-func (p *Planner) handleExitPlanMode() {
-	// Get the plan content from the system prompt file that Claude Code wrote
-	// The plan is expected to be in .claude/plan.md in the working directory
-	planSourcePath := filepath.Join(p.WorkDir(), ".claude", "plan.md")
-
-	// Read the plan content
-	content, err := os.ReadFile(planSourcePath)
-	if err != nil {
-		slog.Warn("planner: could not read plan file", "path", planSourcePath, "error", err)
-		// Try to extract from chat history as fallback
-		content = p.extractPlanFromHistory()
-	}
-
-	// Write to .fab/plans/<agentId>.md
-	plansDir := filepath.Join(os.Getenv("HOME"), ".fab", "plans")
-	if err := os.MkdirAll(plansDir, 0755); err != nil {
-		slog.Error("planner: could not create plans directory", "error", err)
-		return
-	}
-
-	planPath := filepath.Join(plansDir, p.id+".md")
-	if err := os.WriteFile(planPath, content, 0644); err != nil {
-		slog.Error("planner: could not write plan file", "path", planPath, "error", err)
-		return
-	}
-
-	slog.Info("planner: plan written", "path", planPath)
-
-	// Update plan file path
-	p.mu.Lock()
-	p.planFile = planPath
-	callback := p.onPlanComplete
-	p.mu.Unlock()
-
-	// Call completion callback
-	if callback != nil {
-		callback(planPath)
-	}
-}
-
-// extractPlanFromHistory extracts plan content from chat history as a fallback.
-func (p *Planner) extractPlanFromHistory() []byte {
-	entries := p.History().Entries(0)
-	var content string
-	for _, entry := range entries {
-		if entry.Role == "assistant" && entry.Content != "" {
-			content += entry.Content + "\n\n"
-		}
-	}
-	return []byte(content)
 }
 
 // Info returns a snapshot of planner info for status reporting.
@@ -285,7 +199,6 @@ func (p *Planner) Info() PlannerInfo {
 		State:       p.State(),
 		WorkDir:     p.WorkDir(),
 		StartedAt:   p.StartedAt(),
-		PlanFile:    p.planFile,
 		Description: p.description,
 		Backend:     backendName,
 	}
@@ -298,7 +211,6 @@ type PlannerInfo struct {
 	State       State
 	WorkDir     string
 	StartedAt   time.Time
-	PlanFile    string
 	Description string
 	Backend     string // CLI backend name (e.g., "claude", "codex")
 }
@@ -352,12 +264,29 @@ This appears in the TUI and helps users track your progress.
    - Include context about why this change is needed
    - Reference related files or code
    - Be small enough to complete in one session (ideally <100 lines changed)
+   - Include "Plan ID: %s" at the end so agents can retrieve the full plan
 
-4. **Write a plan summary** to .fab/plans/%s.md containing:
-   - High-level overview of the approach
-   - List of issues created with their relationships
-   - Implementation order and dependencies
-   - Any architectural decisions made
+4. **Save your plan** by piping it to fab plan write:
+
+   cat <<'EOF' | fab plan write
+   # Plan: <title>
+
+   ## Overview
+   <high-level approach>
+
+   ## Issues Created
+   - #<id>: <title> (depends on: #<id>, ...)
+   ...
+
+   ## Implementation Order
+   1. ...
+
+   ## Architectural Decisions
+   - ...
+   EOF
+
+   This stores the plan and prints the plan ID (which matches your agent ID: %s).
+   Agents can retrieve the plan later with: fab plan read %s
 
 5. **Complete your session**:
    Run: fab agent done
@@ -394,6 +323,6 @@ Implement rate limiting to prevent API abuse and ensure fair usage.
 - Integration test for rate limit headers
 - Load test to verify limits work under pressure
 
-Planner ID: %s
-`, userPrompt, plannerID, plannerID)
+Plan ID: %s
+`, userPrompt, plannerID, plannerID, plannerID, plannerID)
 }

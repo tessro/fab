@@ -887,15 +887,6 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		if event.ChatEntry != nil && tuiAgentID == m.chatView.AgentID() {
 			m.chatView.AppendEntry(*event.ChatEntry)
 		}
-
-	case "plan_complete":
-		// Could show a completion notification
-		// For now, just log it (the planner will call fab agent done)
-		slog.Debug("plan completed",
-			"planner", event.AgentID,
-			"project", event.Project,
-			"plan_file", event.Data,
-		)
 	}
 	return nil
 }

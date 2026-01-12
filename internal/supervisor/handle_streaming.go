@@ -302,14 +302,6 @@ func (s *Supervisor) handlePlannerEvent(event planner.Event) {
 			Project:     info.Project,
 			Description: info.Description,
 		}
-	case planner.EventPlanComplete:
-		info := event.Planner.Info()
-		streamEvent = &daemon.StreamEvent{
-			Type:    "plan_complete",
-			AgentID: info.ID,
-			Project: info.Project,
-			Data:    event.PlanFile,
-		}
 	case planner.EventDeleted:
 		info := event.Planner.Info()
 		streamEvent = &daemon.StreamEvent{

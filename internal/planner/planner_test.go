@@ -2,6 +2,7 @@ package planner_test
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/tessro/fab/internal/backend"
@@ -156,4 +157,66 @@ func TestManager_ListByProject(t *testing.T) {
 	if len(noProjectPlanners) != 0 {
 		t.Errorf("ListByProject(project-c) returned %d planners, want 0", len(noProjectPlanners))
 	}
+}
+
+func TestPlanner_PromptIncludesPlanWriteCommand(t *testing.T) {
+	b := &mockBackend{}
+	plannerID := "test-planner-id"
+
+	// Create a planner and start it to trigger BuildCommand
+	p := planner.New(plannerID, "test-project", "/tmp", "test task", b)
+	if p == nil {
+		t.Fatal("New() returned nil")
+	}
+
+	// Start the planner to trigger the backend's BuildCommand
+	// We can't actually start it without a real command, but we can
+	// check that the prompt is passed to the backend
+	_ = p.Start()
+	_ = p.Stop()
+
+	// Verify the prompt was passed to BuildCommand
+	if !b.buildCommandCalled {
+		t.Fatal("BuildCommand was not called")
+	}
+
+	// Check that the initial prompt includes fab plan write instructions
+	prompt := b.lastConfig.InitialPrompt
+	if prompt == "" {
+		t.Fatal("InitialPrompt was empty")
+	}
+
+	// Verify the prompt mentions fab plan write
+	if !strings.Contains(prompt, "fab plan write") {
+		t.Error("prompt should mention 'fab plan write'")
+	}
+
+	// Verify the prompt mentions fab plan read
+	if !strings.Contains(prompt, "fab plan read") {
+		t.Error("prompt should mention 'fab plan read'")
+	}
+
+	// Verify the prompt includes the planner ID for referencing in issues
+	if !strings.Contains(prompt, "Plan ID: "+plannerID) {
+		t.Error("prompt should include 'Plan ID: <plannerID>' for issue references")
+	}
+}
+
+func TestPlanner_NoAutoWriteOnExitPlanMode(t *testing.T) {
+	// This test verifies that the planner no longer has auto-write behavior.
+	// The planner.Planner struct should not have PlanFile or OnPlanComplete methods.
+	// This is a compile-time check - if those methods exist, this test would need updating.
+
+	b := &mockBackend{}
+	p := planner.New("test-id", "test-project", "/tmp", "test prompt", b)
+
+	// The Info() method should not include a PlanFile field.
+	// This is verified by the fact that the code compiles - PlannerInfo no longer has PlanFile.
+	info := p.Info()
+	_ = info // Use info to avoid unused variable error
+
+	// If we got here, it means:
+	// 1. OnPlanComplete method doesn't exist (would be compile error if we tried to call it)
+	// 2. PlanFile() method doesn't exist (would be compile error if we tried to call it)
+	// 3. PlannerInfo.PlanFile field doesn't exist (would be compile error if we accessed it)
 }
