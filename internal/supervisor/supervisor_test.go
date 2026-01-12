@@ -146,6 +146,56 @@ func TestSupervisor_HandleShutdown(t *testing.T) {
 	}
 }
 
+func TestSupervisor_HandleShutdown_StopHost(t *testing.T) {
+	sup, cleanup := newTestSupervisor(t)
+	defer cleanup()
+
+	// Test shutdown with StopHost=true
+	req := &daemon.Request{
+		Type: daemon.MsgShutdown,
+		ID:   "test-1",
+		Payload: map[string]any{
+			"stop_host": true,
+		},
+	}
+
+	resp := sup.Handle(context.Background(), req)
+
+	if !resp.Success {
+		t.Errorf("expected success, got error: %s", resp.Error)
+	}
+
+	// Verify StopHost flag is set
+	if !sup.StopHost() {
+		t.Error("expected StopHost() to return true")
+	}
+}
+
+func TestSupervisor_HandleShutdown_PreserveHost(t *testing.T) {
+	sup, cleanup := newTestSupervisor(t)
+	defer cleanup()
+
+	// Test shutdown with StopHost=false (preserve host)
+	req := &daemon.Request{
+		Type: daemon.MsgShutdown,
+		ID:   "test-1",
+		Payload: map[string]any{
+			"stop_host": false,
+		},
+	}
+
+	resp := sup.Handle(context.Background(), req)
+
+	if !resp.Success {
+		t.Errorf("expected success, got error: %s", resp.Error)
+	}
+
+	// Verify StopHost flag is not set (preserve host)
+	if sup.StopHost() {
+		t.Error("expected StopHost() to return false")
+	}
+}
+
 func TestSupervisor_HandleStatus(t *testing.T) {
 	sup, cleanup := newTestSupervisor(t)
 	defer cleanup()

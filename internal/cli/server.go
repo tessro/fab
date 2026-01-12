@@ -27,6 +27,7 @@ var serverCmd = &cobra.Command{
 }
 
 var serverStartForeground bool
+var serverStopHost bool
 
 var serverStartCmd = &cobra.Command{
 	Use:   "start",
@@ -38,16 +39,23 @@ var serverStartCmd = &cobra.Command{
 var serverStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the fab daemon server",
-	Long:  "Stop the running fab daemon server. This will terminate all agents.",
+	Long: `Stop the running fab daemon server.
+
+By default, running agents are preserved in the agent host process.
+Use --stop-host to also stop the agent host and terminate all agents.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := MustConnect()
 		defer client.Close()
 
-		if err := client.Shutdown(); err != nil {
+		if err := client.Shutdown(serverStopHost); err != nil {
 			return fmt.Errorf("shutdown daemon: %w", err)
 		}
 
-		fmt.Println("🚌 fab daemon stopped")
+		if serverStopHost {
+			fmt.Println("🚌 fab daemon and agent host stopped")
+		} else {
+			fmt.Println("🚌 fab daemon stopped (agents preserved)")
+		}
 		return nil
 	},
 }
@@ -55,8 +63,11 @@ var serverStopCmd = &cobra.Command{
 var serverRestartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the fab daemon server",
-	Long:  "Stop the fab daemon server if running, then start it again.",
-	RunE:  runServerRestart,
+	Long: `Stop the fab daemon server if running, then start it again.
+
+Running agents are preserved in the agent host process by default.
+On restart, the daemon will reconnect to the existing agents.`,
+	RunE: runServerRestart,
 }
 
 func runServerRestart(cmd *cobra.Command, args []string) error {
@@ -66,11 +77,12 @@ func runServerRestart(cmd *cobra.Command, args []string) error {
 	client, err := ConnectClient()
 	if err == nil {
 		defer client.Close()
-		if err := client.Shutdown(); err != nil {
+		// Preserve agent host on restart (stopHost=false)
+		if err := client.Shutdown(false); err != nil {
 			return fmt.Errorf("shutdown daemon: %w", err)
 		}
 
-		fmt.Println("🚌 fab daemon stopped")
+		fmt.Println("🚌 fab daemon stopped (agents preserved)")
 
 		// Wait for daemon to fully stop (up to 5 seconds)
 		for i := 0; i < 50; i++ {
@@ -231,6 +243,7 @@ func runDaemon() error {
 
 func init() {
 	serverStartCmd.Flags().BoolVarP(&serverStartForeground, "foreground", "f", false, "Run in foreground (don't daemonize)")
+	serverStopCmd.Flags().BoolVar(&serverStopHost, "stop-host", false, "Also stop the agent host process and terminate all agents")
 	serverCmd.AddCommand(serverStartCmd)
 	serverCmd.AddCommand(serverStopCmd)
 	serverCmd.AddCommand(serverRestartCmd)

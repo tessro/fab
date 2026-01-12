@@ -647,7 +647,7 @@ func TestClient_Shutdown(t *testing.T) {
 	}
 	defer c.Close()
 
-	if err := c.Shutdown(); err != nil {
+	if err := c.Shutdown(false); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
 
@@ -681,7 +681,7 @@ func TestClient_ErrorResponses(t *testing.T) {
 	if _, err := c.Ping(); err == nil {
 		t.Error("expected error from Ping")
 	}
-	if err := c.Shutdown(); err == nil {
+	if err := c.Shutdown(false); err == nil {
 		t.Error("expected error from Shutdown")
 	}
 	if _, err := c.Status(); err == nil {

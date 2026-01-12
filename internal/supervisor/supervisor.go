@@ -47,6 +47,7 @@ type Supervisor struct {
 
 	shutdownCh chan struct{} // Created at init, closed to signal shutdown
 	shutdownMu sync.Mutex    // Protects closing shutdownCh exactly once
+	stopHost   bool          // If true, stop the agent host on shutdown
 
 	// +checklocks:mu
 	server *daemon.Server // Server reference for broadcasting output events
@@ -253,4 +254,11 @@ func (s *Supervisor) ShutdownCh() <-chan struct{} {
 // StartedAt returns when the supervisor was started.
 func (s *Supervisor) StartedAt() time.Time {
 	return s.startedAt
+}
+
+// StopHost returns whether the agent host should be stopped during shutdown.
+func (s *Supervisor) StopHost() bool {
+	s.shutdownMu.Lock()
+	defer s.shutdownMu.Unlock()
+	return s.stopHost
 }

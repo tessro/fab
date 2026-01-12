@@ -117,6 +117,11 @@ type StopRequest struct {
 	All     bool   `json:"all,omitempty"` // Stop all projects
 }
 
+// ShutdownRequest is the payload for shutdown requests.
+type ShutdownRequest struct {
+	StopHost bool `json:"stop_host,omitempty"` // Also stop the agent host process
+}
+
 // StatusResponse is the payload for status responses.
 type StatusResponse struct {
 	Daemon     DaemonStatus     `json:"daemon"`

@@ -63,7 +63,20 @@ func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
 }
 
 // stopOrchestrator stops the orchestrator for the given project.
+// If preserveAgents is true, agents continue running in the agent host.
 func (s *Supervisor) stopOrchestrator(projectName string) {
+	s.stopOrchestratorWithOptions(projectName, false)
+}
+
+// stopOrchestratorPreserveAgents stops the orchestrator but leaves agents running.
+// Agents continue running in the agent host and can be reconnected after restart.
+func (s *Supervisor) stopOrchestratorPreserveAgents(projectName string) {
+	s.stopOrchestratorWithOptions(projectName, true)
+}
+
+// stopOrchestratorWithOptions is the internal implementation for stopping orchestrators.
+// If preserveAgents is true, agents are left running for the agent host to manage.
+func (s *Supervisor) stopOrchestratorWithOptions(projectName string, preserveAgents bool) {
 	s.mu.Lock()
 	orch, ok := s.orchestrators[projectName]
 	s.mu.Unlock()
@@ -72,13 +85,15 @@ func (s *Supervisor) stopOrchestrator(projectName string) {
 		return
 	}
 
-	// Stop the orchestrator
+	// Stop the orchestrator (task assignment)
 	orch.Stop()
 
-	// Stop all agents
-	s.agents.StopAll(projectName)
+	// Stop agents unless we're preserving them for the agent host
+	if !preserveAgents {
+		s.agents.StopAll(projectName)
+	}
 
-	// Mark project as not running
+	// Mark project as not running (orchestration stopped)
 	proj, err := s.registry.Get(projectName)
 	if err == nil {
 		proj.SetRunning(false)
@@ -88,6 +103,14 @@ func (s *Supervisor) stopOrchestrator(projectName string) {
 	s.mu.Lock()
 	delete(s.orchestrators, projectName)
 	s.mu.Unlock()
+
+	if preserveAgents {
+		slog.Info("orchestrator stopped, agents preserved",
+			"project", projectName)
+	} else {
+		slog.Info("orchestrator stopped, agents terminated",
+			"project", projectName)
+	}
 }
 
 // StartAutostart starts orchestration for all projects with autostart=true.
@@ -149,9 +172,18 @@ func (s *Supervisor) shutdownInternal() {
 	}
 	s.mu.RUnlock()
 
-	// Stop each orchestrator (which also stops its agents)
+	// Check if we should stop agents or preserve them
+	stopHost := s.StopHost()
+
+	// Stop each orchestrator
 	for _, name := range projectNames {
-		s.stopOrchestrator(name)
+		if stopHost {
+			// Full shutdown: stop orchestrator and all agents
+			s.stopOrchestrator(name)
+		} else {
+			// Preserve agents: only stop orchestrator, agents keep running in host
+			s.stopOrchestratorPreserveAgents(name)
+		}
 	}
 }
 

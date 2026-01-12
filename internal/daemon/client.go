@@ -203,8 +203,12 @@ func (c *Client) Ping() (*PingResponse, error) {
 }
 
 // Shutdown requests the daemon to shut down.
-func (c *Client) Shutdown() error {
-	resp, err := c.Send(&Request{Type: MsgShutdown})
+// If stopHost is true, also stops the agent host process.
+func (c *Client) Shutdown(stopHost bool) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgShutdown,
+		Payload: ShutdownRequest{StopHost: stopHost},
+	})
 	if err != nil {
 		return err
 	}
