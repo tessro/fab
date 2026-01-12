@@ -15,7 +15,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage fab agents",
-	Long:  "Commands for managing Claude Code agents.",
+	Long:  "Commands for managing Claude Code agents (work agents and planning agents).",
 }
 
 var agentListProject string
@@ -254,6 +254,127 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// Plan agent subcommand
+var agentPlanProject string
+
+var agentPlanCmd = &cobra.Command{
+	Use:   "plan",
+	Short: "Manage planning agents",
+	Long:  "Commands for starting and managing planning agents.",
+}
+
+var agentPlanStartCmd = &cobra.Command{
+	Use:   "start <prompt>",
+	Short: "Start a planning agent",
+	Long: `Start a planning agent in plan mode to create implementation plans.
+
+The planning agent will explore the codebase, design an implementation approach,
+and write the plan to .fab/plans/<agent-id>.md when complete.
+
+Planning agents:
+- Are visible in the TUI
+- Can ask questions via AskUserQuestion
+- Run in a worktree if --project is specified
+- Are not subject to max-agents limit
+
+Use 'fab tui' to interact with the planning agent.
+
+Examples:
+  fab agent plan start "Add user authentication"
+  fab agent plan start --project myapp "Implement dark mode"
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		prompt := strings.Join(args, " ")
+
+		client := MustConnect()
+		defer client.Close()
+
+		resp, err := client.PlanStart(agentPlanProject, prompt)
+		if err != nil {
+			return fmt.Errorf("start planner: %w", err)
+		}
+
+		fmt.Printf("🚌 Planning agent started (ID: %s)\n", resp.ID)
+		if resp.Project != "" {
+			fmt.Printf("   Project: %s\n", resp.Project)
+		}
+		fmt.Printf("   Working directory: %s\n", resp.WorkDir)
+		fmt.Println()
+		fmt.Printf("Use 'fab tui' to interact with the agent.\n")
+		return nil
+	},
+}
+
+var agentPlanListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List planning agents",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := MustConnect()
+		defer client.Close()
+
+		resp, err := client.PlanList(agentPlanProject)
+		if err != nil {
+			return fmt.Errorf("list planners: %w", err)
+		}
+
+		if len(resp.Planners) == 0 {
+			fmt.Println("No planning agents running")
+			return nil
+		}
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		_, _ = fmt.Fprintln(w, "ID\tPROJECT\tSTATE\tBACKEND\tDESCRIPTION\tAGE\tPLAN FILE")
+
+		for _, p := range resp.Planners {
+			startedAt, _ := time.Parse(time.RFC3339, p.StartedAt)
+			age := formatDuration(time.Since(startedAt))
+			project := p.Project
+			if project == "" {
+				project = "-"
+			}
+			planFile := p.PlanFile
+			if planFile == "" {
+				planFile = "-"
+			}
+			desc := p.Description
+			if desc == "" {
+				desc = "-"
+			}
+			if len(desc) > 40 {
+				desc = desc[:37] + "..."
+			}
+			backend := p.Backend
+			if backend == "" {
+				backend = "-"
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, project, p.State, backend, desc, age, planFile)
+		}
+
+		_ = w.Flush()
+		return nil
+	},
+}
+
+var agentPlanStopCmd = &cobra.Command{
+	Use:   "stop <id>",
+	Short: "Stop a planning agent",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := args[0]
+
+		client := MustConnect()
+		defer client.Close()
+
+		if err := client.PlanStop(id); err != nil {
+			return fmt.Errorf("stop planner: %w", err)
+		}
+
+		fmt.Printf("🚌 Planning agent %s stopped\n", id)
+		return nil
+	},
+}
+
 func init() {
 	agentListCmd.Flags().StringVarP(&agentListProject, "project", "p", "", "Filter by project name")
 	agentCmd.AddCommand(agentListCmd)
@@ -269,6 +390,14 @@ func init() {
 	agentCmd.AddCommand(agentDoneCmd)
 
 	agentCmd.AddCommand(agentDescribeCmd)
+
+	// Plan agent subcommands
+	agentPlanStartCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Run in project worktree")
+	agentPlanListCmd.Flags().StringVarP(&agentPlanProject, "project", "p", "", "Filter by project")
+	agentPlanCmd.AddCommand(agentPlanStartCmd)
+	agentPlanCmd.AddCommand(agentPlanListCmd)
+	agentPlanCmd.AddCommand(agentPlanStopCmd)
+	agentCmd.AddCommand(agentPlanCmd)
 
 	rootCmd.AddCommand(agentCmd)
 }

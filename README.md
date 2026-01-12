@@ -94,8 +94,8 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab agent claim <ticket-id>` | Claim a ticket (used by agents) |
 | `fab agent done` | Signal task completion (used by agents) |
 | `fab agent describe <description>` | Set agent status (used by agents) |
-| `fab agent plan [prompt]` | Start a planning agent |
-| `fab agent plan --project <name> [prompt]` | Plan in a project worktree |
+| `fab agent plan start <prompt>` | Start a planning agent |
+| `fab agent plan start --project <name> <prompt>` | Plan in a project worktree |
 | `fab agent plan list` | List planning agents |
 | `fab agent plan stop <id>` | Stop a planning agent |
 
@@ -264,10 +264,10 @@ Planning agents explore codebases and design implementation approaches without c
 
 ```bash
 # Start a planning session
-fab agent plan "Add user authentication with OAuth"
+fab agent plan start "Add user authentication with OAuth"
 
 # Plan within a specific project's worktree
-fab agent plan --project myapp "Implement dark mode"
+fab agent plan start --project myapp "Implement dark mode"
 
 # List running planning agents
 fab agent plan list

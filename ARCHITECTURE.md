@@ -51,7 +51,7 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 | `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
 | `fab agent done` | Signal task completion (called by agents) |
 | `fab agent describe "<text>"` | Set agent description (called by agents) |
-| `fab agent plan [prompt]` | Start a planning agent |
+| `fab agent plan start <prompt>` | Start a planning agent |
 | `fab agent plan list` | List planning agents |
 | `fab agent plan stop <id>` | Stop a planning agent |
 | **Issue/Task Management** | |
