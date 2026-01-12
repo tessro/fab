@@ -51,6 +51,9 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 | `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
 | `fab agent done` | Signal task completion (called by agents) |
 | `fab agent describe "<text>"` | Set agent description (called by agents) |
+| `fab agent plan [prompt]` | Start a planning agent |
+| `fab agent plan list` | List planning agents |
+| `fab agent plan stop <id>` | Stop a planning agent |
 | **Issue/Task Management** | |
 | `fab issue list` | List all issues |
 | `fab issue show <id>` | Show issue details |
@@ -59,10 +62,10 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 | `fab issue update <id>` | Update an issue |
 | `fab issue close <id>` | Close an issue |
 | `fab issue commit <id> <sha>` | Record a commit for an issue |
-| **Planning Agents** | |
-| `fab plan <prompt>` | Start a planning agent |
-| `fab plan list` | List planning agents |
-| `fab plan stop <id>` | Stop a planning agent |
+| **Plan Storage** | |
+| `fab plan write` | Write plan from stdin (uses FAB_AGENT_ID) |
+| `fab plan read <id>` | Read a stored plan |
+| `fab plan list` | List stored plans |
 | **Other** | |
 | `fab claims` | List active ticket claims |
 | `fab branch cleanup` | Clean up merged branches |
@@ -79,9 +82,11 @@ Standard agents that work on issues. Each runs in an isolated worktree and:
 ### Planner Agents
 Specialized agents for design and exploration work:
 - Run in plan mode with codebase exploration tools
-- Write implementation plans to `.fab/plans/<id>.md`
+- Write plans explicitly via `fab plan write` (reads from stdin)
+- Plans stored in `~/.fab/plans/<id>.md` (or `$FAB_DIR/plans/`)
 - Do NOT count against `max-agents` limit
 - Identified by `plan:` prefix in TUI
+- Managed via `fab agent plan start/list/stop`
 
 ### Manager Agents
 Interactive agents for user coordination:

@@ -94,6 +94,10 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab agent claim <ticket-id>` | Claim a ticket (used by agents) |
 | `fab agent done` | Signal task completion (used by agents) |
 | `fab agent describe <description>` | Set agent status (used by agents) |
+| `fab agent plan [prompt]` | Start a planning agent |
+| `fab agent plan --project <name> [prompt]` | Plan in a project worktree |
+| `fab agent plan list` | List planning agents |
+| `fab agent plan stop <id>` | Stop a planning agent |
 
 ### Issues
 
@@ -105,14 +109,13 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab issue create <title>` | Create a new issue |
 | `fab issue close <id>` | Close an issue |
 
-### Planning
+### Plan Storage
 
 | Command | Description |
 |---------|-------------|
-| `fab plan [prompt]` | Start a planning agent |
-| `fab plan --project <name> [prompt]` | Plan in a project worktree |
-| `fab plan list` | List planning agents |
-| `fab plan stop <id>` | Stop a planning agent |
+| `fab plan write` | Write plan from stdin (uses FAB_AGENT_ID) |
+| `fab plan read <id>` | Read a stored plan |
+| `fab plan list` | List stored plans |
 
 ### Other
 
@@ -261,10 +264,13 @@ Planning agents explore codebases and design implementation approaches without c
 
 ```bash
 # Start a planning session
-fab plan "Add user authentication with OAuth"
+fab agent plan "Add user authentication with OAuth"
 
 # Plan within a specific project's worktree
-fab plan --project myapp "Implement dark mode"
+fab agent plan --project myapp "Implement dark mode"
+
+# List running planning agents
+fab agent plan list
 
 # Interact with planning agents in the TUI
 fab tui
@@ -272,9 +278,21 @@ fab tui
 
 Planning agents:
 - Can explore the codebase and ask clarifying questions
-- Write plans to `.fab/plans/<agent-id>.md`
+- Write plans via `fab plan write` (reads from stdin, uses agent ID)
 - Are visible and interactive in the TUI
 - Don't consume project agent slots
+
+### Plan Storage
+
+Plans are stored in `~/.fab/plans/` (or `$FAB_DIR/plans/` if FAB_DIR is set).
+
+```bash
+# Read a stored plan
+fab plan read abc123
+
+# List all stored plans
+fab plan list
+```
 
 ## Documentation
 
