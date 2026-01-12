@@ -4,10 +4,11 @@ package rules
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+
 	"github.com/tessro/fab/internal/config"
+	"github.com/tessro/fab/internal/paths"
 )
 
 // Action is the result of a rule evaluation.
@@ -87,18 +88,10 @@ func (c *Config) ManagerAllowedPatterns() []string {
 
 // GlobalConfigPath returns the path to the global permissions config.
 func GlobalConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "fab", "permissions.toml"), nil
+	return paths.PermissionsPath()
 }
 
 // ProjectConfigPath returns the path to a project's permissions config.
 func ProjectConfigPath(projectName string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
-	}
-	return filepath.Join(home, ".fab", "projects", projectName, "permissions.toml"), nil
+	return paths.ProjectPermissionsPath(projectName)
 }

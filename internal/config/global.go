@@ -3,9 +3,10 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/tessro/fab/internal/paths"
 )
 
 // GlobalConfig represents the global fab configuration.
@@ -59,17 +60,8 @@ const DefaultLLMAuthModel = "claude-haiku-4-5"
 const DefaultLogLevel = "info"
 
 // GlobalConfigPath returns the path to the global fab config.
-// If FAB_DIR is set, uses $FAB_DIR/config.toml.
-// Otherwise uses ~/.config/fab/config.toml.
 func GlobalConfigPath() (string, error) {
-	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
-		return filepath.Join(fabDir, "config.toml"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "fab", "config.toml"), nil
+	return paths.ConfigPath()
 }
 
 // LoadGlobalConfig loads the global fab configuration.

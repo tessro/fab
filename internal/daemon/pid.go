@@ -9,20 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/tessro/fab/internal/paths"
 )
 
 // DefaultPIDPath returns the default PID file path.
-// If FAB_DIR is set, uses $FAB_DIR/fab.pid.
-// Otherwise uses ~/.fab/fab.pid.
 func DefaultPIDPath() string {
-	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
-		return filepath.Join(fabDir, "fab.pid")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp/fab.pid"
-	}
-	return filepath.Join(home, ".fab", "fab.pid")
+	return paths.PIDPath()
 }
 
 // WritePID writes the current process ID to the PID file.
