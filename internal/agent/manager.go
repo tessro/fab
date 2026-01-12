@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/event"
@@ -429,4 +430,122 @@ func (m *Manager) IdleAgents() []*Agent {
 		}
 	}
 	return idle
+}
+
+// HydrateInfo contains the information needed to hydrate an agent from external data.
+// This is used to reconstruct agents from agent host processes after daemon restart.
+type HydrateInfo struct {
+	ID          string    // Agent ID
+	Project     string    // Project name
+	State       State     // Current state (starting, running, idle, done, error)
+	Worktree    string    // Worktree path
+	Task        string    // Current task ID
+	Description string    // Agent description
+	StartedAt   time.Time // When the agent started
+	Backend     string    // Backend name (claude, codex)
+}
+
+// Hydrate reconstructs an agent from external data without creating a new process.
+// This is used to restore agents from agent host processes after daemon restart.
+// The agent will be in a "detached" state where the process is managed externally.
+// Returns the hydrated agent, or an error if the agent already exists or project not found.
+func (m *Manager) Hydrate(info HydrateInfo) (*Agent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if agent already exists
+	if _, ok := m.agents[info.ID]; ok {
+		return nil, ErrAgentAlreadyExists
+	}
+
+	// Look up the project
+	proj, ok := m.registry[info.Project]
+	if !ok {
+		return nil, ErrAgentNotFound // Project not registered
+	}
+
+	// Get the backend
+	b, err := backend.Get(info.Backend)
+	if err != nil {
+		// Fall back to claude backend if specified backend not found
+		b, err = backend.Get("claude")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Create worktree reference
+	wt := &project.Worktree{
+		Path:    info.Worktree,
+		InUse:   true,
+		AgentID: info.ID,
+	}
+
+	// Register the worktree with the project
+	proj.AdoptWorktree(*wt)
+
+	// Create the agent struct without starting a process
+	agent := &Agent{
+		ID:          info.ID,
+		Project:     proj,
+		Worktree:    wt,
+		Backend:     b,
+		State:       info.State,
+		Task:        info.Task,
+		Description: info.Description,
+		StartedAt:   info.StartedAt,
+		UpdatedAt:   time.Now(),
+		history:     NewChatHistory(DefaultChatHistorySize),
+	}
+
+	// Register state change callback to emit events
+	agent.OnStateChange(func(old, new State) {
+		slog.Debug("agent state changed",
+			"agent", agent.ID,
+			"project", proj.Name,
+			"from", old,
+			"to", new,
+		)
+		m.emit(Event{
+			Type:     EventStateChanged,
+			Agent:    agent,
+			OldState: old,
+			NewState: new,
+		})
+	})
+
+	// Register info change callback to emit events
+	agent.OnInfoChange(func() {
+		slog.Debug("agent info changed",
+			"agent", agent.ID,
+			"project", proj.Name,
+			"task", agent.GetTask(),
+			"description", agent.GetDescription(),
+		)
+		m.emit(Event{
+			Type:  EventInfoChanged,
+			Agent: agent,
+		})
+	})
+
+	// Add to tracking maps
+	m.agents[info.ID] = agent
+	m.projects[proj.Name] = append(m.projects[proj.Name], agent)
+
+	slog.Info("agent hydrated",
+		"agent", info.ID,
+		"project", proj.Name,
+		"state", info.State,
+		"worktree", info.Worktree,
+	)
+
+	return agent, nil
+}
+
+// Exists returns true if an agent with the given ID exists.
+func (m *Manager) Exists(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.agents[id]
+	return ok
 }

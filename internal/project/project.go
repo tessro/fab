@@ -51,6 +51,23 @@ func (p *Project) AddWorktree(wt Worktree) {
 	p.Worktrees = append(p.Worktrees, wt)
 }
 
+// AdoptWorktree registers an existing worktree with the project.
+// This is used during rehydration to adopt worktrees from agent hosts.
+// If a worktree with the same AgentID already exists, it is not added again.
+func (p *Project) AdoptWorktree(wt Worktree) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Check if worktree already exists for this agent
+	for _, existing := range p.Worktrees {
+		if existing.AgentID == wt.AgentID {
+			return // Already registered
+		}
+	}
+
+	p.Worktrees = append(p.Worktrees, wt)
+}
+
 // Worktree represents a git worktree used by an agent.
 type Worktree struct {
 	Path    string // Absolute path (e.g., "~/.fab/projects/myapp/worktrees/wt-001")
