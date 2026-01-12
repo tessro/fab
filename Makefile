@@ -1,4 +1,4 @@
-.PHONY: build install clean test lint
+.PHONY: build install clean test lint e2e
 
 BINARY := fab
 VERSION ?= dev
@@ -19,6 +19,9 @@ clean:
 
 test:
 	go test ./...
+
+e2e:
+	go test -v -count=1 ./internal/e2e
 
 lint:
 	golangci-lint run
