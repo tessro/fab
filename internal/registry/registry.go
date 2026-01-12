@@ -11,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	configPkg "github.com/tessro/fab/internal/config"
+	"github.com/tessro/fab/internal/paths"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -104,7 +105,7 @@ type Config struct {
 // Registry manages the persistent collection of projects.
 type Registry struct {
 	configPath     string // Immutable after creation
-	projectBaseDir string // Base directory for project storage (testing only)
+	projectBaseDir string // Base directory for project storage (derived from FAB_DIR)
 	// +checklocks:mu
 	projects map[string]*project.Project
 	// globalConfig holds non-project config fields to preserve when saving.
@@ -114,27 +115,35 @@ type Registry struct {
 }
 
 // New creates a new Registry with the default config path.
-// If FAB_DIR is set, uses $FAB_DIR/config.toml.
-// Otherwise uses ~/.config/fab/config.toml.
+// Uses paths.ConfigPath() which honors FAB_DIR env var.
 func New() (*Registry, error) {
-	var configPath string
-	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
-		configPath = filepath.Join(fabDir, DefaultConfigFile)
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		configPath = filepath.Join(home, DefaultConfigDir, DefaultConfigFile)
+	configPath, err := paths.ConfigPath()
+	if err != nil {
+		return nil, err
 	}
 	return NewWithPath(configPath)
 }
 
 // NewWithPath creates a new Registry with a custom config path.
 func NewWithPath(configPath string) (*Registry, error) {
+	projectsDir, err := paths.ProjectsDir()
+	if err != nil {
+		// Fallback: use direct env var check
+		if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+			projectsDir = filepath.Join(fabDir, "projects")
+		} else {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				return nil, homeErr
+			}
+			projectsDir = filepath.Join(home, ".fab", "projects")
+		}
+	}
+
 	r := &Registry{
-		configPath: configPath,
-		projects:   make(map[string]*project.Project),
+		configPath:     configPath,
+		projectBaseDir: projectsDir,
+		projects:       make(map[string]*project.Project),
 	}
 
 	if err := r.load(); err != nil && !os.IsNotExist(err) {
@@ -145,11 +154,15 @@ func NewWithPath(configPath string) (*Registry, error) {
 }
 
 // SetProjectBaseDir sets the base directory for project storage.
-// This is intended for testing to redirect project directories to temp locations.
+// This overrides the FAB_DIR-derived default. Primarily used for testing.
 func (r *Registry) SetProjectBaseDir(baseDir string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.projectBaseDir = baseDir
+	// Update BaseDir on all existing projects
+	for _, p := range r.projects {
+		p.BaseDir = baseDir
+	}
 }
 
 // load reads the config file and populates the registry.
@@ -187,6 +200,7 @@ func (r *Registry) load() error {
 		}
 
 		p := project.NewProject(entry.Name, remoteURL)
+		p.BaseDir = r.projectBaseDir
 		if maxAgents > 0 {
 			p.MaxAgents = maxAgents
 		}
@@ -578,4 +592,3 @@ func (r *Registry) Count() int {
 func (r *Registry) ConfigPath() string {
 	return r.configPath
 }
-

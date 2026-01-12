@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/tessro/fab/internal/paths"
 )
 
 // DefaultMaxAgents is the default number of concurrent agents per project.
@@ -22,17 +24,17 @@ var ErrWorktreeNotFound = errors.New("worktree not found")
 
 // Project represents a supervised coding project.
 type Project struct {
-	Name           string   // Unique identifier (e.g., "myapp")
-	RemoteURL      string   // Git remote URL (e.g., "git@github.com:user/repo.git")
-	MaxAgents      int      // Max concurrent agents (default: 3)
-	IssueBackend   string   // Issue backend type: "tk" (default), "github", "gh"
-	AllowedAuthors []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
-	Autostart      bool     // Start orchestration when daemon starts
-	PermissionsChecker string // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
-	AgentBackend   string   // Agent CLI backend: "claude" (default), "codex" - used as fallback if planner/coding not set
-	PlannerBackend string   // Planner CLI backend: "claude" (default), "codex"
-	CodingBackend  string   // Coding agent CLI backend: "claude" (default), "codex"
-	BaseDir        string   // Base directory for project storage (default: ~/.fab/projects)
+	Name               string   // Unique identifier (e.g., "myapp")
+	RemoteURL          string   // Git remote URL (e.g., "git@github.com:user/repo.git")
+	MaxAgents          int      // Max concurrent agents (default: 3)
+	IssueBackend       string   // Issue backend type: "tk" (default), "github", "gh"
+	AllowedAuthors     []string // GitHub usernames allowed to create issues (empty = infer from remote URL)
+	Autostart          bool     // Start orchestration when daemon starts
+	PermissionsChecker string   // Permission checker type: "manual" (default, TUI prompts), "llm" (LLM-based)
+	AgentBackend       string   // Agent CLI backend: "claude" (default), "codex" - used as fallback if planner/coding not set
+	PlannerBackend     string   // Planner CLI backend: "claude" (default), "codex"
+	CodingBackend      string   // Coding agent CLI backend: "claude" (default), "codex"
+	BaseDir            string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
@@ -68,21 +70,25 @@ func NewProject(name, remoteURL string) *Project {
 }
 
 // ProjectDir returns the path to the project directory.
-// Returns BaseDir/<projectName>/ if BaseDir is set.
-// Otherwise, if FAB_DIR is set, uses $FAB_DIR/projects/<projectName>/.
-// Otherwise uses ~/.fab/projects/<projectName>/.
+// Returns BaseDir/<projectName>/ if BaseDir is set, otherwise uses paths.ProjectDir().
 func (p *Project) ProjectDir() string {
 	if p.BaseDir != "" {
 		return filepath.Join(p.BaseDir, p.Name)
 	}
-	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
-		return filepath.Join(fabDir, "projects", p.Name)
-	}
-	home, err := os.UserHomeDir()
+	// Use paths.ProjectDir which handles FAB_DIR and errors internally
+	projDir, err := paths.ProjectDir(p.Name)
 	if err != nil {
-		return filepath.Join("/tmp", ".fab", "projects", p.Name)
+		// Fallback to direct env var check
+		if fabDir := os.Getenv(paths.EnvFabDir); fabDir != "" {
+			return filepath.Join(fabDir, "projects", p.Name)
+		}
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return filepath.Join("/tmp", ".fab", "projects", p.Name)
+		}
+		return filepath.Join(home, ".fab", "projects", p.Name)
 	}
-	return filepath.Join(home, ".fab", "projects", p.Name)
+	return projDir
 }
 
 // RepoDir returns the path to fab's clone of the repository.

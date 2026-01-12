@@ -1,6 +1,8 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -381,4 +383,63 @@ func TestGetCodingBackend(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProjectDir_FAB_DIR(t *testing.T) {
+	// Save and restore FAB_DIR
+	origFabDir := os.Getenv("FAB_DIR")
+	defer os.Setenv("FAB_DIR", origFabDir)
+
+	t.Run("uses FAB_DIR when set and BaseDir empty", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+		p := NewProject("myapp", "")
+		// BaseDir is empty, so ProjectDir should use paths.ProjectsDir() which uses FAB_DIR
+		want := "/tmp/fab-e2e/projects/myapp"
+		got := p.ProjectDir()
+		if got != want {
+			t.Errorf("ProjectDir() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("RepoDir follows ProjectDir under FAB_DIR", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+		p := NewProject("myapp", "")
+		want := "/tmp/fab-e2e/projects/myapp/repo"
+		got := p.RepoDir()
+		if got != want {
+			t.Errorf("RepoDir() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("WorktreesDir follows ProjectDir under FAB_DIR", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+		p := NewProject("myapp", "")
+		want := "/tmp/fab-e2e/projects/myapp/worktrees"
+		got := p.WorktreesDir()
+		if got != want {
+			t.Errorf("WorktreesDir() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("BaseDir takes precedence over FAB_DIR", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+		p := NewProject("myapp", "")
+		p.BaseDir = "/custom/projects" // Explicit BaseDir should override FAB_DIR
+		want := "/custom/projects/myapp"
+		got := p.ProjectDir()
+		if got != want {
+			t.Errorf("ProjectDir() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("defaults to ~/.fab/projects when FAB_DIR not set", func(t *testing.T) {
+		os.Unsetenv("FAB_DIR")
+		p := NewProject("myapp", "")
+		home, _ := os.UserHomeDir()
+		want := filepath.Join(home, ".fab", "projects", "myapp")
+		got := p.ProjectDir()
+		if got != want {
+			t.Errorf("ProjectDir() = %q, want %q", got, want)
+		}
+	})
 }

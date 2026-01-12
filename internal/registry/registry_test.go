@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tessro/fab/internal/paths"
 	"github.com/tessro/fab/internal/project"
 )
 
@@ -625,3 +626,151 @@ func TestRegistry_AddBackendCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestRegistry_FAB_DIR_BaseDir(t *testing.T) {
+	// Save and restore FAB_DIR
+	origFabDir := os.Getenv("FAB_DIR")
+	defer os.Setenv("FAB_DIR", origFabDir)
+
+	t.Run("loaded projects get BaseDir from FAB_DIR", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.toml")
+
+		// Write a config file with a project
+		initialConfig := `[[projects]]
+name = "test-project"
+remote-url = "git@github.com:user/test.git"
+`
+		if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+
+		// Load the registry
+		r, err := NewWithPath(configPath)
+		if err != nil {
+			t.Fatalf("NewWithPath() error = %v", err)
+		}
+
+		// Get the project and verify BaseDir
+		p, err := r.Get("test-project")
+		if err != nil {
+			t.Fatalf("Get() error = %v", err)
+		}
+
+		want, _ := paths.ProjectsDir() // Should be /tmp/fab-e2e/projects
+		if p.BaseDir != want {
+			t.Errorf("BaseDir = %q, want %q", p.BaseDir, want)
+		}
+
+		// Verify ProjectDir uses the FAB_DIR-derived path
+		wantProjectDir := "/tmp/fab-e2e/projects/test-project"
+		if p.ProjectDir() != wantProjectDir {
+			t.Errorf("ProjectDir() = %q, want %q", p.ProjectDir(), wantProjectDir)
+		}
+	})
+
+	t.Run("added projects get BaseDir from FAB_DIR", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.toml")
+
+		r, err := NewWithPath(configPath)
+		if err != nil {
+			t.Fatalf("NewWithPath() error = %v", err)
+		}
+
+		// Add a project
+		p, err := r.Add("git@github.com:user/myproject.git", "myproject", 0, false, "")
+		if err != nil {
+			t.Fatalf("Add() error = %v", err)
+		}
+
+		want, _ := paths.ProjectsDir()
+		if p.BaseDir != want {
+			t.Errorf("BaseDir = %q, want %q", p.BaseDir, want)
+		}
+
+		// Verify ProjectDir uses the FAB_DIR-derived path
+		wantProjectDir := "/tmp/fab-e2e/projects/myproject"
+		if p.ProjectDir() != wantProjectDir {
+			t.Errorf("ProjectDir() = %q, want %q", p.ProjectDir(), wantProjectDir)
+		}
+	})
+
+	t.Run("SetProjectBaseDir updates all projects", func(t *testing.T) {
+		os.Setenv("FAB_DIR", "/tmp/fab-e2e")
+
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.toml")
+
+		// Write a config file with a project
+		initialConfig := `[[projects]]
+name = "test-project"
+remote-url = "git@github.com:user/test.git"
+`
+		if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+
+		r, err := NewWithPath(configPath)
+		if err != nil {
+			t.Fatalf("NewWithPath() error = %v", err)
+		}
+
+		// Override with custom BaseDir
+		r.SetProjectBaseDir("/custom/projects")
+
+		p, err := r.Get("test-project")
+		if err != nil {
+			t.Fatalf("Get() error = %v", err)
+		}
+
+		if p.BaseDir != "/custom/projects" {
+			t.Errorf("BaseDir = %q, want %q", p.BaseDir, "/custom/projects")
+		}
+
+		wantProjectDir := "/custom/projects/test-project"
+		if p.ProjectDir() != wantProjectDir {
+			t.Errorf("ProjectDir() = %q, want %q", p.ProjectDir(), wantProjectDir)
+		}
+	})
+
+	t.Run("uses default path when FAB_DIR not set", func(t *testing.T) {
+		os.Unsetenv("FAB_DIR")
+
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.toml")
+
+		// Write a config file with a project
+		initialConfig := `[[projects]]
+name = "test-project"
+remote-url = "git@github.com:user/test.git"
+`
+		if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+
+		r, err := NewWithPath(configPath)
+		if err != nil {
+			t.Fatalf("NewWithPath() error = %v", err)
+		}
+
+		p, err := r.Get("test-project")
+		if err != nil {
+			t.Fatalf("Get() error = %v", err)
+		}
+
+		home, _ := os.UserHomeDir()
+		want := filepath.Join(home, ".fab", "projects")
+		if p.BaseDir != want {
+			t.Errorf("BaseDir = %q, want %q", p.BaseDir, want)
+		}
+
+		wantProjectDir := filepath.Join(home, ".fab", "projects", "test-project")
+		if p.ProjectDir() != wantProjectDir {
+			t.Errorf("ProjectDir() = %q, want %q", p.ProjectDir(), wantProjectDir)
+		}
+	})
+}
