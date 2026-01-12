@@ -4,10 +4,12 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/tessro/fab/internal/backend"
 	"github.com/tessro/fab/internal/event"
 	"github.com/tessro/fab/internal/id"
+	"github.com/tessro/fab/internal/runtime"
 )
 
 // Manager errors.
@@ -45,6 +47,10 @@ type Manager struct {
 
 	events event.Emitter[Event]
 
+	// runtimeStore persists planner metadata for daemon restart recovery.
+	// May be nil if persistence is disabled.
+	runtimeStore *runtime.Store
+
 	mu sync.RWMutex
 }
 
@@ -52,6 +58,86 @@ type Manager struct {
 func NewManager() *Manager {
 	return &Manager{
 		planners: make(map[string]*Planner),
+	}
+}
+
+// SetRuntimeStore sets the runtime store for persisting planner metadata.
+func (m *Manager) SetRuntimeStore(store *runtime.Store) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.runtimeStore = store
+}
+
+// savePlannerRuntime persists planner runtime metadata to the store.
+func (m *Manager) savePlannerRuntime(p *Planner) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	info := p.Info()
+	rt := runtime.AgentRuntime{
+		ID:         p.ID(),
+		Project:    p.Project(),
+		Kind:       runtime.KindPlanner,
+		Backend:    info.Backend,
+		PID:        0, // ProcessAgent doesn't expose PID directly
+		StartedAt:  info.StartedAt,
+		ThreadID:   p.ThreadID(),
+		LastState:  string(info.State),
+		LastUpdate: time.Now(),
+	}
+
+	if err := store.Upsert(rt); err != nil {
+		slog.Error("failed to save planner runtime", "planner", p.ID(), "error", err)
+	}
+}
+
+// removePlannerRuntime removes planner metadata from the runtime store.
+func (m *Manager) removePlannerRuntime(id string) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.Remove(id); err != nil {
+		slog.Error("failed to remove planner runtime", "planner", id, "error", err)
+	}
+}
+
+// updatePlannerState updates the state in the runtime store.
+func (m *Manager) updatePlannerState(id string, state State) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateState(id, string(state)); err != nil {
+		slog.Error("failed to update planner runtime state", "planner", id, "error", err)
+	}
+}
+
+// UpdatePlannerThreadID updates the thread ID in the runtime store.
+func (m *Manager) UpdatePlannerThreadID(id, threadID string) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateThreadID(id, threadID); err != nil {
+		slog.Error("failed to update planner thread ID", "planner", id, "error", err)
 	}
 }
 
@@ -84,13 +170,14 @@ func (m *Manager) Create(project, workDir, prompt string, b backend.Backend) (*P
 func (m *Manager) CreateWithID(plannerID, project, workDir, prompt string, b backend.Backend) (*Planner, error) {
 	p := New(plannerID, project, workDir, prompt, b)
 
-	// Register state change callback
+	// Register state change callback to emit events and update runtime store
 	p.OnStateChange(func(old, new State) {
 		slog.Debug("planner state changed",
 			"planner", p.ID(),
 			"from", old,
 			"to", new,
 		)
+		m.updatePlannerState(p.ID(), new)
 		m.emit(Event{
 			Type:     EventStateChanged,
 			Planner:  p,
@@ -112,6 +199,16 @@ func (m *Manager) CreateWithID(plannerID, project, workDir, prompt string, b bac
 		})
 	})
 
+	// Register thread ID change callback to persist to runtime store
+	p.OnThreadIDChange(func(threadID string) {
+		slog.Debug("planner thread ID changed",
+			"planner", p.ID(),
+			"project", project,
+			"thread_id", threadID,
+		)
+		m.UpdatePlannerThreadID(p.ID(), threadID)
+	})
+
 	m.mu.Lock()
 	m.planners[plannerID] = p
 	m.mu.Unlock()
@@ -121,6 +218,9 @@ func (m *Manager) CreateWithID(plannerID, project, workDir, prompt string, b bac
 		"project", project,
 		"workdir", workDir,
 	)
+
+	// Persist planner runtime metadata
+	m.savePlannerRuntime(p)
 
 	m.emit(Event{
 		Type:    EventCreated,
@@ -188,6 +288,9 @@ func (m *Manager) Delete(id string) error {
 
 	delete(m.planners, id)
 	m.mu.Unlock()
+
+	// Remove from runtime store
+	m.removePlannerRuntime(id)
 
 	slog.Info("planner deleted", "planner", id)
 

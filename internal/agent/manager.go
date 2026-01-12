@@ -11,6 +11,7 @@ import (
 	"github.com/tessro/fab/internal/event"
 	"github.com/tessro/fab/internal/id"
 	"github.com/tessro/fab/internal/project"
+	"github.com/tessro/fab/internal/runtime"
 )
 
 // Manager errors.
@@ -71,6 +72,10 @@ type Manager struct {
 	events        event.Emitter[Event]
 	projectEvents event.Emitter[ProjectEvent]
 
+	// runtimeStore persists agent metadata for daemon restart recovery.
+	// May be nil if persistence is disabled.
+	runtimeStore *runtime.Store
+
 	mu sync.RWMutex
 }
 
@@ -80,6 +85,99 @@ func NewManager() *Manager {
 		agents:   make(map[string]*Agent),
 		projects: make(map[string][]*Agent),
 		registry: make(map[string]*project.Project),
+	}
+}
+
+// SetRuntimeStore sets the runtime store for persisting agent metadata.
+// When set, agent metadata is persisted on start/stop/state changes.
+func (m *Manager) SetRuntimeStore(store *runtime.Store) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.runtimeStore = store
+}
+
+// RuntimeStore returns the current runtime store, if any.
+func (m *Manager) RuntimeStore() *runtime.Store {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.runtimeStore
+}
+
+// saveAgentRuntime persists agent runtime metadata to the store.
+// Safe to call if runtimeStore is nil.
+func (m *Manager) saveAgentRuntime(agent *Agent) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	info := agent.Info()
+	rt := runtime.AgentRuntime{
+		ID:           agent.ID,
+		Project:      info.Project,
+		Kind:         runtime.KindCoding,
+		Backend:      info.Backend,
+		PID:          agent.PID(),
+		StartedAt:    agent.StartedAt,
+		WorktreePath: info.Worktree,
+		ThreadID:     agent.GetThreadID(),
+		LastState:    string(info.State),
+		LastUpdate:   time.Now(),
+	}
+
+	if err := store.Upsert(rt); err != nil {
+		slog.Error("failed to save agent runtime", "agent", agent.ID, "error", err)
+	}
+}
+
+// removeAgentRuntime removes agent metadata from the runtime store.
+// Safe to call if runtimeStore is nil.
+func (m *Manager) removeAgentRuntime(id string) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.Remove(id); err != nil {
+		slog.Error("failed to remove agent runtime", "agent", id, "error", err)
+	}
+}
+
+// updateAgentState updates the state in the runtime store.
+// Safe to call if runtimeStore is nil.
+func (m *Manager) updateAgentState(id string, state State) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateState(id, string(state)); err != nil {
+		slog.Error("failed to update agent runtime state", "agent", id, "error", err)
+	}
+}
+
+// UpdateAgentThreadID updates the thread ID in the runtime store.
+// This is called when thread ID becomes known (Codex).
+func (m *Manager) UpdateAgentThreadID(id, threadID string) {
+	m.mu.RLock()
+	store := m.runtimeStore
+	m.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateThreadID(id, threadID); err != nil {
+		slog.Error("failed to update agent thread ID", "agent", id, "error", err)
 	}
 }
 
@@ -170,7 +268,7 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 
 	agent := NewWithBackend(agentID, proj, wt, b)
 
-	// Register state change callback to emit events
+	// Register state change callback to emit events and update runtime store
 	agent.OnStateChange(func(old, new State) {
 		slog.Debug("agent state changed",
 			"agent", agent.ID,
@@ -178,6 +276,7 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 			"from", old,
 			"to", new,
 		)
+		m.updateAgentState(agent.ID, new)
 		m.emit(Event{
 			Type:     EventStateChanged,
 			Agent:    agent,
@@ -200,6 +299,16 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 		})
 	})
 
+	// Register thread ID change callback to persist to runtime store
+	agent.OnThreadIDChange(func(threadID string) {
+		slog.Debug("agent thread ID changed",
+			"agent", agent.ID,
+			"project", proj.Name,
+			"thread_id", threadID,
+		)
+		m.UpdateAgentThreadID(agent.ID, threadID)
+	})
+
 	m.mu.Lock()
 	m.agents[agentID] = agent
 	m.projects[proj.Name] = append(m.projects[proj.Name], agent)
@@ -210,6 +319,9 @@ func (m *Manager) Create(proj *project.Project) (*Agent, error) {
 		"project", proj.Name,
 		"worktree", wt.Path,
 	)
+
+	// Persist agent runtime metadata
+	m.saveAgentRuntime(agent)
 
 	m.emit(Event{
 		Type:  EventCreated,
@@ -331,6 +443,9 @@ func (m *Manager) Delete(id string) error {
 	if proj != nil {
 		_ = proj.DeleteWorktreeForAgent(id)
 	}
+
+	// Remove from runtime store
+	m.removeAgentRuntime(id)
 
 	slog.Info("agent deleted", "agent", id, "project", projectName)
 

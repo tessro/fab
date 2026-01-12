@@ -104,6 +104,8 @@ type Agent struct {
 	onStateChange func(old, new State) // Optional callback for state changes
 	// +checklocks:mu
 	onInfoChange func() // Optional callback for task/description changes
+	// +checklocks:mu
+	onThreadIDChange func(threadID string) // Optional callback for thread ID changes (Codex)
 
 	// Read loop management (channels are goroutine-safe: created before goroutine, closed to signal)
 	readLoopStop chan struct{} // Signals read loop to stop
@@ -332,8 +334,21 @@ func (a *Agent) GetThreadID() string {
 // SetThreadID sets the thread ID for conversation resumption (Codex).
 func (a *Agent) SetThreadID(id string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.threadID = id
+	callback := a.onThreadIDChange
+	a.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock
+	if callback != nil {
+		callback(id)
+	}
+}
+
+// OnThreadIDChange sets a callback that's invoked when thread ID changes.
+func (a *Agent) OnThreadIDChange(fn func(threadID string)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onThreadIDChange = fn
 }
 
 // Reset prepares the agent for reuse (after Done or Error).

@@ -172,3 +172,24 @@ func AgentHostSocketPath(agentID string) (string, error) {
 	}
 	return filepath.Join(dir, agentID+".sock"), nil
 }
+
+// RuntimeDir returns the runtime directory (~/.fab/runtime by default).
+// When FAB_DIR is set, returns FAB_DIR/runtime.
+// This directory stores runtime state that needs to persist across daemon restarts.
+func RuntimeDir() (string, error) {
+	base, err := BaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "runtime"), nil
+}
+
+// AgentsRuntimePath returns the path to the agents runtime metadata file.
+// (~/.fab/runtime/agents.json by default, or FAB_DIR/runtime/agents.json).
+func AgentsRuntimePath() (string, error) {
+	dir, err := RuntimeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "agents.json"), nil
+}

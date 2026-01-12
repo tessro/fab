@@ -11,6 +11,7 @@ import (
 	"github.com/tessro/fab/internal/daemon"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/rules"
+	"github.com/tessro/fab/internal/runtime"
 )
 
 // getProjectManager returns the manager for a project, creating it if necessary.
@@ -56,11 +57,86 @@ func (s *Supervisor) setupManagerCallbacks(mgr *manager.Manager) {
 	projectName := mgr.Project()
 
 	mgr.OnStateChange(func(old, new manager.State) {
+		s.updateManagerRuntimeState(projectName, new)
 		s.broadcastManagerStateTyped(projectName, new, mgr.StartedAt())
 	})
 	mgr.OnEntry(func(entry agent.ChatEntry) {
 		s.broadcastManagerChatEntry(projectName, entry)
 	})
+	mgr.OnThreadIDChange(func(threadID string) {
+		s.updateManagerThreadID(projectName, threadID)
+	})
+}
+
+// saveManagerRuntime persists manager runtime metadata to the store.
+func (s *Supervisor) saveManagerRuntime(mgr *manager.Manager) {
+	s.mu.RLock()
+	store := s.runtimeStore
+	s.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	rt := runtime.AgentRuntime{
+		ID:         "manager:" + mgr.Project(),
+		Project:    mgr.Project(),
+		Kind:       runtime.KindManager,
+		PID:        0, // ProcessAgent doesn't expose PID directly
+		StartedAt:  mgr.StartedAt(),
+		ThreadID:   mgr.ThreadID(),
+		LastState:  string(mgr.State()),
+		LastUpdate: time.Now(),
+	}
+
+	if err := store.Upsert(rt); err != nil {
+		slog.Error("failed to save manager runtime", "project", mgr.Project(), "error", err)
+	}
+}
+
+// removeManagerRuntime removes manager metadata from the runtime store.
+func (s *Supervisor) removeManagerRuntime(projectName string) {
+	s.mu.RLock()
+	store := s.runtimeStore
+	s.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.Remove("manager:" + projectName); err != nil {
+		slog.Error("failed to remove manager runtime", "project", projectName, "error", err)
+	}
+}
+
+// updateManagerRuntimeState updates the manager state in the runtime store.
+func (s *Supervisor) updateManagerRuntimeState(projectName string, state manager.State) {
+	s.mu.RLock()
+	store := s.runtimeStore
+	s.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateState("manager:"+projectName, string(state)); err != nil {
+		slog.Error("failed to update manager runtime state", "project", projectName, "error", err)
+	}
+}
+
+// updateManagerThreadID updates the manager thread ID in the runtime store.
+func (s *Supervisor) updateManagerThreadID(projectName, threadID string) {
+	s.mu.RLock()
+	store := s.runtimeStore
+	s.mu.RUnlock()
+
+	if store == nil {
+		return
+	}
+
+	if err := store.UpdateThreadID("manager:"+projectName, threadID); err != nil {
+		slog.Error("failed to update manager thread ID", "project", projectName, "error", err)
+	}
 }
 
 // broadcastManagerStateTyped sends a manager state change to attached clients.
@@ -111,6 +187,9 @@ func (s *Supervisor) handleManagerStart(_ context.Context, req *daemon.Request) 
 		return errorResponse(req, fmt.Sprintf("failed to start manager: %v", err))
 	}
 
+	// Persist manager runtime metadata
+	s.saveManagerRuntime(mgr)
+
 	slog.Info("manager agent started", "project", startReq.Project)
 	return successResponse(req, nil)
 }
@@ -137,6 +216,9 @@ func (s *Supervisor) handleManagerStop(_ context.Context, req *daemon.Request) *
 	if err := mgr.Stop(); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to stop manager: %v", err))
 	}
+
+	// Remove from runtime store
+	s.removeManagerRuntime(stopReq.Project)
 
 	slog.Info("manager agent stopped", "project", stopReq.Project)
 	return successResponse(req, nil)

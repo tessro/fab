@@ -98,6 +98,8 @@ type ProcessAgent struct {
 	onStateChange func(old, new State)
 	// +checklocks:mu
 	onEntry func(entry agent.ChatEntry)
+	// +checklocks:mu
+	onThreadIDChange func(threadID string)
 
 	// Read loop control
 	readLoopStop chan struct{}
@@ -155,8 +157,21 @@ func (p *ProcessAgent) ThreadID() string {
 // SetThreadID sets the thread ID for conversation resumption.
 func (p *ProcessAgent) SetThreadID(id string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.threadID = id
+	callback := p.onThreadIDChange
+	p.mu.Unlock()
+
+	// Call callback OUTSIDE the lock to prevent deadlock
+	if callback != nil {
+		callback(id)
+	}
+}
+
+// OnThreadIDChange sets a callback for thread ID changes.
+func (p *ProcessAgent) OnThreadIDChange(fn func(threadID string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onThreadIDChange = fn
 }
 
 // OnStateChange sets a callback for state changes.

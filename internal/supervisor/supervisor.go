@@ -15,6 +15,7 @@ import (
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/planner"
 	"github.com/tessro/fab/internal/registry"
+	"github.com/tessro/fab/internal/runtime"
 	"github.com/tessro/fab/internal/version"
 )
 
@@ -58,6 +59,10 @@ type Supervisor struct {
 	// Heartbeat monitor for detecting stuck agents
 	heartbeat *HeartbeatMonitor
 
+	// runtimeStore persists agent metadata for daemon restart recovery.
+	// May be nil if persistence is disabled.
+	runtimeStore *runtime.Store
+
 	mu sync.RWMutex
 }
 
@@ -75,6 +80,12 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		slog.Warn("failed to load global config", "error", err)
 	}
 
+	// Initialize runtime store for agent metadata persistence
+	runtimeStore, err := runtime.NewStore()
+	if err != nil {
+		slog.Warn("failed to create runtime store", "error", err)
+	}
+
 	s := &Supervisor{
 		registry:        reg,
 		agents:          agents,
@@ -88,6 +99,13 @@ func New(reg *registry.Registry, agents *agent.Manager) *Supervisor {
 		managers:        make(map[string]*manager.Manager),
 		planners:        planner.NewManager(),
 		globalConfig:    globalCfg,
+		runtimeStore:    runtimeStore,
+	}
+
+	// Wire up runtime store to agent and planner managers
+	if runtimeStore != nil {
+		agents.SetRuntimeStore(runtimeStore)
+		s.planners.SetRuntimeStore(runtimeStore)
 	}
 
 	// Set up callback to start agent read loops when agent starts
