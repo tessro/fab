@@ -93,7 +93,10 @@ func New(id, project, workDir, prompt string, b backend.Backend) *Planner {
 		LargeBuffer:   true,
 		LogStderr:     true,
 		BuildCommand: func() (*exec.Cmd, error) {
-			return p.buildCommand()
+			return p.buildCommand("")
+		},
+		BuildResumeCommand: func(threadID, message string) (*exec.Cmd, error) {
+			return p.buildResumeCommand(threadID, message)
 		},
 		ProcessMessage: func(msg *agent.StreamMessage) bool {
 			return p.processMessage(msg)
@@ -170,7 +173,7 @@ func (p *Planner) SendMessage(content string) error {
 }
 
 // buildCommand creates the exec.Cmd for the CLI process using the backend.
-func (p *Planner) buildCommand() (*exec.Cmd, error) {
+func (p *Planner) buildCommand(threadID string) (*exec.Cmd, error) {
 	// Build command using backend
 	// FAB_AGENT_ID uses "plan:" prefix to match TUI agent ID format and enable
 	// permission handling (including LLM auth) via the standard agent flow.
@@ -181,6 +184,19 @@ func (p *Planner) buildCommand() (*exec.Cmd, error) {
 		AgentID:       "plan:" + p.id,
 		InitialPrompt: p.planPrompt,
 		PluginDir:     plugin.DefaultInstallDir(),
+		ThreadID:      threadID,
+	})
+}
+
+// buildResumeCommand creates an exec.Cmd for resuming a conversation.
+// Used by Codex which requires separate processes per turn.
+func (p *Planner) buildResumeCommand(threadID, message string) (*exec.Cmd, error) {
+	return p.backend.BuildCommand(backend.CommandConfig{
+		WorkDir:       p.WorkDir(),
+		AgentID:       "plan:" + p.id,
+		InitialPrompt: message,
+		PluginDir:     plugin.DefaultInstallDir(),
+		ThreadID:      threadID,
 	})
 }
 

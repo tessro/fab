@@ -115,6 +115,8 @@ type Agent struct {
 	exitErr error // Error from process exit (nil for clean exit)
 	// +checklocks:mu
 	stopping bool // True when Stop() has been called
+	// +checklocks:mu
+	threadID string // Thread ID for conversation resumption (Codex)
 }
 
 // New creates a new Agent in the Starting state with the default mode.
@@ -320,6 +322,20 @@ func (a *Agent) GetLastUserInput() time.Time {
 	return a.LastUserInput
 }
 
+// GetThreadID returns the thread ID for conversation resumption (Codex).
+func (a *Agent) GetThreadID() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.threadID
+}
+
+// SetThreadID sets the thread ID for conversation resumption (Codex).
+func (a *Agent) SetThreadID(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.threadID = id
+}
+
 // Reset prepares the agent for reuse (after Done or Error).
 // Returns to Starting state, clears task.
 func (a *Agent) Reset() error {
@@ -517,10 +533,29 @@ func (a *Agent) StopWithTimeout(timeout time.Duration) error {
 }
 
 // SendMessage sends a user message to Claude Code via stdin as JSON.
+// For backends with continuous stdin (Claude Code), the message is written to stdin.
+// For backends that require separate processes per turn (Codex), this spawns a
+// resume process if a thread ID is available and the process has stopped.
 func (a *Agent) SendMessage(content string) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.sendMessageLocked(content)
+
+	// If process is running, send via stdin (Claude Code style)
+	if a.stdin != nil {
+		err := a.sendMessageLocked(content)
+		a.mu.Unlock()
+		return err
+	}
+
+	// Process not running - check if we can resume (Codex style)
+	// Codex processes exit after each turn, so we check for StateDone or StateError
+	threadID := a.threadID
+	if threadID != "" && (a.State == StateDone || a.State == StateError) {
+		a.mu.Unlock()
+		return a.resumeWithMessage(threadID, content)
+	}
+
+	a.mu.Unlock()
+	return ErrProcessNotStarted
 }
 
 // sendMessageLocked sends a message while holding the lock.
@@ -538,6 +573,92 @@ func (a *Agent) sendMessageLocked(content string) error {
 
 	_, err = a.stdin.Write(data)
 	return err
+}
+
+// resumeWithMessage spawns a new process to resume a conversation with a message.
+// This is used by Codex which requires separate processes per turn.
+// The caller should call StartReadLoop after this returns to process output.
+func (a *Agent) resumeWithMessage(threadID, content string) error {
+	a.mu.Lock()
+
+	// Reset state to allow restart - direct assignment is intentional here
+	// as we're restarting for a resume operation
+	if a.State != StateStarting {
+		a.State = StateStarting
+		a.UpdatedAt = time.Now()
+	}
+
+	if a.cmd != nil {
+		a.mu.Unlock()
+		return ErrProcessAlreadyRuns
+	}
+
+	// Determine working directory
+	workDir := ""
+	if a.Worktree != nil {
+		workDir = a.Worktree.Path
+	} else if a.Project != nil {
+		workDir = a.Project.RepoDir()
+	}
+
+	// Build command using the backend with thread ID for resume
+	cfg := backend.CommandConfig{
+		WorkDir:       workDir,
+		AgentID:       a.ID,
+		InitialPrompt: content,
+		ThreadID:      threadID,
+	}
+	cmd, err := a.Backend.BuildCommand(cfg)
+	if err != nil {
+		a.mu.Unlock()
+		return err
+	}
+
+	// Set up pipes
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		a.mu.Unlock()
+		return err
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		stdin.Close()
+		a.mu.Unlock()
+		return err
+	}
+
+	// Start the process
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		a.mu.Unlock()
+		return err
+	}
+
+	a.stdin = stdin
+	a.stdout = stdout
+	a.cmd = cmd
+	a.UpdatedAt = time.Now()
+	a.stopping = false
+
+	// Initialize read loop channels
+	a.readLoopMu.Lock()
+	a.readLoopStop = make(chan struct{})
+	a.readLoopDone = make(chan struct{})
+	a.readLoopMu.Unlock()
+
+	a.mu.Unlock()
+
+	slog.Debug("agent.resumeWithMessage: started resume process",
+		"agent", a.ID,
+		"thread_id", threadID,
+		"pid", cmd.Process.Pid)
+
+	// Start the read loop to process output from the resumed process
+	go a.runReadLoop(DefaultReadLoopConfig())
+
+	return nil
 }
 
 // Write sends raw input to the process stdin.
@@ -793,6 +914,12 @@ func (a *Agent) runReadLoop(cfg ReadLoopConfig) {
 
 		if msg == nil {
 			continue
+		}
+
+		// Capture thread ID from system init messages (Codex thread.started)
+		if msg.ThreadID != "" {
+			a.SetThreadID(msg.ThreadID)
+			log.Debug("readloop: captured thread ID", "thread_id", msg.ThreadID)
 		}
 
 		// Log system messages (init, hook_response) that don't produce chat entries

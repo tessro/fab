@@ -57,4 +57,8 @@ type CommandConfig struct {
 	// Env contains additional environment variables to set for the CLI process.
 	// These are appended to os.Environ().
 	Env []string
+
+	// ThreadID is the session thread ID for resuming conversations (Codex-specific).
+	// When set, Codex uses "exec resume <thread-id>" instead of "exec".
+	ThreadID string
 }

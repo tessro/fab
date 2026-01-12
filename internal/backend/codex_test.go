@@ -53,6 +53,10 @@ func TestCodexBackend_BuildCommand(t *testing.T) {
 		if !strings.Contains(args, "--full-auto") {
 			t.Errorf("BuildCommand() args should contain '--full-auto', got %v", cmd.Args)
 		}
+		// Should NOT contain resume
+		if strings.Contains(args, "resume") {
+			t.Errorf("BuildCommand() args should not contain 'resume' without ThreadID, got %v", cmd.Args)
+		}
 	})
 
 	t.Run("with initial prompt", func(t *testing.T) {
@@ -69,6 +73,37 @@ func TestCodexBackend_BuildCommand(t *testing.T) {
 		args := strings.Join(cmd.Args, " ")
 		if !strings.Contains(args, "write hello world") {
 			t.Errorf("BuildCommand() args should contain initial prompt, got %v", cmd.Args)
+		}
+	})
+
+	t.Run("with thread ID for resume", func(t *testing.T) {
+		cfg := backend.CommandConfig{
+			WorkDir:       "/tmp/test",
+			AgentID:       "test-agent",
+			ThreadID:      "019bac20-11a2-7061-9708-dda3b7642ac3",
+			InitialPrompt: "follow-up question",
+		}
+		cmd, err := b.BuildCommand(cfg)
+		if err != nil {
+			t.Fatalf("BuildCommand() error = %v", err)
+		}
+
+		args := strings.Join(cmd.Args, " ")
+		// Should contain "exec resume" and the thread ID
+		if !strings.Contains(args, "exec resume") {
+			t.Errorf("BuildCommand() args should contain 'exec resume', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "019bac20-11a2-7061-9708-dda3b7642ac3") {
+			t.Errorf("BuildCommand() args should contain thread ID, got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "follow-up question") {
+			t.Errorf("BuildCommand() args should contain prompt, got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "--json") {
+			t.Errorf("BuildCommand() args should contain '--json', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "--full-auto") {
+			t.Errorf("BuildCommand() args should contain '--full-auto', got %v", cmd.Args)
 		}
 	})
 
@@ -122,6 +157,10 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg.Subtype != "init" {
 			t.Errorf("Subtype = %q, want %q", msg.Subtype, "init")
+		}
+		// Verify thread_id is captured in StreamMessage
+		if msg.ThreadID != "019bac20-11a2-7061-9708-dda3b7642ac3" {
+			t.Errorf("ThreadID = %q, want %q", msg.ThreadID, "019bac20-11a2-7061-9708-dda3b7642ac3")
 		}
 	})
 

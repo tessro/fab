@@ -11,11 +11,12 @@ import (
 // This is a canonical representation that backends translate their CLI-specific
 // output into.
 type StreamMessage struct {
-	Type    string         `json:"type"`              // "system", "assistant", "user", "result"
-	Subtype string         `json:"subtype,omitempty"` // For system messages: "init", "hook_response"
-	Message *NestedMessage `json:"message,omitempty"` // For assistant/user types
-	Result  string         `json:"result,omitempty"`  // For result type
-	IsError bool           `json:"is_error,omitempty"`
+	Type     string         `json:"type"`               // "system", "assistant", "user", "result"
+	Subtype  string         `json:"subtype,omitempty"`  // For system messages: "init", "hook_response"
+	Message  *NestedMessage `json:"message,omitempty"`  // For assistant/user types
+	Result   string         `json:"result,omitempty"`   // For result type
+	IsError  bool           `json:"is_error,omitempty"`
+	ThreadID string         `json:"thread_id,omitempty"` // Session thread ID (Codex: from thread.started)
 }
 
 // NestedMessage contains the actual API message content.

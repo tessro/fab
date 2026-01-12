@@ -16,12 +16,16 @@ func (b *CodexBackend) Name() string { return "codex" }
 
 // BuildCommand creates the exec.Cmd for the Codex CLI.
 func (b *CodexBackend) BuildCommand(cfg CommandConfig) (*exec.Cmd, error) {
-	args := []string{"exec", "--json"}
+	var args []string
 
-	// Use full-auto mode for automated operation (workspace-write + on-request approval)
-	args = append(args, "--full-auto")
+	// If ThreadID is provided, use "exec resume" to continue the conversation
+	if cfg.ThreadID != "" {
+		args = []string{"exec", "resume", "--json", "--full-auto", cfg.ThreadID}
+	} else {
+		args = []string{"exec", "--json", "--full-auto"}
+	}
 
-	// Add initial prompt if provided
+	// Add prompt if provided (required for resume, optional for new exec)
 	if cfg.InitialPrompt != "" {
 		args = append(args, cfg.InitialPrompt)
 	}
@@ -88,8 +92,9 @@ func (b *CodexBackend) convertEvent(event *codexEvent) (*StreamMessage, error) {
 	case "thread.started":
 		// Session initialization - capture thread_id for session management
 		return &StreamMessage{
-			Type:    "system",
-			Subtype: "init",
+			Type:     "system",
+			Subtype:  "init",
+			ThreadID: event.ThreadID,
 		}, nil
 
 	case "turn.started":

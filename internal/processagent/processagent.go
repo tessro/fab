@@ -37,6 +37,13 @@ type Config struct {
 	// The returned command should NOT be started yet.
 	BuildCommand func() (*exec.Cmd, error)
 
+	// BuildResumeCommand is called to create an exec.Cmd for resuming a conversation.
+	// It receives the thread ID and the message content.
+	// If nil, follow-up messages are sent via stdin to the running process.
+	// For backends like Codex that use separate processes per turn, this allows
+	// spawning a new "exec resume" process.
+	BuildResumeCommand func(threadID, message string) (*exec.Cmd, error)
+
 	// InitialPrompt is sent via stdin after the process starts.
 	// If empty, no initial prompt is sent.
 	InitialPrompt string
@@ -74,6 +81,8 @@ type ProcessAgent struct {
 	stdout io.ReadCloser
 	// +checklocks:mu
 	startedAt time.Time
+	// +checklocks:mu
+	threadID string // Thread ID for conversation resumption (Codex)
 
 	// Chat history for TUI display
 	history *agent.ChatHistory
@@ -134,6 +143,20 @@ func (p *ProcessAgent) History() *agent.ChatHistory {
 // WorkDir returns the working directory.
 func (p *ProcessAgent) WorkDir() string {
 	return p.workDir
+}
+
+// ThreadID returns the current thread ID for conversation resumption.
+func (p *ProcessAgent) ThreadID() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.threadID
+}
+
+// SetThreadID sets the thread ID for conversation resumption.
+func (p *ProcessAgent) SetThreadID(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.threadID = id
 }
 
 // OnStateChange sets a callback for state changes.
@@ -361,38 +384,145 @@ func (p *ProcessAgent) StopWithTimeout(timeout time.Duration) error {
 	return nil
 }
 
-// SendMessage sends a user message to the process via stdin.
+// SendMessage sends a user message to the process.
+// For backends with continuous stdin (Claude Code), the message is written to stdin.
+// For backends that require separate processes per turn (Codex), this spawns a
+// resume process if a thread ID is available and the process has stopped.
 func (p *ProcessAgent) SendMessage(content string) error {
 	p.mu.RLock()
 	stdin := p.stdin
 	state := p.state
+	threadID := p.threadID
 	p.mu.RUnlock()
 
-	if state != StateRunning && state != StateStarting {
-		return ErrNotRunning
-	}
+	// If process is running, send via stdin (Claude Code style)
+	if state == StateRunning || state == StateStarting {
+		if stdin == nil {
+			return ErrProcessNotFound
+		}
 
-	if stdin == nil {
-		return ErrProcessNotFound
-	}
+		msg := agent.InputMessage{
+			Type: "user",
+			Message: agent.MessageBody{
+				Role:    "user",
+				Content: content,
+			},
+			SessionID: "default",
+		}
 
-	msg := agent.InputMessage{
-		Type: "user",
-		Message: agent.MessageBody{
-			Role:    "user",
-			Content: content,
-		},
-		SessionID: "default",
-	}
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
 
-	data, err := json.Marshal(msg)
-	if err != nil {
+		data = append(data, '\n')
+		_, err = stdin.Write(data)
 		return err
 	}
 
-	data = append(data, '\n')
-	_, err = stdin.Write(data)
-	return err
+	// Process not running - check if we can resume (Codex style)
+	if p.config.BuildResumeCommand != nil && threadID != "" {
+		return p.resumeWithMessage(threadID, content)
+	}
+
+	return ErrNotRunning
+}
+
+// resumeWithMessage spawns a new process to resume a conversation with a message.
+// This is used by Codex which requires separate processes per turn.
+func (p *ProcessAgent) resumeWithMessage(threadID, content string) error {
+	log := slog.With("component", p.config.LogPrefix)
+	log.Debug("ProcessAgent.resumeWithMessage: resuming conversation", "thread_id", threadID)
+
+	p.mu.Lock()
+
+	if p.state != StateStopped {
+		p.mu.Unlock()
+		return ErrAlreadyRunning
+	}
+
+	p.state = StateStarting
+
+	// Build resume command
+	cmd, err := p.config.BuildResumeCommand(threadID, content)
+	if err != nil {
+		p.state = StateStopped
+		p.mu.Unlock()
+		return fmt.Errorf("build resume command: %w", err)
+	}
+	cmd.Dir = p.workDir
+
+	// Set up pipes
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		p.state = StateStopped
+		p.mu.Unlock()
+		return fmt.Errorf("stdin pipe: %w", err)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		stdin.Close()
+		p.state = StateStopped
+		p.mu.Unlock()
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	// Set up stderr if logging is requested
+	var stderr io.ReadCloser
+	if p.config.LogStderr {
+		stderr, err = cmd.StderrPipe()
+		if err != nil {
+			stdin.Close()
+			stdout.Close()
+			p.state = StateStopped
+			p.mu.Unlock()
+			return fmt.Errorf("stderr pipe: %w", err)
+		}
+	}
+
+	// Start the process
+	log.Debug("ProcessAgent.resumeWithMessage: starting resume process", "cmd", cmd.Path, "dir", cmd.Dir)
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		if stderr != nil {
+			stderr.Close()
+		}
+		p.state = StateStopped
+		p.mu.Unlock()
+		return fmt.Errorf("start process: %w", err)
+	}
+
+	// Start stderr reader goroutine if logging is enabled
+	if stderr != nil {
+		stderrLog := log
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				stderrLog.Warn(p.config.LogPrefix+".stderr", "line", line)
+			}
+		}()
+	}
+	log.Debug("ProcessAgent.resumeWithMessage: process started", "pid", cmd.Process.Pid)
+
+	p.cmd = cmd
+	p.stdin = stdin
+	p.stdout = stdout
+
+	// Create new read loop channels
+	p.readLoopStop = make(chan struct{})
+	p.readLoopDone = make(chan struct{})
+
+	p.mu.Unlock()
+
+	// Start read loop
+	go p.runReadLoop()
+
+	p.setState(StateRunning)
+	log.Info("ProcessAgent.resumeWithMessage: complete", "pid", cmd.Process.Pid, "thread_id", threadID)
+	return nil
 }
 
 // runReadLoop reads and parses output from Claude Code.
@@ -454,6 +584,12 @@ func (p *ProcessAgent) runReadLoop() {
 
 		if msg == nil {
 			continue
+		}
+
+		// Capture thread ID from system init messages (Codex thread.started)
+		if msg.ThreadID != "" {
+			p.SetThreadID(msg.ThreadID)
+			log.Debug("ProcessAgent.runReadLoop: captured thread ID", "thread_id", msg.ThreadID)
 		}
 
 		// Let embedder process the message first
