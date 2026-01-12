@@ -68,10 +68,15 @@ func NewProject(name, remoteURL string) *Project {
 }
 
 // ProjectDir returns the path to the project directory.
-// Returns BaseDir/<projectName>/ if BaseDir is set, otherwise ~/.fab/projects/<projectName>/
+// Returns BaseDir/<projectName>/ if BaseDir is set.
+// Otherwise, if FAB_DIR is set, uses $FAB_DIR/projects/<projectName>/.
+// Otherwise uses ~/.fab/projects/<projectName>/.
 func (p *Project) ProjectDir() string {
 	if p.BaseDir != "" {
 		return filepath.Join(p.BaseDir, p.Name)
+	}
+	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+		return filepath.Join(fabDir, "projects", p.Name)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

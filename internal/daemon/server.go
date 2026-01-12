@@ -18,7 +18,12 @@ import (
 )
 
 // DefaultSocketPath returns the default Unix socket path.
+// If FAB_DIR is set, uses $FAB_DIR/fab.sock.
+// Otherwise uses ~/.fab/fab.sock.
 func DefaultSocketPath() string {
+	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+		return filepath.Join(fabDir, "fab.sock")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/tmp/fab.sock"

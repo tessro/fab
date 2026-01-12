@@ -114,12 +114,19 @@ type Registry struct {
 }
 
 // New creates a new Registry with the default config path.
+// If FAB_DIR is set, uses $FAB_DIR/config.toml.
+// Otherwise uses ~/.config/fab/config.toml.
 func New() (*Registry, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
+	var configPath string
+	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+		configPath = filepath.Join(fabDir, DefaultConfigFile)
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		configPath = filepath.Join(home, DefaultConfigDir, DefaultConfigFile)
 	}
-	configPath := filepath.Join(home, DefaultConfigDir, DefaultConfigFile)
 	return NewWithPath(configPath)
 }
 

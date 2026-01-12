@@ -10,8 +10,13 @@ import (
 	"strings"
 )
 
-// DefaultLogPath returns the default log file path (~/.fab/fab.log).
+// DefaultLogPath returns the default log file path.
+// If FAB_DIR is set, uses $FAB_DIR/fab.log.
+// Otherwise uses ~/.fab/fab.log.
 func DefaultLogPath() string {
+	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+		return filepath.Join(fabDir, "fab.log")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/tmp/fab.log"

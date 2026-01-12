@@ -12,7 +12,12 @@ import (
 )
 
 // DefaultPIDPath returns the default PID file path.
+// If FAB_DIR is set, uses $FAB_DIR/fab.pid.
+// Otherwise uses ~/.fab/fab.pid.
 func DefaultPIDPath() string {
+	if fabDir := os.Getenv("FAB_DIR"); fabDir != "" {
+		return filepath.Join(fabDir, "fab.pid")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/tmp/fab.pid"

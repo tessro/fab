@@ -119,7 +119,14 @@ func daemonize() error {
 	}
 
 	// Build command with --foreground flag
-	cmd := exec.Command(exe, "server", "start", "--foreground")
+	args := []string{"server", "start", "--foreground"}
+
+	// Pass --fab-dir if it was specified
+	if fabDir := FabDir(); fabDir != "" {
+		args = append([]string{"--fab-dir", fabDir}, args...)
+	}
+
+	cmd := exec.Command(exe, args...)
 
 	// Detach from terminal
 	cmd.Stdin = nil

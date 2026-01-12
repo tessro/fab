@@ -138,9 +138,31 @@ The orchestrator then recycles the worktree for the next agent.
 
 ## Configuration
 
+### Base Directory
+
+By default, fab stores all data in `~/.fab/` (socket, PID file, logs, projects) and configuration in `~/.config/fab/config.toml`.
+
+You can override this with the `--fab-dir` flag or `FAB_DIR` environment variable:
+
+```bash
+# Run fab in an isolated directory
+fab --fab-dir /tmp/fab-test server start
+
+# Or via environment variable
+export FAB_DIR=/tmp/fab-test
+fab server start
+```
+
+When `FAB_DIR` is set, all paths resolve under that directory:
+- Socket: `$FAB_DIR/fab.sock`
+- PID file: `$FAB_DIR/fab.pid`
+- Log file: `$FAB_DIR/fab.log`
+- Config: `$FAB_DIR/config.toml`
+- Projects: `$FAB_DIR/projects/`
+
 ### Global Configuration
 
-Config lives at `~/.config/fab/config.toml`:
+Config lives at `~/.config/fab/config.toml` (or `$FAB_DIR/config.toml` if FAB_DIR is set):
 
 ```toml
 # Logging level: debug, info, warn, error
@@ -177,7 +199,7 @@ fab project config set myproject issue-backend gh
 
 ### Worktrees
 
-Worktrees are stored in `~/.fab/projects/<project>/worktrees/wt-NNN/`.
+Worktrees are stored in `~/.fab/projects/<project>/worktrees/wt-NNN/` (or `$FAB_DIR/projects/<project>/worktrees/wt-NNN/` if FAB_DIR is set).
 
 ## Permission System
 
