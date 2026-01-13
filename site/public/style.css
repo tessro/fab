@@ -226,6 +226,15 @@ nav {
     font-size: 0.95rem;
 }
 
+.feature p a {
+    color: var(--mauve);
+    text-decoration: none;
+}
+
+.feature p a:hover {
+    text-decoration: underline;
+}
+
 /* Terminal Demo */
 .demo {
     padding: 20px 0 80px;
