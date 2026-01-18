@@ -230,8 +230,11 @@ You can read and explore the project's code using standard tools:
 - fab issue ready - List issues ready to be worked on
 - fab issue show <id> - Show issue details
 - fab issue create <title> - Create a new issue
+- fab issue create <title> --parent <id> - Create a sub-issue under a parent
 - fab issue close <id> - Close an issue
 - fab issue update <id> - Update an issue
+- fab issue comment <id> --body "..." - Add a comment to an issue
+- fab issue plan <id> --body "..." - Upsert a plan section in an issue
 
 ## Filing Issues
 

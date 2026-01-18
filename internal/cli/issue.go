@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -171,6 +172,7 @@ var (
 	issueCreatePriority    int
 	issueCreateCommit      bool
 	issueCreateDependsOn   []string
+	issueCreateParent      string
 )
 
 var issueCreateCmd = &cobra.Command{
@@ -197,12 +199,27 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 		Dependencies: issueCreateDependsOn,
 	}
 
-	iss, err := backend.Create(context.Background(), params)
-	if err != nil {
-		return fmt.Errorf("create issue: %w", err)
+	var iss *issue.Issue
+
+	if issueCreateParent != "" {
+		// Create as sub-issue
+		iss, err = backend.CreateSubIssue(context.Background(), issueCreateParent, params)
+		if err != nil {
+			if errors.Is(err, issue.ErrNotSupported) {
+				return fmt.Errorf("issue backend %q does not support sub-issues", backend.Name())
+			}
+			return fmt.Errorf("create sub-issue: %w", err)
+		}
+		fmt.Printf("🚌 Created sub-issue: %s (parent: %s)\n", iss.ID, issueCreateParent)
+	} else {
+		// Create regular issue
+		iss, err = backend.Create(context.Background(), params)
+		if err != nil {
+			return fmt.Errorf("create issue: %w", err)
+		}
+		fmt.Printf("🚌 Created issue: %s\n", iss.ID)
 	}
 
-	fmt.Printf("🚌 Created issue: %s\n", iss.ID)
 	fmt.Printf("   Title: %s\n", iss.Title)
 
 	if issueCreateCommit {
@@ -306,6 +323,97 @@ func runIssueCommit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// issue comment
+
+var issueCommentBody string
+
+var issueCommentCmd = &cobra.Command{
+	Use:   "comment <id>",
+	Short: "Add a comment to an issue",
+	Long:  "Add a comment to an issue. The comment body can be provided via --body flag.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runIssueComment,
+}
+
+func runIssueComment(cmd *cobra.Command, args []string) error {
+	backend, err := getIssueBackend()
+	if err != nil {
+		return err
+	}
+
+	// Check if backend supports collaboration features
+	collab, ok := backend.(issue.IssueCollaborator)
+	if !ok {
+		return fmt.Errorf("issue backend %q does not support comments", backend.Name())
+	}
+
+	if err := collab.AddComment(context.Background(), args[0], issueCommentBody); err != nil {
+		if errors.Is(err, issue.ErrNotSupported) {
+			return fmt.Errorf("issue backend %q does not support comments", backend.Name())
+		}
+		return fmt.Errorf("add comment: %w", err)
+	}
+
+	fmt.Printf("🚌 Comment added to issue %s\n", args[0])
+	return nil
+}
+
+// issue plan
+
+var (
+	issuePlanBody string
+	issuePlanFile string
+)
+
+var issuePlanCmd = &cobra.Command{
+	Use:   "plan <id>",
+	Short: "Upsert a plan section in an issue",
+	Long:  "Update or create a ## Plan section in the issue body. The plan content can be provided via --body or --file flag.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runIssuePlan,
+}
+
+func runIssuePlan(cmd *cobra.Command, args []string) error {
+	var planContent string
+
+	if issuePlanFile != "" && issuePlanBody != "" {
+		return fmt.Errorf("cannot specify both --body and --file")
+	}
+
+	if issuePlanFile != "" {
+		content, err := os.ReadFile(issuePlanFile)
+		if err != nil {
+			return fmt.Errorf("read plan file: %w", err)
+		}
+		planContent = string(content)
+	} else if issuePlanBody != "" {
+		planContent = issuePlanBody
+	} else {
+		return fmt.Errorf("plan content is required (use --body or --file)")
+	}
+
+	backend, err := getIssueBackend()
+	if err != nil {
+		return err
+	}
+
+	// Check if backend supports collaboration features
+	collab, ok := backend.(issue.IssueCollaborator)
+	if !ok {
+		return fmt.Errorf("issue backend %q does not support plans", backend.Name())
+	}
+
+	if err := collab.UpsertPlanSection(context.Background(), args[0], planContent); err != nil {
+		if errors.Is(err, issue.ErrNotSupported) {
+			return fmt.Errorf("issue backend %q does not support plans", backend.Name())
+		}
+		return fmt.Errorf("upsert plan: %w", err)
+	}
+
+	fmt.Printf("🚌 Plan updated for issue %s\n", args[0])
+	return nil
+}
+
 // getIssueBackend returns the issue backend for the resolved project.
 func getIssueBackend() (issue.Backend, error) {
 	reg, err := registry.New()
@@ -367,11 +475,20 @@ func init() {
 	issueCreateCmd.Flags().IntVar(&issueCreatePriority, "priority", 1, "Issue priority (0=low, 1=medium, 2=high)")
 	issueCreateCmd.Flags().BoolVar(&issueCreateCommit, "commit", false, "Commit and push changes immediately")
 	issueCreateCmd.Flags().StringSliceVar(&issueCreateDependsOn, "depends-on", nil, "Issue IDs this issue depends on (comma-separated)")
+	issueCreateCmd.Flags().StringVar(&issueCreateParent, "parent", "", "Parent issue ID (creates a sub-issue)")
 
 	// update flags
 	issueUpdateCmd.Flags().StringVarP(&issueUpdateStatus, "status", "s", "", "New status (open, closed, blocked)")
 	issueUpdateCmd.Flags().IntVar(&issueUpdatePriority, "priority", 0, "New priority (0=low, 1=medium, 2=high)")
 	issueUpdateCmd.Flags().StringVarP(&issueUpdateTitle, "title", "t", "", "New title")
+
+	// comment flags
+	issueCommentCmd.Flags().StringVarP(&issueCommentBody, "body", "b", "", "Comment body")
+	_ = issueCommentCmd.MarkFlagRequired("body")
+
+	// plan flags
+	issuePlanCmd.Flags().StringVarP(&issuePlanBody, "body", "b", "", "Plan content")
+	issuePlanCmd.Flags().StringVarP(&issuePlanFile, "file", "f", "", "Read plan content from file")
 
 	// Add subcommands
 	issueCmd.AddCommand(issueListCmd)
@@ -381,6 +498,8 @@ func init() {
 	issueCmd.AddCommand(issueUpdateCmd)
 	issueCmd.AddCommand(issueCloseCmd)
 	issueCmd.AddCommand(issueCommitCmd)
+	issueCmd.AddCommand(issueCommentCmd)
+	issueCmd.AddCommand(issuePlanCmd)
 
 	rootCmd.AddCommand(issueCmd)
 }
