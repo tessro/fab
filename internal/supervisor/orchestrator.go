@@ -63,7 +63,7 @@ func issueBackendFactoryForProject(proj *project.Project, globalCfg *config.Glob
 			if globalCfg != nil {
 				apiKey = globalCfg.GetAPIKey("linear")
 			}
-			return linear.New(repoDir, proj.LinearProject, proj.AllowedAuthors, apiKey)
+			return linear.New(repoDir, proj.LinearTeam, proj.LinearProject, proj.AllowedAuthors, apiKey)
 		default:
 			return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 		}

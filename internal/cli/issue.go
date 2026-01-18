@@ -339,7 +339,7 @@ func getIssueBackend() (issue.Backend, error) {
 		if globalCfg != nil {
 			apiKey = globalCfg.GetAPIKey("linear")
 		}
-		return linear.New(project.RepoDir(), project.LinearProject, project.AllowedAuthors, apiKey)
+		return linear.New(project.RepoDir(), project.LinearTeam, project.LinearProject, project.AllowedAuthors, apiKey)
 	default:
 		return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 	}

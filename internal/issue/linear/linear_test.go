@@ -9,6 +9,7 @@ import (
 func TestName(t *testing.T) {
 	// Create a mock backend without making API calls
 	b := &Backend{
+		teamID:    "test-team",
 		projectID: "test-project",
 		apiKey:    "test-key",
 	}
@@ -188,18 +189,34 @@ func TestNew_MissingAPIKey(t *testing.T) {
 	// Temporarily clear the env var if set
 	t.Setenv("LINEAR_API_KEY", "")
 
-	_, err := New("/tmp", "project-id", nil, "")
+	_, err := New("/tmp", "team-id", "project-id", nil, "")
 	if err == nil {
 		t.Error("New() with missing API key should return error")
 	}
 }
 
-func TestNew_MissingProjectID(t *testing.T) {
+func TestNew_MissingTeamID(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "test-key")
 
-	_, err := New("/tmp", "", nil, "")
+	_, err := New("/tmp", "", "", nil, "")
 	if err == nil {
-		t.Error("New() with missing project ID should return error")
+		t.Error("New() with missing team ID should return error")
+	}
+}
+
+func TestNew_OptionalProjectID(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "test-key")
+
+	// Project ID is optional, so this should succeed
+	b, err := New("/tmp", "team-id", "", nil, "")
+	if err != nil {
+		t.Errorf("New() with missing project ID should succeed: %v", err)
+	}
+	if b.teamID != "team-id" {
+		t.Errorf("teamID = %q, want %q", b.teamID, "team-id")
+	}
+	if b.projectID != "" {
+		t.Errorf("projectID = %q, want empty", b.projectID)
 	}
 }
 
@@ -207,7 +224,7 @@ func TestNew_APIKeyFromConfig(t *testing.T) {
 	// Clear env var to ensure config key is used
 	t.Setenv("LINEAR_API_KEY", "")
 
-	b, err := New("/tmp", "project-id", nil, "config-api-key")
+	b, err := New("/tmp", "team-id", "project-id", nil, "config-api-key")
 	if err != nil {
 		t.Errorf("New() with config API key should not error: %v", err)
 	}
@@ -220,7 +237,7 @@ func TestNew_APIKeyFromEnvFallback(t *testing.T) {
 	// Set env var and leave config key empty
 	t.Setenv("LINEAR_API_KEY", "env-api-key")
 
-	b, err := New("/tmp", "project-id", nil, "")
+	b, err := New("/tmp", "team-id", "project-id", nil, "")
 	if err != nil {
 		t.Errorf("New() with env API key should not error: %v", err)
 	}
@@ -233,7 +250,7 @@ func TestNew_APIKeyConfigTakesPrecedence(t *testing.T) {
 	// Set both config and env - config should take precedence
 	t.Setenv("LINEAR_API_KEY", "env-api-key")
 
-	b, err := New("/tmp", "project-id", nil, "config-api-key")
+	b, err := New("/tmp", "team-id", "project-id", nil, "config-api-key")
 	if err != nil {
 		t.Errorf("New() should not error: %v", err)
 	}

@@ -21,7 +21,8 @@ const (
 
 // Backend implements issue.Backend for Linear Issues using the GraphQL API.
 type Backend struct {
-	projectID      string   // Linear project ID to scope issues to
+	teamID         string   // Linear team ID (required for issue creation)
+	projectID      string   // Linear project ID to scope issues to (optional)
 	allowedAuthors []string // Linear usernames allowed to create issues (empty = all)
 	apiKey         string   // Linear API key
 	client         *http.Client
@@ -31,8 +32,9 @@ type Backend struct {
 // repoDir is used for context but Linear doesn't require it.
 // configAPIKey is the API key from the global config (can be empty).
 // The backend falls back to LINEAR_API_KEY environment variable if configAPIKey is empty.
-// projectID should be set via project config (linear-project setting).
-func New(repoDir string, projectID string, allowedAuthors []string, configAPIKey string) (*Backend, error) {
+// teamID is required (linear-team setting) for issue creation.
+// projectID is optional (linear-project setting) for scoping issues to a project.
+func New(repoDir string, teamID string, projectID string, allowedAuthors []string, configAPIKey string) (*Backend, error) {
 	apiKey := configAPIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("LINEAR_API_KEY")
@@ -41,11 +43,12 @@ func New(repoDir string, projectID string, allowedAuthors []string, configAPIKey
 		return nil, fmt.Errorf("LINEAR_API_KEY not set in config or environment")
 	}
 
-	if projectID == "" {
-		return nil, fmt.Errorf("linear-project setting not configured for this project")
+	if teamID == "" {
+		return nil, fmt.Errorf("linear-team setting not configured for this project")
 	}
 
 	return &Backend{
+		teamID:         teamID,
 		projectID:      projectID,
 		allowedAuthors: allowedAuthors,
 		apiKey:         apiKey,
@@ -179,9 +182,13 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 	`
 
 	input := map[string]any{
-		"title":     params.Title,
-		"projectId": b.projectID,
-		"priority":  linearPriority,
+		"title":    params.Title,
+		"teamId":   b.teamID,
+		"priority": linearPriority,
+	}
+	// Project is optional - only set if configured
+	if b.projectID != "" {
+		input["projectId"] = b.projectID
 	}
 	if params.Description != "" {
 		input["description"] = params.Description
@@ -261,9 +268,12 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 
 // List returns issues matching the filter.
 func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.Issue, error) {
-	// Build filter for the project
-	filterObj := map[string]any{
-		"project": map[string]any{"id": map[string]any{"eq": b.projectID}},
+	// Build filter - prefer project if configured, otherwise filter by team
+	filterObj := map[string]any{}
+	if b.projectID != "" {
+		filterObj["project"] = map[string]any{"id": map[string]any{"eq": b.projectID}}
+	} else {
+		filterObj["team"] = map[string]any{"id": map[string]any{"eq": b.teamID}}
 	}
 
 	// Apply status filter
