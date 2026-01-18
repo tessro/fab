@@ -249,6 +249,23 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 	return b.toIssue(&result.CreateIssue.Issue), nil
 }
 
+// CreateSubIssue creates a child issue under a parent issue.
+// GitHub uses blockedBy relationships to link parent-child issues.
+func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
+	// Create the child issue first
+	child, err := b.Create(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("create child issue: %w", err)
+	}
+
+	// Link child to parent using blockedBy relationship
+	if err := b.addBlockedBy(ctx, child.ID, parentID); err != nil {
+		fmt.Fprintf(issue.Stderr, "warning: failed to link child to parent %s: %v\n", parentID, err)
+	}
+
+	return child, nil
+}
+
 // Get retrieves an issue by ID (issue number as string).
 func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 	num, err := strconv.Atoi(id)

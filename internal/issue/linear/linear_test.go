@@ -185,6 +185,42 @@ func TestToIssue_WithParent(t *testing.T) {
 	}
 }
 
+// TestCreateSubIssue_ParentInResponse tests that the CreateSubIssue response
+// correctly maps the parent to the Dependencies field. This validates that when
+// Linear returns a parent in the response, it's properly converted to our Issue model.
+// Note: The actual API call is not tested here (requires mocking), but the
+// conversion logic that toIssue uses for parent handling is covered by TestToIssue_WithParent.
+func TestCreateSubIssue_ParentInResponse(t *testing.T) {
+	b := &Backend{}
+
+	// Simulate response from Linear API with parent set
+	li := &linearIssue{
+		ID:         "uuid-child",
+		Identifier: "FAB-200",
+		Title:      "Child Issue",
+		Priority:   3,
+	}
+	li.State.Type = "backlog"
+	li.Parent = &struct {
+		Identifier string `json:"identifier"`
+	}{
+		Identifier: "FAB-100", // Parent identifier
+	}
+
+	iss := b.toIssue(li)
+
+	// Verify the child issue has the parent in Dependencies
+	if iss.ID != "FAB-200" {
+		t.Errorf("ID = %q, want %q", iss.ID, "FAB-200")
+	}
+	if len(iss.Dependencies) != 1 {
+		t.Errorf("Dependencies length = %d, want 1", len(iss.Dependencies))
+	}
+	if len(iss.Dependencies) > 0 && iss.Dependencies[0] != "FAB-100" {
+		t.Errorf("Dependencies[0] = %q, want %q", iss.Dependencies[0], "FAB-100")
+	}
+}
+
 func TestNew_MissingAPIKey(t *testing.T) {
 	// Temporarily clear the env var if set
 	t.Setenv("LINEAR_API_KEY", "")

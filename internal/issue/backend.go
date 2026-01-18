@@ -28,6 +28,10 @@ type IssueWriter interface {
 	// Create creates a new issue and returns it with its assigned ID.
 	Create(ctx context.Context, params CreateParams) (*Issue, error)
 
+	// CreateSubIssue creates a child issue under a parent issue.
+	// Returns the child issue with its assigned ID.
+	CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
+
 	// Update modifies an existing issue.
 	Update(ctx context.Context, id string, params UpdateParams) (*Issue, error)
 

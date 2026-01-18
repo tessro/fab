@@ -230,6 +230,21 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 	return b.toIssue(&result.IssueCreate.Issue), nil
 }
 
+// CreateSubIssue creates a child issue under a parent issue.
+// Uses Linear's parentId field on issueCreate to establish the parent-child relationship.
+func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
+	// Verify parent exists before creating child
+	_, err := b.resolveIssueID(ctx, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve parent issue ID: %w", err)
+	}
+
+	// Set parent as first dependency - Create() will use this to set parentId
+	params.Dependencies = append([]string{parentID}, params.Dependencies...)
+
+	return b.Create(ctx, params)
+}
+
 // Get retrieves an issue by ID (identifier like "FAB-123" or UUID).
 func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 	// Try to get by identifier first (more common use case)
