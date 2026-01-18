@@ -312,13 +312,37 @@ func detectPrefix(ticketsDir string) (string, error) {
 }
 
 // AddComment adds a comment to an issue.
+// Comments are stored in a ## Comments section in the issue body.
+// New comments are appended at the end of the section.
 func (b *Backend) AddComment(ctx context.Context, id string, body string) error {
-	return issue.ErrNotSupported
+	iss, err := b.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Format the comment with timestamp
+	timestamp := time.Now().Format("2006-01-02 15:04")
+	comment := fmt.Sprintf("**%s**: %s", timestamp, strings.TrimSpace(body))
+
+	// Update the description with the new comment
+	iss.Description = upsertComment(iss.Description, comment)
+	iss.Updated = time.Now()
+
+	return b.writeIssue(iss)
 }
 
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
 func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
-	return issue.ErrNotSupported
+	iss, err := b.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Use the shared helper to update the plan section
+	iss.Description = issue.UpsertPlanSection(iss.Description, planContent)
+	iss.Updated = time.Now()
+
+	return b.writeIssue(iss)
 }
 
 // CreateSubIssue creates a child issue linked to a parent issue.

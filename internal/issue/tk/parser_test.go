@@ -826,3 +826,76 @@ func TestFormatParseRoundtrip(t *testing.T) {
 		})
 	}
 }
+
+func TestUpsertComment(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		comment string
+		want    string
+	}{
+		{
+			name:    "empty body creates Comments section",
+			body:    "",
+			comment: "First comment",
+			want:    "## Comments\n\nFirst comment\n",
+		},
+		{
+			name:    "body without Comments section appends section",
+			body:    "## Summary\n\nThis is the summary.",
+			comment: "A comment",
+			want:    "## Summary\n\nThis is the summary.\n\n## Comments\n\nA comment\n",
+		},
+		{
+			name:    "appends to existing Comments section",
+			body:    "## Summary\n\nSummary text.\n\n## Comments\n\n**2024-01-15 10:00**: First comment",
+			comment: "**2024-01-15 11:00**: Second comment",
+			want:    "## Summary\n\nSummary text.\n\n## Comments\n\n**2024-01-15 10:00**: First comment\n\n**2024-01-15 11:00**: Second comment\n",
+		},
+		{
+			name:    "Comments section between other sections",
+			body:    "## Summary\n\nSummary text.\n\n## Comments\n\n**2024-01-15 10:00**: Existing\n\n## Notes\n\nSome notes.",
+			comment: "New comment",
+			want:    "## Summary\n\nSummary text.\n\n## Comments\n\n**2024-01-15 10:00**: Existing\n\nNew comment\n\n## Notes\n\nSome notes.\n",
+		},
+		{
+			name:    "Comments section at beginning",
+			body:    "## Comments\n\nFirst comment\n\n## Summary\n\nSummary text.",
+			comment: "Second comment",
+			want:    "## Comments\n\nFirst comment\n\nSecond comment\n\n## Summary\n\nSummary text.\n",
+		},
+		{
+			name:    "empty Comments section",
+			body:    "## Summary\n\nText.\n\n## Comments\n\n## Notes\n\nNotes.",
+			comment: "First comment",
+			want:    "## Summary\n\nText.\n\n## Comments\n\nFirst comment\n\n## Notes\n\nNotes.\n",
+		},
+		{
+			name:    "handles CRLF line endings",
+			body:    "## Summary\r\n\r\nText.\r\n\r\n## Comments\r\n\r\nOld.",
+			comment: "New.",
+			want:    "## Summary\n\nText.\n\n## Comments\n\nOld.\n\nNew.\n",
+		},
+		{
+			name:    "trims whitespace from comment",
+			body:    "## Summary\n\nText.",
+			comment: "  \n\nMy comment\n\n  ",
+			want:    "## Summary\n\nText.\n\n## Comments\n\nMy comment\n",
+		},
+		{
+			name:    "multiple comments accumulate",
+			body:    "## Comments\n\nComment 1\n\nComment 2",
+			comment: "Comment 3",
+			want:    "## Comments\n\nComment 1\n\nComment 2\n\nComment 3\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := upsertComment(tt.body, tt.comment)
+			if got != tt.want {
+				t.Errorf("upsertComment() =\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}

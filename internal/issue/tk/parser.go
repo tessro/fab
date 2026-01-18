@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -156,4 +157,102 @@ func formatIssue(iss *issue.Issue) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// commentsHeadingRegex matches ## Comments heading.
+var commentsHeadingRegex = regexp.MustCompile(`(?m)^## Comments\s*$`)
+
+// sectionHeadingRegex matches any ## heading (used to find end of sections).
+var sectionHeadingRegex = regexp.MustCompile(`(?m)^## [^\n]+$`)
+
+// upsertComment appends a comment to the ## Comments section of a Markdown body.
+// If no ## Comments section exists, one is created at the end.
+// Comments are appended at the end of the section (newest last).
+func upsertComment(body, comment string) string {
+	// Normalize line endings
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	comment = strings.TrimSpace(comment)
+
+	// Find if ## Comments section exists
+	commentsLoc := commentsHeadingRegex.FindStringIndex(body)
+
+	if commentsLoc == nil {
+		// No existing Comments section - append at end
+		return appendCommentsSection(body, comment)
+	}
+
+	// Find where the Comments section ends (next ## heading or end of doc)
+	afterComments := body[commentsLoc[1]:]
+	nextSectionLoc := sectionHeadingRegex.FindStringIndex(afterComments)
+
+	var beforeComments, existingComments, afterSection string
+	beforeComments = body[:commentsLoc[0]]
+
+	if nextSectionLoc == nil {
+		// Comments section goes to end of document
+		existingComments = strings.TrimSpace(afterComments)
+		afterSection = ""
+	} else {
+		existingComments = strings.TrimSpace(afterComments[:nextSectionLoc[0]])
+		afterSection = afterComments[nextSectionLoc[0]:]
+	}
+
+	// Build new body with appended comment
+	return buildCommentsSection(beforeComments, existingComments, comment, afterSection)
+}
+
+// appendCommentsSection appends a Comments section to the end of the body.
+func appendCommentsSection(body, comment string) string {
+	body = strings.TrimRight(body, "\n\t ")
+
+	var sb strings.Builder
+	sb.WriteString(body)
+
+	// Add spacing before new section
+	if len(body) > 0 {
+		sb.WriteString("\n\n")
+	}
+
+	sb.WriteString("## Comments\n\n")
+	sb.WriteString(comment)
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+// buildCommentsSection builds the body with the Comments section content.
+func buildCommentsSection(beforeComments, existingComments, newComment, afterSection string) string {
+	beforeComments = strings.TrimRight(beforeComments, "\n\t ")
+	afterSection = strings.TrimRight(strings.TrimLeft(afterSection, "\n\t "), "\n\t ")
+
+	var sb strings.Builder
+
+	// Content before Comments section
+	if len(beforeComments) > 0 {
+		sb.WriteString(beforeComments)
+		sb.WriteString("\n\n")
+	}
+
+	// Comments section heading
+	sb.WriteString("## Comments\n\n")
+
+	// Existing comments
+	if len(existingComments) > 0 {
+		sb.WriteString(existingComments)
+		sb.WriteString("\n\n")
+	}
+
+	// New comment
+	sb.WriteString(newComment)
+
+	// Content after Comments section
+	if len(afterSection) > 0 {
+		sb.WriteString("\n\n")
+		sb.WriteString(afterSection)
+	}
+
+	// Always end with a single newline
+	sb.WriteString("\n")
+
+	return sb.String()
 }
