@@ -73,20 +73,21 @@ func (l *CommitLog) List() []CommitRecord {
 	return result
 }
 
-// ListRecent returns the n most recent commits.
+// ListRecent returns the n most recent commits, newest first.
 func (l *CommitLog) ListRecent(n int) []CommitRecord {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	if n <= 0 || n >= len(l.commits) {
-		result := make([]CommitRecord, len(l.commits))
-		copy(result, l.commits)
-		return result
+	count := n
+	if count <= 0 || count > len(l.commits) {
+		count = len(l.commits)
 	}
 
-	start := len(l.commits) - n
-	result := make([]CommitRecord, n)
-	copy(result, l.commits[start:])
+	// Build result in reverse order (newest first)
+	result := make([]CommitRecord, count)
+	for i := 0; i < count; i++ {
+		result[i] = l.commits[len(l.commits)-1-i]
+	}
 	return result
 }
 

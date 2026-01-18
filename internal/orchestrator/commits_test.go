@@ -64,23 +64,29 @@ func TestCommitLog_ListRecent(t *testing.T) {
 	log.Add(CommitRecord{SHA: "def456", Branch: "fab/agent2", AgentID: "agent2", MergedAt: time.Now()})
 	log.Add(CommitRecord{SHA: "ghi789", Branch: "fab/agent3", AgentID: "agent3", MergedAt: time.Now()})
 
-	// Get last 2
+	// Get last 2 (newest first)
 	commits := log.ListRecent(2)
 	if len(commits) != 2 {
 		t.Errorf("expected 2 commits, got %d", len(commits))
 	}
 
-	if commits[0].SHA != "def456" {
-		t.Errorf("expected first to be def456, got %s", commits[0].SHA)
+	if commits[0].SHA != "ghi789" {
+		t.Errorf("expected first to be ghi789 (newest), got %s", commits[0].SHA)
 	}
-	if commits[1].SHA != "ghi789" {
-		t.Errorf("expected second to be ghi789, got %s", commits[1].SHA)
+	if commits[1].SHA != "def456" {
+		t.Errorf("expected second to be def456, got %s", commits[1].SHA)
 	}
 
-	// Request more than exists
+	// Request more than exists (should return all, newest first)
 	commits = log.ListRecent(10)
 	if len(commits) != 3 {
 		t.Errorf("expected 3 commits, got %d", len(commits))
+	}
+	if commits[0].SHA != "ghi789" {
+		t.Errorf("expected first to be ghi789 (newest), got %s", commits[0].SHA)
+	}
+	if commits[2].SHA != "abc123" {
+		t.Errorf("expected last to be abc123 (oldest), got %s", commits[2].SHA)
 	}
 
 	// Request zero or negative returns all
