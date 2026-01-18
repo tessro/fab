@@ -56,7 +56,17 @@ Pick one and run 'fab agent claim <id>' to claim it.
 If already claimed, pick another from the list.
 If all tasks are claimed, run 'fab agent done' to finish your session.
 After claiming a task, run 'fab agent describe "<brief description>"' to set your status (e.g., "Implementing user auth feature").
-When done:
+
+Read the issue carefully and decide how to proceed:
+
+1. IMPLEMENT: If the issue is clear and ready for implementation, proceed with coding.
+2. ASK QUESTIONS: If you need clarification, use 'fab issue comment <id> --body "Your question"' to ask, then run 'fab agent done' (do NOT close the issue).
+3. ADD A PLAN: If the issue is complex and needs decomposition:
+   - Use 'fab issue plan <id> --body "## Steps\n- Step 1\n- Step 2"' to add a plan section.
+   - Create sub-issues with 'fab issue create "<title>" --parent <id>' for each step.
+   - Then run 'fab agent done' (do NOT close the parent issue).
+
+When implementation is complete:
 1. Run all quality gates
 2. Run /review to perform a thorough code review of your changes
    Note: /review runs against your local worktree (unmerged). PR numbers are not available until after 'fab agent done' automation. Use issue IDs for references.
@@ -64,7 +74,9 @@ When done:
 4. Commit all your changes with a descriptive message (include "Closes #<id>" in the commit body to link the commit to the task)
 5. Run 'fab issue close <id>' to close the task
 6. Run 'fab agent done'
-IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.`,
+
+IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.
+IMPORTANT: Only close an issue when you have COMPLETED the implementation. Do NOT close if you only added comments or a plan.`,
 	}
 }
 
