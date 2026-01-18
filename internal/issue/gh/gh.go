@@ -18,10 +18,7 @@ import (
 	"github.com/tessro/fab/internal/issue"
 )
 
-const (
-	graphqlEndpoint = "https://api.github.com/graphql"
-	restEndpoint    = "https://api.github.com"
-)
+const graphqlEndpoint = "https://api.github.com/graphql"
 
 // Backend implements issue.Backend for GitHub Issues using the GraphQL API.
 type Backend struct {
@@ -143,46 +140,6 @@ func (b *Backend) graphqlRequest(ctx context.Context, query string, variables ma
 	return result.Data, nil
 }
 
-// restRequest sends a REST request to the GitHub API.
-func (b *Backend) restRequest(ctx context.Context, method, endpoint string, body any) (json.RawMessage, error) {
-	var reqBody io.Reader
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(jsonBody)
-	}
-
-	url := restEndpoint + endpoint
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+b.token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := b.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
-}
-
 // ghIssue represents a GitHub issue from the GraphQL API.
 type ghIssue struct {
 	ID        string    `json:"id"` // GraphQL node ID
@@ -194,9 +151,6 @@ type ghIssue struct {
 	Author    ghAuthor  `json:"author"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
-	Parent    *struct {
-		Number int `json:"number"`
-	} `json:"parent"`
 }
 
 type ghLabels struct {
@@ -210,6 +164,14 @@ type ghLabel struct {
 
 type ghAuthor struct {
 	Login string `json:"login"`
+}
+
+// ghBlockedBy represents the blockedBy connection on a GitHub issue.
+type ghBlockedBy struct {
+	Nodes []struct {
+		Number int    `json:"number"`
+		State  string `json:"state"`
+	} `json:"nodes"`
 }
 
 // Create creates a new issue on GitHub.
@@ -277,9 +239,9 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 		return nil, fmt.Errorf("parse create response: %w", err)
 	}
 
-	// Set up dependencies using GitHub sub-issues
+	// Set up dependencies using GitHub's blockedBy API
 	for _, depID := range params.Dependencies {
-		if err := b.addSubIssue(ctx, depID, strconv.Itoa(result.CreateIssue.Issue.Number)); err != nil {
+		if err := b.addBlockedBy(ctx, strconv.Itoa(result.CreateIssue.Issue.Number), depID); err != nil {
 			fmt.Fprintf(issue.Stderr, "warning: failed to add dependency %s: %v\n", depID, err)
 		}
 	}
@@ -313,7 +275,7 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 					updatedAt
 					author { login }
 					labels(first: 20) { nodes { id name } }
-					parent { number }
+					blockedBy(first: 20) { nodes { number state } }
 				}
 			}
 		}
@@ -330,18 +292,21 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 
 	var result struct {
 		Repository struct {
-			Issue ghIssue `json:"issue"`
+			Issue struct {
+				ghIssue
+				BlockedBy ghBlockedBy `json:"blockedBy"`
+			} `json:"issue"`
 		} `json:"repository"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse issue: %w", err)
 	}
 
-	iss := b.toIssue(&result.Repository.Issue)
+	iss := b.toIssue(&result.Repository.Issue.ghIssue)
 
-	// Set dependencies from parent if available
-	if result.Repository.Issue.Parent != nil {
-		iss.Dependencies = []string{strconv.Itoa(result.Repository.Issue.Parent.Number)}
+	// Set dependencies from blockedBy issues
+	for _, blocker := range result.Repository.Issue.BlockedBy.Nodes {
+		iss.Dependencies = append(iss.Dependencies, strconv.Itoa(blocker.Number))
 	}
 
 	return iss, nil
@@ -392,7 +357,7 @@ func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.I
 						updatedAt
 						author { login }
 						labels(first: 20) { nodes { id name } }
-						parent { number }
+						blockedBy(first: 20) { nodes { number state } }
 					}
 				}
 			}
@@ -416,7 +381,10 @@ func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.I
 	var result struct {
 		Repository struct {
 			Issues struct {
-				Nodes []ghIssue `json:"nodes"`
+				Nodes []struct {
+					ghIssue
+					BlockedBy ghBlockedBy `json:"blockedBy"`
+				} `json:"nodes"`
 			} `json:"issues"`
 		} `json:"repository"`
 	}
@@ -426,11 +394,11 @@ func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.I
 
 	issues := make([]*issue.Issue, 0, len(result.Repository.Issues.Nodes))
 	for _, gh := range result.Repository.Issues.Nodes {
-		iss := b.toIssue(&gh)
+		iss := b.toIssue(&gh.ghIssue)
 
-		// Set dependencies from parent
-		if gh.Parent != nil {
-			iss.Dependencies = []string{strconv.Itoa(gh.Parent.Number)}
+		// Set dependencies from blockedBy issues
+		for _, blocker := range gh.BlockedBy.Nodes {
+			iss.Dependencies = append(iss.Dependencies, strconv.Itoa(blocker.Number))
 		}
 
 		// Apply label filter client-side
@@ -590,7 +558,7 @@ func (b *Backend) Update(ctx context.Context, id string, params issue.UpdatePara
 					updatedAt
 					author { login }
 					labels(first: 20) { nodes { id name } }
-					parent { number }
+					blockedBy(first: 20) { nodes { number state } }
 				}
 			}
 		}
@@ -603,16 +571,19 @@ func (b *Backend) Update(ctx context.Context, id string, params issue.UpdatePara
 
 	var result struct {
 		UpdateIssue struct {
-			Issue ghIssue `json:"issue"`
+			Issue struct {
+				ghIssue
+				BlockedBy ghBlockedBy `json:"blockedBy"`
+			} `json:"issue"`
 		} `json:"updateIssue"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse update response: %w", err)
 	}
 
-	iss := b.toIssue(&result.UpdateIssue.Issue)
-	if result.UpdateIssue.Issue.Parent != nil {
-		iss.Dependencies = []string{strconv.Itoa(result.UpdateIssue.Issue.Parent.Number)}
+	iss := b.toIssue(&result.UpdateIssue.Issue.ghIssue)
+	for _, blocker := range result.UpdateIssue.Issue.BlockedBy.Nodes {
+		iss.Dependencies = append(iss.Dependencies, strconv.Itoa(blocker.Number))
 	}
 
 	return iss, nil
@@ -627,11 +598,11 @@ func (b *Backend) Close(ctx context.Context, id string) error {
 
 // Ready returns open issues that are not blocked, have no open dependencies, and are authored by allowed users.
 func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
-	// Fetch all open issues
-	issues, err := b.List(ctx, issue.ListFilter{Status: []issue.Status{issue.StatusOpen}})
-	if err != nil {
-		return nil, err
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
 	}
+	owner, repo := parts[0], parts[1]
 
 	// Build allowed authors set for quick lookup
 	allowedSet := make(map[string]bool, len(b.allowedAuthors))
@@ -639,28 +610,22 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 		allowedSet[strings.ToLower(author)] = true
 	}
 
-	// Build a set of open issue numbers for dependency checking
-	openIssues := make(map[string]bool, len(issues))
-	for _, iss := range issues {
-		openIssues[iss.ID] = true
-	}
-
-	// Fetch authors for filtering (GraphQL response includes author)
-	parts := strings.Split(b.nwo, "/")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
-	}
-	owner, repo := parts[0], parts[1]
-
+	// Fetch open issues with blockedBy and author info
 	query := `
-		query ListIssuesWithAuthors($owner: String!, $repo: String!) {
+		query ListIssuesForReady($owner: String!, $repo: String!) {
 			repository(owner: $owner, name: $repo) {
 				issues(states: [OPEN], first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {
 					nodes {
+						id
 						number
+						title
+						body
+						state
+						createdAt
+						updatedAt
 						author { login }
-						labels(first: 20) { nodes { name } }
-						parent { number }
+						labels(first: 20) { nodes { id name } }
+						blockedBy(first: 20) { nodes { number state } }
 					}
 				}
 			}
@@ -672,21 +637,15 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 		"repo":  repo,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list issues with authors: %w", err)
+		return nil, fmt.Errorf("list issues for ready: %w", err)
 	}
 
 	var result struct {
 		Repository struct {
 			Issues struct {
 				Nodes []struct {
-					Number int      `json:"number"`
-					Author ghAuthor `json:"author"`
-					Labels struct {
-						Nodes []ghLabel `json:"nodes"`
-					} `json:"labels"`
-					Parent *struct {
-						Number int `json:"number"`
-					} `json:"parent"`
+					ghIssue
+					BlockedBy ghBlockedBy `json:"blockedBy"`
 				} `json:"nodes"`
 			} `json:"issues"`
 		} `json:"repository"`
@@ -695,40 +654,30 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 		return nil, fmt.Errorf("parse issues: %w", err)
 	}
 
-	// Build a map of issue number to author and parent
-	issueAuthors := make(map[string]string)
-	issueParents := make(map[string]string)
-	issueBlocked := make(map[string]bool)
-	for _, node := range result.Repository.Issues.Nodes {
-		num := strconv.Itoa(node.Number)
-		issueAuthors[num] = strings.ToLower(node.Author.Login)
-		if node.Parent != nil {
-			issueParents[num] = strconv.Itoa(node.Parent.Number)
-		}
-		// Check for blocked label
-		for _, label := range node.Labels.Nodes {
-			if label.Name == "blocked" {
-				issueBlocked[num] = true
-				break
-			}
-		}
-	}
-
-	// Filter: not blocked + authored by allowed user + no open dependencies
+	// Filter: not blocked + authored by allowed user + no open blocking issues
 	ready := make([]*issue.Issue, 0)
-	for _, iss := range issues {
-		// Skip blocked issues
-		if iss.Status == issue.StatusBlocked || issueBlocked[iss.ID] {
+	for _, gh := range result.Repository.Issues.Nodes {
+		iss := b.toIssue(&gh.ghIssue)
+
+		// Skip blocked issues (via label)
+		if iss.Status == issue.StatusBlocked {
 			continue
 		}
 
 		// Skip issues not authored by allowed users
-		if len(allowedSet) > 0 && !allowedSet[issueAuthors[iss.ID]] {
+		if len(allowedSet) > 0 && !allowedSet[strings.ToLower(gh.Author.Login)] {
 			continue
 		}
 
-		// Skip issues with open parent
-		if parent := issueParents[iss.ID]; parent != "" && openIssues[parent] {
+		// Skip issues with open blocking issues
+		hasOpenBlocker := false
+		for _, blocker := range gh.BlockedBy.Nodes {
+			if blocker.State == "OPEN" {
+				hasOpenBlocker = true
+				break
+			}
+		}
+		if hasOpenBlocker {
 			continue
 		}
 
@@ -972,43 +921,39 @@ func (b *Backend) createLabel(ctx context.Context, name string) (string, error) 
 	return result.CreateLabel.Label.ID, nil
 }
 
-// addSubIssue adds childNum as a sub-issue of parentNum using GitHub's REST API.
-// This creates a dependency: child depends on parent (parent must complete first).
-func (b *Backend) addSubIssue(ctx context.Context, parentNum, childNum string) error {
-	// First, get the internal ID of the child issue
-	childID, err := b.getIssueInternalID(ctx, childNum)
+// addBlockedBy adds a blockedBy relationship: blockedIssueNum is blocked by blockingIssueNum.
+func (b *Backend) addBlockedBy(ctx context.Context, blockedIssueNum, blockingIssueNum string) error {
+	// Get the GraphQL node IDs for both issues
+	blockedIssue, err := b.getIssueNodeID(ctx, blockedIssueNum)
 	if err != nil {
-		return fmt.Errorf("get child issue ID: %w", err)
+		return fmt.Errorf("get blocked issue node ID: %w", err)
 	}
 
-	// Use the REST API to add the sub-issue
-	endpoint := fmt.Sprintf("/repos/%s/issues/%s/sub_issues", b.nwo, parentNum)
-	_, err = b.restRequest(ctx, "POST", endpoint, map[string]any{
-		"sub_issue_id": childID,
+	blockingIssue, err := b.getIssueNodeID(ctx, blockingIssueNum)
+	if err != nil {
+		return fmt.Errorf("get blocking issue node ID: %w", err)
+	}
+
+	query := `
+		mutation AddBlockedBy($input: AddBlockedByInput!) {
+			addBlockedBy(input: $input) {
+				issue { number }
+				blockingIssue { number }
+			}
+		}
+	`
+
+	_, err = b.graphqlRequest(ctx, query, map[string]any{
+		"input": map[string]any{
+			"issueId":         blockedIssue.ID,
+			"blockingIssueId": blockingIssue.ID,
+		},
 	})
 	if err != nil {
-		return fmt.Errorf("add sub-issue: %w", err)
+		return fmt.Errorf("add blockedBy relationship: %w", err)
 	}
 
 	return nil
-}
-
-// getIssueInternalID retrieves the internal numeric ID for an issue (not the node_id).
-func (b *Backend) getIssueInternalID(ctx context.Context, issueNum string) (int64, error) {
-	endpoint := fmt.Sprintf("/repos/%s/issues/%s", b.nwo, issueNum)
-	data, err := b.restRequest(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	var result struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return 0, err
-	}
-
-	return result.ID, nil
 }
 
 // detectNWO extracts the owner/repo from a git repository.
