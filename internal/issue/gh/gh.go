@@ -1062,13 +1062,118 @@ func parseIssueNumberFromURL(url string) (int, error) {
 	return strconv.Atoi(matches[1])
 }
 
-// AddComment adds a comment to an issue.
+// AddComment adds a comment to an issue using the GitHub GraphQL API.
 func (b *Backend) AddComment(ctx context.Context, id string, body string) error {
-	return issue.ErrNotSupported
+	// Get the GraphQL node ID for the issue
+	ghIss, err := b.getIssueNodeID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get issue node ID: %w", err)
+	}
+
+	query := `
+		mutation AddIssueComment($input: AddCommentInput!) {
+			addComment(input: $input) {
+				commentEdge {
+					node {
+						id
+					}
+				}
+			}
+		}
+	`
+
+	_, err = b.graphqlRequest(ctx, query, map[string]any{
+		"input": map[string]any{
+			"subjectId": ghIss.ID,
+			"body":      body,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("add comment: %w", err)
+	}
+
+	return nil
 }
 
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
+// It fetches the current issue body, applies the plan section update using the
+// shared helper, and updates the issue via the GitHub GraphQL API.
 func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
-	return issue.ErrNotSupported
+	// Get the current issue to get the body and node ID
+	ghIss, err := b.getIssueWithBody(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get issue: %w", err)
+	}
+
+	// Use the shared helper to update the plan section
+	newBody := issue.UpsertPlanSection(ghIss.Body, planContent)
+
+	// Update the issue body via GraphQL
+	query := `
+		mutation UpdateIssue($input: UpdateIssueInput!) {
+			updateIssue(input: $input) {
+				issue {
+					id
+				}
+			}
+		}
+	`
+
+	_, err = b.graphqlRequest(ctx, query, map[string]any{
+		"input": map[string]any{
+			"id":   ghIss.ID,
+			"body": newBody,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("update issue body: %w", err)
+	}
+
+	return nil
 }
 
+// getIssueWithBody retrieves the GraphQL node ID and body for an issue.
+func (b *Backend) getIssueWithBody(ctx context.Context, id string) (*ghIssue, error) {
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid issue number: %s", id)
+	}
+
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	query := `
+		query GetIssueWithBody($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					id
+					number
+					body
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner":  owner,
+		"repo":   repo,
+		"number": num,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Repository struct {
+			Issue ghIssue `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	return &result.Repository.Issue, nil
+}

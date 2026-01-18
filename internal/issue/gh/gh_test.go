@@ -1,7 +1,11 @@
 package gh
 
 import (
+	"context"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/tessro/fab/internal/issue"
 )
@@ -127,5 +131,99 @@ func TestOwnerFromNWO(t *testing.T) {
 				t.Errorf("ownerFromNWO() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBackend_AddComment(t *testing.T) {
+	backend := &Backend{
+		nwo:    "owner/repo",
+		token:  "test-token",
+		client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	ctx := context.Background()
+
+	// Test with invalid issue number
+	err := backend.AddComment(ctx, "not-a-number", "Test comment")
+	if err == nil {
+		t.Error("AddComment() should return error for invalid issue number")
+	}
+	if !strings.Contains(err.Error(), "invalid issue number") {
+		t.Errorf("Expected 'invalid issue number' error, got: %v", err)
+	}
+}
+
+func TestBackend_AddComment_InvalidIssueNumber(t *testing.T) {
+	backend := &Backend{
+		nwo:    "owner/repo",
+		token:  "test-token",
+		client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	ctx := context.Background()
+
+	// Test with various invalid issue numbers
+	invalidIDs := []string{"abc", "", "12.34", "-1a"}
+	for _, id := range invalidIDs {
+		err := backend.AddComment(ctx, id, "Test comment")
+		if err == nil {
+			t.Errorf("AddComment(%q) should return error for invalid issue number", id)
+		}
+	}
+}
+
+func TestBackend_UpsertPlanSection_InvalidIssueNumber(t *testing.T) {
+	backend := &Backend{
+		nwo:    "owner/repo",
+		token:  "test-token",
+		client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	ctx := context.Background()
+
+	// Test with various invalid issue numbers
+	invalidIDs := []string{"abc", "", "12.34", "-1a"}
+	for _, id := range invalidIDs {
+		err := backend.UpsertPlanSection(ctx, id, "- [ ] Step 1")
+		if err == nil {
+			t.Errorf("UpsertPlanSection(%q) should return error for invalid issue number", id)
+		}
+	}
+}
+
+func TestBackend_getIssueWithBody_InvalidIssueNumber(t *testing.T) {
+	backend := &Backend{
+		nwo:    "owner/repo",
+		token:  "test-token",
+		client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	ctx := context.Background()
+
+	// Test with invalid issue number
+	_, err := backend.getIssueWithBody(ctx, "not-a-number")
+	if err == nil {
+		t.Error("getIssueWithBody() should return error for invalid issue number")
+	}
+	if !strings.Contains(err.Error(), "invalid issue number") {
+		t.Errorf("Expected 'invalid issue number' error, got: %v", err)
+	}
+}
+
+func TestBackend_getIssueWithBody_InvalidNWO(t *testing.T) {
+	backend := &Backend{
+		nwo:    "invalid-nwo-without-slash",
+		token:  "test-token",
+		client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	ctx := context.Background()
+
+	_, err := backend.getIssueWithBody(ctx, "123")
+	if err == nil {
+		t.Error("getIssueWithBody() should return error for invalid nwo")
+	}
+	if !strings.Contains(err.Error(), "invalid nwo") {
+		t.Errorf("Expected 'invalid nwo' error, got: %v", err)
 	}
 }
