@@ -290,12 +290,55 @@ This is the issue description.
 	}
 }
 
-func TestBackend_CreateSubIssue_NotSupported(t *testing.T) {
-	backend := &Backend{}
+func TestBackend_CreateSubIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	ticketsDir := filepath.Join(tmpDir, ".tickets")
+	if err := os.MkdirAll(ticketsDir, 0755); err != nil {
+		t.Fatalf("mkdir error: %v", err)
+	}
+
+	backend := &Backend{
+		repoDir:    tmpDir,
+		ticketsDir: ticketsDir,
+		prefix:     "test-",
+	}
 	ctx := context.Background()
 
-	_, err := backend.CreateSubIssue(ctx, "parent", issue.CreateParams{Title: "Child"})
-	if err != issue.ErrNotSupported {
-		t.Errorf("CreateSubIssue() error = %v, want %v", err, issue.ErrNotSupported)
+	// Create parent issue first
+	parent, err := backend.Create(ctx, issue.CreateParams{Title: "Parent Issue"})
+	if err != nil {
+		t.Fatalf("Create parent error: %v", err)
+	}
+
+	// Create sub-issue
+	child, err := backend.CreateSubIssue(ctx, parent.ID, issue.CreateParams{Title: "Child Issue"})
+	if err != nil {
+		t.Fatalf("CreateSubIssue() error = %v", err)
+	}
+
+	// Verify child has parent as dependency
+	if len(child.Dependencies) == 0 || child.Dependencies[0] != parent.ID {
+		t.Errorf("Child should have parent %s as dependency, got %v", parent.ID, child.Dependencies)
+	}
+}
+
+func TestBackend_CreateSubIssue_ParentNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	ticketsDir := filepath.Join(tmpDir, ".tickets")
+	if err := os.MkdirAll(ticketsDir, 0755); err != nil {
+		t.Fatalf("mkdir error: %v", err)
+	}
+
+	backend := &Backend{
+		repoDir:    tmpDir,
+		ticketsDir: ticketsDir,
+		prefix:     "test-",
+	}
+	ctx := context.Background()
+
+	// Try to create sub-issue with non-existent parent
+	_, err := backend.CreateSubIssue(ctx, "nonexistent", issue.CreateParams{Title: "Child"})
+	if err == nil {
+		t.Error("CreateSubIssue() should error for non-existent parent")
 	}
 }

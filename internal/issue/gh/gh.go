@@ -87,57 +87,7 @@ func (b *Backend) Name() string {
 
 // graphqlRequest sends a GraphQL request to the GitHub API.
 func (b *Backend) graphqlRequest(ctx context.Context, query string, variables map[string]any) (json.RawMessage, error) {
-	body := map[string]any{
-		"query": query,
-	}
-	if variables != nil {
-		body["variables"] = variables
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", graphqlEndpoint, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+b.token)
-
-	resp, err := b.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
-	}
-
-	return result.Data, nil
+	return b.graphqlRequestWithFeatures(ctx, query, variables, nil)
 }
 
 // ghIssue represents a GitHub issue from the GraphQL API.
@@ -250,20 +200,21 @@ func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue
 }
 
 // CreateSubIssue creates a child issue under a parent issue.
-// GitHub uses blockedBy relationships to link parent-child issues.
+// Uses GitHub's native sub-issues API (GraphQL with sub_issues feature header).
 func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
-	// Create the child issue first
-	child, err := b.Create(ctx, params)
+	// First, create the issue normally
+	childIssue, err := b.Create(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create child issue: %w", err)
 	}
 
-	// Link child to parent using blockedBy relationship
-	if err := b.addBlockedBy(ctx, child.ID, parentID); err != nil {
-		fmt.Fprintf(issue.Stderr, "warning: failed to link child to parent %s: %v\n", parentID, err)
+	// Then link it as a sub-issue to the parent using native sub-issues API
+	if err := b.addSubIssue(ctx, parentID, childIssue.ID); err != nil {
+		// Log warning but don't fail - the issue was created, just not linked
+		fmt.Fprintf(issue.Stderr, "warning: failed to link sub-issue to parent %s: %v\n", parentID, err)
 	}
 
-	return child, nil
+	return childIssue, nil
 }
 
 // Get retrieves an issue by ID (issue number as string).
@@ -973,6 +924,100 @@ func (b *Backend) addBlockedBy(ctx context.Context, blockedIssueNum, blockingIss
 	return nil
 }
 
+// addSubIssue links an existing issue as a sub-issue of a parent issue.
+// Uses GitHub's sub-issues API with the GraphQL-Features: sub_issues header.
+func (b *Backend) addSubIssue(ctx context.Context, parentIssueNum, childIssueNum string) error {
+	// Get the GraphQL node IDs for both issues
+	parentIssue, err := b.getIssueNodeID(ctx, parentIssueNum)
+	if err != nil {
+		return fmt.Errorf("get parent issue node ID: %w", err)
+	}
+
+	childIssue, err := b.getIssueNodeID(ctx, childIssueNum)
+	if err != nil {
+		return fmt.Errorf("get child issue node ID: %w", err)
+	}
+
+	query := `
+		mutation AddSubIssue($input: AddSubIssueInput!) {
+			addSubIssue(input: $input) {
+				issue { number }
+				subIssue { number }
+			}
+		}
+	`
+
+	_, err = b.graphqlRequestWithFeatures(ctx, query, map[string]any{
+		"input": map[string]any{
+			"issueId":    parentIssue.ID,
+			"subIssueId": childIssue.ID,
+		},
+	}, []string{"sub_issues"})
+	if err != nil {
+		return fmt.Errorf("add sub-issue relationship: %w", err)
+	}
+
+	return nil
+}
+
+// graphqlRequestWithFeatures sends a GraphQL request with additional feature headers.
+func (b *Backend) graphqlRequestWithFeatures(ctx context.Context, query string, variables map[string]any, features []string) (json.RawMessage, error) {
+	body := map[string]any{
+		"query": query,
+	}
+	if variables != nil {
+		body["variables"] = variables
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", graphqlEndpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	if len(features) > 0 {
+		req.Header.Set("GraphQL-Features", strings.Join(features, ","))
+	}
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
+	}
+
+	return result.Data, nil
+}
+
 // detectNWO extracts the owner/repo from a git repository.
 func detectNWO(repoDir string) (string, error) {
 	cmd := exec.Command("git", "remote", "get-url", "origin")
@@ -1027,7 +1072,3 @@ func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent 
 	return issue.ErrNotSupported
 }
 
-// CreateSubIssue creates a child issue linked to a parent issue.
-func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
-	return nil, issue.ErrNotSupported
-}

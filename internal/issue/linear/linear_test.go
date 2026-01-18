@@ -6,6 +6,11 @@ import (
 	"github.com/tessro/fab/internal/issue"
 )
 
+// TestBackendImplementsInterface verifies that Backend implements issue.Backend.
+func TestBackendImplementsInterface(t *testing.T) {
+	var _ issue.Backend = (*Backend)(nil)
+}
+
 func TestName(t *testing.T) {
 	// Create a mock backend without making API calls
 	b := &Backend{

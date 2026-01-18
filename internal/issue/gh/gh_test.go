@@ -1,6 +1,15 @@
 package gh
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/tessro/fab/internal/issue"
+)
+
+// TestBackendImplementsInterface verifies that Backend implements issue.Backend.
+func TestBackendImplementsInterface(t *testing.T) {
+	var _ issue.Backend = (*Backend)(nil)
+}
 
 func TestParseNWO(t *testing.T) {
 	tests := []struct {

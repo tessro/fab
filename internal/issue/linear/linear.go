@@ -811,7 +811,3 @@ func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent 
 	return nil
 }
 
-// CreateSubIssue creates a child issue linked to a parent issue.
-func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
-	return nil, issue.ErrNotSupported
-}

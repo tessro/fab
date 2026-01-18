@@ -8,6 +8,11 @@ import (
 	"github.com/tessro/fab/internal/issue"
 )
 
+// TestBackendImplementsInterface verifies that Backend implements issue.Backend.
+func TestBackendImplementsInterface(t *testing.T) {
+	var _ issue.Backend = (*Backend)(nil)
+}
+
 func TestParseIssue(t *testing.T) {
 	created := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 
