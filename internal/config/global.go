@@ -23,6 +23,9 @@ type GlobalConfig struct {
 
 	// Defaults contains default values for project configuration.
 	Defaults DefaultsConfig `toml:"defaults"`
+
+	// Webhook contains webhook server configuration.
+	Webhook WebhookConfig `toml:"webhook"`
 }
 
 // DefaultsConfig contains default values for project configuration.
@@ -52,6 +55,20 @@ type LLMAuthConfig struct {
 	Provider string `toml:"provider"`
 	// Model is the model to use for authorization (e.g., "claude-haiku-4-5").
 	Model string `toml:"model"`
+}
+
+// WebhookConfig contains webhook server configuration.
+type WebhookConfig struct {
+	// Enabled determines whether the webhook server is started.
+	Enabled bool `toml:"enabled"`
+	// BindAddr is the address to bind the HTTP server to.
+	// Default: ":8080"
+	BindAddr string `toml:"bind-addr"`
+	// Secret is the webhook secret for validating signatures.
+	Secret string `toml:"secret"`
+	// PathPrefix is the URL path prefix for webhook endpoints.
+	// Default: "/webhooks"
+	PathPrefix string `toml:"path-prefix"`
 }
 
 // DefaultLLMAuthProvider is the default provider for LLM authorization.
@@ -159,4 +176,42 @@ func (c *GlobalConfig) GetDefaultMergeStrategy() string {
 		return c.Defaults.MergeStrategy
 	}
 	return DefaultMergeStrategy
+}
+
+// DefaultWebhookBindAddr is the default bind address for the webhook server.
+const DefaultWebhookBindAddr = ":8080"
+
+// DefaultWebhookPathPrefix is the default URL path prefix for webhook endpoints.
+const DefaultWebhookPathPrefix = "/webhooks"
+
+// GetWebhookEnabled returns whether the webhook server is enabled.
+func (c *GlobalConfig) GetWebhookEnabled() bool {
+	if c == nil {
+		return false
+	}
+	return c.Webhook.Enabled
+}
+
+// GetWebhookBindAddr returns the webhook bind address or the default.
+func (c *GlobalConfig) GetWebhookBindAddr() string {
+	if c != nil && c.Webhook.BindAddr != "" {
+		return c.Webhook.BindAddr
+	}
+	return DefaultWebhookBindAddr
+}
+
+// GetWebhookSecret returns the webhook secret.
+func (c *GlobalConfig) GetWebhookSecret() string {
+	if c == nil {
+		return ""
+	}
+	return c.Webhook.Secret
+}
+
+// GetWebhookPathPrefix returns the webhook path prefix or the default.
+func (c *GlobalConfig) GetWebhookPathPrefix() string {
+	if c != nil && c.Webhook.PathPrefix != "" {
+		return c.Webhook.PathPrefix
+	}
+	return DefaultWebhookPathPrefix
 }

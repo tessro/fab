@@ -218,6 +218,12 @@ func runDaemon() error {
 	// Start orchestration for projects with autostart=true
 	sup.StartAutostart()
 
+	// Start webhook server if enabled
+	if err := sup.StartWebhookServer(); err != nil {
+		return fmt.Errorf("start webhook server: %w", err)
+	}
+	defer func() { _ = sup.StopWebhookServer() }()
+
 	fmt.Println("🚌 fab daemon running...")
 
 	// Set up signal handling
