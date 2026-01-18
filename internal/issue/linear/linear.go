@@ -746,12 +746,69 @@ func (b *Backend) findOrCreateLabel(ctx context.Context, name string) (string, e
 
 // AddComment adds a comment to an issue.
 func (b *Backend) AddComment(ctx context.Context, id string, body string) error {
-	return issue.ErrNotSupported
+	// Resolve the issue ID (convert identifier to UUID if needed)
+	issueID, err := b.resolveIssueID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("resolve issue ID: %w", err)
+	}
+
+	query := `
+		mutation CommentCreate($input: CommentCreateInput!) {
+			commentCreate(input: $input) {
+				success
+				comment {
+					id
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"input": map[string]any{
+			"issueId": issueID,
+			"body":    body,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create comment: %w", err)
+	}
+
+	var result struct {
+		CommentCreate struct {
+			Success bool `json:"success"`
+		} `json:"commentCreate"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return fmt.Errorf("parse comment response: %w", err)
+	}
+
+	if !result.CommentCreate.Success {
+		return fmt.Errorf("comment creation failed")
+	}
+
+	return nil
 }
 
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
 func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
-	return issue.ErrNotSupported
+	// First, fetch the current issue to get its description
+	iss, err := b.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get issue: %w", err)
+	}
+
+	// Use the helper to upsert the plan section
+	newDescription := issue.UpsertPlanSection(iss.Description, planContent)
+
+	// Update the issue with the new description
+	_, err = b.Update(ctx, id, issue.UpdateParams{
+		Description: &newDescription,
+	})
+	if err != nil {
+		return fmt.Errorf("update issue description: %w", err)
+	}
+
+	return nil
 }
 
 // CreateSubIssue creates a child issue linked to a parent issue.

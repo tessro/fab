@@ -294,3 +294,11 @@ func TestNew_APIKeyConfigTakesPrecedence(t *testing.T) {
 		t.Errorf("apiKey = %q, want %q (config should take precedence)", b.apiKey, "config-api-key")
 	}
 }
+
+// TestBackendImplementsCollaborativeBackend verifies that the Backend type
+// correctly implements the CollaborativeBackend interface.
+func TestBackendImplementsCollaborativeBackend(t *testing.T) {
+	// This test ensures the Backend type satisfies the CollaborativeBackend interface.
+	// If Backend doesn't implement the interface, this will fail to compile.
+	var _ issue.CollaborativeBackend = (*Backend)(nil)
+}
