@@ -35,7 +35,8 @@ type ProjectEntry struct {
 	Name               string   `toml:"name"`
 	RemoteURL          string   `toml:"remote-url"`
 	MaxAgents          int      `toml:"max-agents,omitempty"`
-	IssueBackend       string   `toml:"issue-backend,omitempty"`       // "tk" (default), "github", "gh"
+	IssueBackend       string   `toml:"issue-backend,omitempty"`       // "tk" (default), "github", "gh", "linear"
+	LinearProject      string   `toml:"linear-project,omitempty"`      // Linear project ID (required for "linear" backend)
 	AllowedAuthors     []string `toml:"allowed-authors,omitempty"`     // GitHub usernames allowed to create issues
 	Autostart          bool     `toml:"autostart,omitempty"`           // Start orchestration when daemon starts
 	PermissionsChecker string   `toml:"permissions-checker,omitempty"` // Permission checker: "manual" (default), "llm"
@@ -208,6 +209,7 @@ func (r *Registry) load() error {
 		if issueBackend != "" {
 			p.IssueBackend = issueBackend
 		}
+		p.LinearProject = entry.LinearProject
 		if len(allowedAuthors) > 0 {
 			p.AllowedAuthors = allowedAuthors
 		}
@@ -251,6 +253,7 @@ func (r *Registry) save() error {
 			RemoteURL:          p.RemoteURL,
 			MaxAgents:          p.MaxAgents,
 			IssueBackend:       p.IssueBackend,
+			LinearProject:      p.LinearProject,
 			AllowedAuthors:     p.AllowedAuthors,
 			Autostart:          p.Autostart,
 			PermissionsChecker: p.PermissionsChecker,
@@ -416,6 +419,7 @@ const (
 	ConfigKeyMaxAgents          ConfigKey = "max-agents"
 	ConfigKeyAutostart          ConfigKey = "autostart"
 	ConfigKeyIssueBackend       ConfigKey = "issue-backend"
+	ConfigKeyLinearProject      ConfigKey = "linear-project"
 	ConfigKeyAllowedAuthors     ConfigKey = "allowed-authors"
 	ConfigKeyPermissionsChecker ConfigKey = "permissions-checker"
 	ConfigKeyAgentBackend       ConfigKey = "agent-backend"
@@ -426,7 +430,7 @@ const (
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend, ConfigKeyPlannerBackend, ConfigKeyCodingBackend, ConfigKeyMergeStrategy}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyLinearProject, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend, ConfigKeyPlannerBackend, ConfigKeyCodingBackend, ConfigKeyMergeStrategy}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -460,6 +464,8 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 			backend = "tk"
 		}
 		return backend, nil
+	case ConfigKeyLinearProject:
+		return p.LinearProject, nil
 	case ConfigKeyAllowedAuthors:
 		return p.AllowedAuthors, nil
 	case ConfigKeyPermissionsChecker:
@@ -505,6 +511,7 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		string(ConfigKeyMaxAgents):          p.MaxAgents,
 		string(ConfigKeyAutostart):          p.Autostart,
 		string(ConfigKeyIssueBackend):       issueBackend,
+		string(ConfigKeyLinearProject):      p.LinearProject,
 		string(ConfigKeyAllowedAuthors):     p.AllowedAuthors,
 		string(ConfigKeyPermissionsChecker): permissionsChecker,
 		string(ConfigKeyAgentBackend):       p.GetAgentBackend(),
@@ -542,10 +549,13 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 		p.Autostart = autostart
 	case ConfigKeyIssueBackend:
 		v := strings.ToLower(value)
-		if v != "tk" && v != "github" && v != "gh" {
-			return errors.New("invalid value for issue-backend: must be 'tk', 'github', or 'gh'")
+		if v != "tk" && v != "github" && v != "gh" && v != "linear" {
+			return errors.New("invalid value for issue-backend: must be 'tk', 'github', 'gh', or 'linear'")
 		}
 		p.IssueBackend = v
+	case ConfigKeyLinearProject:
+		// Linear project ID (UUID or project key)
+		p.LinearProject = value
 	case ConfigKeyAllowedAuthors:
 		// Parse comma-separated list of GitHub usernames
 		if value == "" {

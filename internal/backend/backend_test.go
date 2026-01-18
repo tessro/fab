@@ -57,8 +57,7 @@ func TestBackendInterface(t *testing.T) {
 		}
 		if cmd == nil {
 			t.Fatal("BuildCommand() returned nil command")
-		}
-		if cmd.Dir != "/tmp" {
+		} else if cmd.Dir != "/tmp" {
 			t.Errorf("BuildCommand() Dir = %q, want %q", cmd.Dir, "/tmp")
 		}
 	})
@@ -70,8 +69,7 @@ func TestBackendInterface(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil message")
-		}
-		if msg.Type != "test" {
+		} else if msg.Type != "test" {
 			t.Errorf("ParseStreamMessage() Type = %q, want %q", msg.Type, "test")
 		}
 	})

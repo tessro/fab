@@ -8,6 +8,7 @@ import (
 
 	"github.com/tessro/fab/internal/issue"
 	"github.com/tessro/fab/internal/issue/gh"
+	"github.com/tessro/fab/internal/issue/linear"
 	"github.com/tessro/fab/internal/issue/tk"
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/project"
@@ -56,6 +57,8 @@ func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
 			return tk.New(repoDir)
 		case "github", "gh":
 			return gh.New(repoDir, proj.AllowedAuthors)
+		case "linear":
+			return linear.New(repoDir, proj.LinearProject, proj.AllowedAuthors)
 		default:
 			return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 		}

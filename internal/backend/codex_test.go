@@ -29,8 +29,7 @@ func TestCodexBackend_BuildCommand(t *testing.T) {
 		}
 		if cmd == nil {
 			t.Fatal("BuildCommand() returned nil command")
-		}
-		if cmd.Dir != "/tmp/test" {
+		} else if cmd.Dir != "/tmp/test" {
 			t.Errorf("BuildCommand() Dir = %q, want %q", cmd.Dir, "/tmp/test")
 		}
 
@@ -151,12 +150,13 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "system" {
-			t.Errorf("Type = %q, want %q", msg.Type, "system")
-		}
-		if msg.Subtype != "init" {
-			t.Errorf("Subtype = %q, want %q", msg.Subtype, "init")
+		} else {
+			if msg.Type != "system" {
+				t.Errorf("Type = %q, want %q", msg.Type, "system")
+			}
+			if msg.Subtype != "init" {
+				t.Errorf("Subtype = %q, want %q", msg.Subtype, "init")
+			}
 		}
 		// Verify thread_id is captured in StreamMessage
 		if msg.ThreadID != "019bac20-11a2-7061-9708-dda3b7642ac3" {
@@ -184,21 +184,22 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if msg.Message.Usage == nil {
-			t.Fatal("Usage is nil")
-		}
-		if msg.Message.Usage.InputTokens != 8202 {
-			t.Errorf("InputTokens = %d, want 8202", msg.Message.Usage.InputTokens)
-		}
-		if msg.Message.Usage.OutputTokens != 55 {
-			t.Errorf("OutputTokens = %d, want 55", msg.Message.Usage.OutputTokens)
-		}
-		if msg.Message.Usage.CacheReadInputTokens != 6400 {
-			t.Errorf("CacheReadInputTokens = %d, want 6400", msg.Message.Usage.CacheReadInputTokens)
+		} else {
+			if msg.Type != "assistant" {
+				t.Errorf("Type = %q, want %q", msg.Type, "assistant")
+			}
+			if msg.Message.Usage == nil {
+				t.Fatal("Usage is nil")
+			}
+			if msg.Message.Usage.InputTokens != 8202 {
+				t.Errorf("InputTokens = %d, want 8202", msg.Message.Usage.InputTokens)
+			}
+			if msg.Message.Usage.OutputTokens != 55 {
+				t.Errorf("OutputTokens = %d, want 55", msg.Message.Usage.OutputTokens)
+			}
+			if msg.Message.Usage.CacheReadInputTokens != 6400 {
+				t.Errorf("CacheReadInputTokens = %d, want 6400", msg.Message.Usage.CacheReadInputTokens)
+			}
 		}
 	})
 
@@ -210,21 +211,22 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if msg.Message == nil {
-			t.Fatal("Message is nil")
-		}
-		if msg.Message.Role != "assistant" {
-			t.Errorf("Role = %q, want %q", msg.Message.Role, "assistant")
-		}
-		if len(msg.Message.Content) != 1 {
-			t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
-		}
-		if msg.Message.Content[0].Text != "Hello, I can help you." {
-			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Hello, I can help you.")
+		} else {
+			if msg.Type != "assistant" {
+				t.Errorf("Type = %q, want %q", msg.Type, "assistant")
+			}
+			if msg.Message == nil {
+				t.Fatal("Message is nil")
+			}
+			if msg.Message.Role != "assistant" {
+				t.Errorf("Role = %q, want %q", msg.Message.Role, "assistant")
+			}
+			if len(msg.Message.Content) != 1 {
+				t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
+			}
+			if msg.Message.Content[0].Text != "Hello, I can help you." {
+				t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "Hello, I can help you.")
+			}
 		}
 	})
 
@@ -236,12 +238,13 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if msg.Message.Content[0].Text != "**Creating a new file using shell command**" {
-			t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "**Creating a new file using shell command**")
+		} else {
+			if msg.Type != "assistant" {
+				t.Errorf("Type = %q, want %q", msg.Type, "assistant")
+			}
+			if msg.Message.Content[0].Text != "**Creating a new file using shell command**" {
+				t.Errorf("Text = %q, want %q", msg.Message.Content[0].Text, "**Creating a new file using shell command**")
+			}
 		}
 	})
 
@@ -253,35 +256,36 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "assistant" {
-			t.Errorf("Type = %q, want %q", msg.Type, "assistant")
-		}
-		if len(msg.Message.Content) != 1 {
-			t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
-		}
-		block := msg.Message.Content[0]
-		if block.Type != "tool_use" {
-			t.Errorf("block.Type = %q, want %q", block.Type, "tool_use")
-		}
-		if block.Name != "Bash" {
-			t.Errorf("block.Name = %q, want %q", block.Name, "Bash")
-		}
-		if block.ID != "item_1" {
-			t.Errorf("block.ID = %q, want %q", block.ID, "item_1")
-		}
+		} else {
+			if msg.Type != "assistant" {
+				t.Errorf("Type = %q, want %q", msg.Type, "assistant")
+			}
+			if len(msg.Message.Content) != 1 {
+				t.Fatalf("Content length = %d, want 1", len(msg.Message.Content))
+			}
+			block := msg.Message.Content[0]
+			if block.Type != "tool_use" {
+				t.Errorf("block.Type = %q, want %q", block.Type, "tool_use")
+			}
+			if block.Name != "Bash" {
+				t.Errorf("block.Name = %q, want %q", block.Name, "Bash")
+			}
+			if block.ID != "item_1" {
+				t.Errorf("block.ID = %q, want %q", block.ID, "item_1")
+			}
 
-		// Check input contains command
-		var input map[string]any
-		if err := json.Unmarshal(block.Input, &input); err != nil {
-			t.Fatalf("failed to unmarshal input: %v", err)
-		}
-		cmd, ok := input["command"].(string)
-		if !ok {
-			t.Fatalf("input command is not string: %T", input["command"])
-		}
-		if cmd != "/bin/zsh -lc 'ls -la'" {
-			t.Errorf("input command = %q, want %q", cmd, "/bin/zsh -lc 'ls -la'")
+			// Check input contains command
+			var input map[string]any
+			if err := json.Unmarshal(block.Input, &input); err != nil {
+				t.Fatalf("failed to unmarshal input: %v", err)
+			}
+			cmd, ok := input["command"].(string)
+			if !ok {
+				t.Fatalf("input command is not string: %T", input["command"])
+			}
+			if cmd != "/bin/zsh -lc 'ls -la'" {
+				t.Errorf("input command = %q, want %q", cmd, "/bin/zsh -lc 'ls -la'")
+			}
 		}
 	})
 
@@ -293,22 +297,23 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "user" {
-			t.Errorf("Type = %q, want %q", msg.Type, "user")
-		}
-		block := msg.Message.Content[0]
-		if block.Type != "tool_result" {
-			t.Errorf("block.Type = %q, want %q", block.Type, "tool_result")
-		}
-		if block.ToolUseID != "item_1" {
-			t.Errorf("block.ToolUseID = %q, want %q", block.ToolUseID, "item_1")
-		}
-		if string(block.Content) != "file1.txt\nfile2.txt" {
-			t.Errorf("block.Content = %q, want %q", block.Content, "file1.txt\nfile2.txt")
-		}
-		if block.IsError {
-			t.Error("block.IsError should be false for exit_code 0")
+		} else {
+			if msg.Type != "user" {
+				t.Errorf("Type = %q, want %q", msg.Type, "user")
+			}
+			block := msg.Message.Content[0]
+			if block.Type != "tool_result" {
+				t.Errorf("block.Type = %q, want %q", block.Type, "tool_result")
+			}
+			if block.ToolUseID != "item_1" {
+				t.Errorf("block.ToolUseID = %q, want %q", block.ToolUseID, "item_1")
+			}
+			if string(block.Content) != "file1.txt\nfile2.txt" {
+				t.Errorf("block.Content = %q, want %q", block.Content, "file1.txt\nfile2.txt")
+			}
+			if block.IsError {
+				t.Error("block.IsError should be false for exit_code 0")
+			}
 		}
 	})
 
@@ -320,10 +325,11 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		block := msg.Message.Content[0]
-		if !block.IsError {
-			t.Error("block.IsError should be true for non-zero exit_code")
+		} else {
+			block := msg.Message.Content[0]
+			if !block.IsError {
+				t.Error("block.IsError should be true for non-zero exit_code")
+			}
 		}
 	})
 
@@ -335,15 +341,16 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "result" {
-			t.Errorf("Type = %q, want %q", msg.Type, "result")
-		}
-		if !msg.IsError {
-			t.Error("IsError should be true")
-		}
-		if msg.Result != "API rate limit exceeded" {
-			t.Errorf("Result = %q, want %q", msg.Result, "API rate limit exceeded")
+		} else {
+			if msg.Type != "result" {
+				t.Errorf("Type = %q, want %q", msg.Type, "result")
+			}
+			if !msg.IsError {
+				t.Error("IsError should be true")
+			}
+			if msg.Result != "API rate limit exceeded" {
+				t.Errorf("Result = %q, want %q", msg.Result, "API rate limit exceeded")
+			}
 		}
 	})
 
@@ -355,12 +362,13 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "system" {
-			t.Errorf("Type = %q, want %q", msg.Type, "system")
-		}
-		if msg.Subtype != "warning" {
-			t.Errorf("Subtype = %q, want %q", msg.Subtype, "warning")
+		} else {
+			if msg.Type != "system" {
+				t.Errorf("Type = %q, want %q", msg.Type, "system")
+			}
+			if msg.Subtype != "warning" {
+				t.Errorf("Subtype = %q, want %q", msg.Subtype, "warning")
+			}
 		}
 	})
 
@@ -372,8 +380,7 @@ func TestCodexBackend_ParseStreamMessage(t *testing.T) {
 		}
 		if msg == nil {
 			t.Fatal("ParseStreamMessage() returned nil")
-		}
-		if msg.Type != "result" {
+		} else if msg.Type != "result" {
 			t.Errorf("Type = %q, want %q", msg.Type, "result")
 		}
 	})

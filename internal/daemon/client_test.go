@@ -17,8 +17,7 @@ func TestDecodePayload(t *testing.T) {
 		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
-		}
-		if result.Version != "" || result.Uptime != "" {
+		} else if result.Version != "" || result.Uptime != "" {
 			t.Error("expected zero value struct")
 		}
 	})

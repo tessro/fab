@@ -36,12 +36,13 @@ func TestCreateWorktreeForAgent_Success(t *testing.T) {
 	}
 	if wt == nil {
 		t.Fatal("expected worktree, got nil")
-	}
-	if !wt.InUse {
-		t.Error("InUse = false, want true")
-	}
-	if wt.AgentID != "agent1" {
-		t.Errorf("AgentID = %q, want %q", wt.AgentID, "agent1")
+	} else {
+		if !wt.InUse {
+			t.Error("InUse = false, want true")
+		}
+		if wt.AgentID != "agent1" {
+			t.Errorf("AgentID = %q, want %q", wt.AgentID, "agent1")
+		}
 	}
 	// Path should be wt-{agentID}
 	if wt.Path != p.WorktreesDir()+"/wt-agent1" {
