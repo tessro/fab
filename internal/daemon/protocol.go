@@ -368,10 +368,12 @@ type AgentDoneRequest struct {
 
 // AgentDoneResponse is the payload for agent.done responses.
 type AgentDoneResponse struct {
-	Merged     bool   `json:"merged"`                // True if merge to main succeeded
+	Merged     bool   `json:"merged"`                // True if merge to main succeeded (only for direct merge strategy)
 	BranchName string `json:"branch_name,omitempty"` // The branch that was processed
 	SHA        string `json:"sha,omitempty"`         // Commit SHA of merge commit (only if Merged is true)
 	MergeError string `json:"merge_error,omitempty"` // Conflict message if merge failed
+	PRCreated  bool   `json:"pr_created,omitempty"`  // True if PR was created (only for pull-request strategy)
+	PRURL      string `json:"pr_url,omitempty"`      // URL of created PR (only if PRCreated is true)
 }
 
 // PermissionRequest represents a tool permission request from Claude Code.

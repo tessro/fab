@@ -34,6 +34,7 @@ type Project struct {
 	AgentBackend       string   // Agent CLI backend: "claude" (default), "codex" - used as fallback if planner/coding not set
 	PlannerBackend     string   // Planner CLI backend: "claude" (default), "codex"
 	CodingBackend      string   // Coding agent CLI backend: "claude" (default), "codex"
+	MergeStrategy      string   // Merge strategy: "direct" (default), "pull-request"
 	BaseDir            string   // Base directory for project storage (default: ~/.fab/projects)
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
@@ -265,6 +266,20 @@ func (p *Project) GetCodingBackend() string {
 		return p.CodingBackend
 	}
 	return p.GetAgentBackend()
+}
+
+// DefaultMergeStrategy is the default merge strategy.
+const DefaultMergeStrategy = "direct"
+
+// MergeStrategyPullRequest is the value for pull-request merge strategy.
+const MergeStrategyPullRequest = "pull-request"
+
+// GetMergeStrategy returns the configured merge strategy, or the default ("direct").
+func (p *Project) GetMergeStrategy() string {
+	if p.MergeStrategy == "" {
+		return DefaultMergeStrategy
+	}
+	return p.MergeStrategy
 }
 
 // ManagerWorktreePath returns the path to the manager's worktree.

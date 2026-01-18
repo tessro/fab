@@ -254,13 +254,14 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("rebase conflict - please resolve conflicts and try again:\n%s", output)
 		}
 
-		fmt.Println("🚌 Rebase successful, merging to main...")
+		fmt.Println("🚌 Rebase successful, completing...")
 	}
 
 	client := MustConnect()
 	defer client.Close()
 
-	if err := client.AgentDone(agentID, doneTaskID, doneErrorMsg); err != nil {
+	resp, err := client.AgentDoneWithResponse(agentID, doneTaskID, doneErrorMsg)
+	if err != nil {
 		return fmt.Errorf("agent done: %w", err)
 	}
 
@@ -268,8 +269,12 @@ func runAgentDone(cmd *cobra.Command, args []string) error {
 		fmt.Printf("🚌 Agent %s signaled error: %s\n", agentID, doneErrorMsg)
 	} else if isPlanner {
 		fmt.Printf("🚌 Plan agent %s completed\n", agentID)
-	} else {
+	} else if resp.PRCreated {
+		fmt.Printf("🚌 Agent %s completed and created PR: %s\n", agentID, resp.PRURL)
+	} else if resp.Merged {
 		fmt.Printf("🚌 Agent %s completed and merged to main\n", agentID)
+	} else {
+		fmt.Printf("🚌 Agent %s completed\n", agentID)
 	}
 	return nil
 }

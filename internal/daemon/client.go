@@ -457,6 +457,13 @@ func (c *Client) AgentOutput(id string) (*AgentOutputResponse, error) {
 // AgentDone signals that an agent has completed its task.
 // This is called by agents to notify the orchestrator they are done.
 func (c *Client) AgentDone(agentID, taskID, errorMsg string) error {
+	_, err := c.AgentDoneWithResponse(agentID, taskID, errorMsg)
+	return err
+}
+
+// AgentDoneWithResponse signals that an agent has completed its task and returns the response.
+// This is called by agents to notify the orchestrator they are done.
+func (c *Client) AgentDoneWithResponse(agentID, taskID, errorMsg string) (*AgentDoneResponse, error) {
 	resp, err := c.Send(&Request{
 		Type: MsgAgentDone,
 		Payload: AgentDoneRequest{
@@ -466,12 +473,13 @@ func (c *Client) AgentDone(agentID, taskID, errorMsg string) error {
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !resp.Success {
-		return NewServerError("agent done", resp.Error)
+		return nil, NewServerError("agent done", resp.Error)
 	}
-	return nil
+
+	return decodePayload[AgentDoneResponse](resp.Payload)
 }
 
 // AgentClaim claims a ticket for an agent to prevent duplicate work.

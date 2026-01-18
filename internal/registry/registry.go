@@ -42,6 +42,7 @@ type ProjectEntry struct {
 	AgentBackend       string   `toml:"agent-backend,omitempty"`       // Agent CLI backend: "claude" (default), "codex" - used as fallback
 	PlannerBackend     string   `toml:"planner-backend,omitempty"`     // Planner CLI backend: "claude" (default), "codex"
 	CodingBackend      string   `toml:"coding-backend,omitempty"`      // Coding agent CLI backend: "claude" (default), "codex"
+	MergeStrategy      string   `toml:"merge-strategy,omitempty"`      // Merge strategy: "direct" (default), "pull-request"
 	// Deprecated: Path is only used to detect old config format
 	Path string `toml:"path,omitempty"`
 
@@ -215,6 +216,7 @@ func (r *Registry) load() error {
 		p.AgentBackend = agentBackend
 		p.PlannerBackend = entry.PlannerBackend
 		p.CodingBackend = entry.CodingBackend
+		p.MergeStrategy = entry.MergeStrategy
 		r.projects[entry.Name] = p
 	}
 
@@ -255,6 +257,7 @@ func (r *Registry) save() error {
 			AgentBackend:       p.AgentBackend,
 			PlannerBackend:     p.PlannerBackend,
 			CodingBackend:      p.CodingBackend,
+			MergeStrategy:      p.MergeStrategy,
 		})
 	}
 
@@ -418,11 +421,12 @@ const (
 	ConfigKeyAgentBackend       ConfigKey = "agent-backend"
 	ConfigKeyPlannerBackend     ConfigKey = "planner-backend"
 	ConfigKeyCodingBackend      ConfigKey = "coding-backend"
+	ConfigKeyMergeStrategy      ConfigKey = "merge-strategy"
 )
 
 // ValidConfigKeys returns all valid configuration keys.
 func ValidConfigKeys() []ConfigKey {
-	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend, ConfigKeyPlannerBackend, ConfigKeyCodingBackend}
+	return []ConfigKey{ConfigKeyMaxAgents, ConfigKeyAutostart, ConfigKeyIssueBackend, ConfigKeyAllowedAuthors, ConfigKeyPermissionsChecker, ConfigKeyAgentBackend, ConfigKeyPlannerBackend, ConfigKeyCodingBackend, ConfigKeyMergeStrategy}
 }
 
 // IsValidConfigKey returns true if the key is a valid configuration key.
@@ -470,6 +474,8 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 		return p.GetPlannerBackend(), nil
 	case ConfigKeyCodingBackend:
 		return p.GetCodingBackend(), nil
+	case ConfigKeyMergeStrategy:
+		return p.GetMergeStrategy(), nil
 	default:
 		return nil, errors.New("invalid configuration key")
 	}
@@ -504,6 +510,7 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		string(ConfigKeyAgentBackend):       p.GetAgentBackend(),
 		string(ConfigKeyPlannerBackend):     p.GetPlannerBackend(),
 		string(ConfigKeyCodingBackend):      p.GetCodingBackend(),
+		string(ConfigKeyMergeStrategy):      p.GetMergeStrategy(),
 	}, nil
 }
 
@@ -574,6 +581,12 @@ func (r *Registry) SetConfigValue(name string, key ConfigKey, value string) erro
 			return errors.New("invalid value for coding-backend: must be 'claude' or 'codex'")
 		}
 		p.CodingBackend = v
+	case ConfigKeyMergeStrategy:
+		v := strings.ToLower(value)
+		if v != "direct" && v != "pull-request" {
+			return errors.New("invalid value for merge-strategy: must be 'direct' or 'pull-request'")
+		}
+		p.MergeStrategy = v
 	default:
 		return errors.New("invalid configuration key")
 	}

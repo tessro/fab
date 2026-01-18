@@ -29,6 +29,8 @@ type GlobalConfig struct {
 type DefaultsConfig struct {
 	// AgentBackend is the default agent CLI backend ("claude" or "codex").
 	AgentBackend string `toml:"agent-backend"`
+	// MergeStrategy is the default merge strategy ("direct" or "pull-request").
+	MergeStrategy string `toml:"merge-strategy"`
 }
 
 // ProvidersConfig contains API provider configurations.
@@ -136,4 +138,15 @@ func (c *GlobalConfig) GetDefaultAgentBackend() string {
 		return c.Defaults.AgentBackend
 	}
 	return "claude"
+}
+
+// DefaultMergeStrategy is the default merge strategy.
+const DefaultMergeStrategy = "direct"
+
+// GetDefaultMergeStrategy returns the configured default merge strategy or "direct".
+func (c *GlobalConfig) GetDefaultMergeStrategy() string {
+	if c != nil && c.Defaults.MergeStrategy != "" {
+		return c.Defaults.MergeStrategy
+	}
+	return DefaultMergeStrategy
 }

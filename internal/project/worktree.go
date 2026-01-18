@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // createWorktree creates a git worktree at the specified path.
@@ -326,4 +327,89 @@ func (p *Project) getWorktreePathForAgent(agentID string) string {
 		}
 	}
 	return ""
+}
+
+// PullRequestResult represents the outcome of creating a pull request.
+type PullRequestResult struct {
+	Created    bool   // True if PR was created successfully
+	BranchName string // The branch that was pushed
+	PRURL      string // URL of the created pull request
+	Error      error  // Error if PR creation failed
+}
+
+// CreatePullRequest rebases an agent's branch onto main, pushes it, and creates a pull request.
+// This is used when merge strategy is "pull-request" instead of direct merge.
+// Unlike MergeAgentBranch, this does NOT merge into main - it just creates a PR.
+func (p *Project) CreatePullRequest(agentID, title, body string) (*PullRequestResult, error) {
+	p.mergeMu.Lock()
+	defer p.mergeMu.Unlock()
+
+	repoDir := p.RepoDir()
+	branchName := "fab/" + agentID
+
+	// Verify the repo is a valid git repository
+	gitDir := filepath.Join(repoDir, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repo not found: %s", repoDir)
+	}
+
+	// Get the worktree path for this agent
+	wtPath := p.getWorktreePathForAgent(agentID)
+	if wtPath == "" {
+		return nil, fmt.Errorf("worktree not found for agent %s", agentID)
+	}
+
+	// Fetch latest from origin
+	fetchCmd := exec.Command("git", "fetch", "origin")
+	fetchCmd.Dir = repoDir
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("fetch: %w\n%s", err, output)
+	}
+
+	// Rebase the agent's branch onto origin/main
+	rebaseCmd := exec.Command("git", "rebase", "origin/main")
+	rebaseCmd.Dir = wtPath
+	rebaseOutput, rebaseErr := rebaseCmd.CombinedOutput()
+
+	if rebaseErr != nil {
+		// Rebase failed - abort and return error
+		abortCmd := exec.Command("git", "rebase", "--abort")
+		abortCmd.Dir = wtPath
+		_ = abortCmd.Run()
+
+		return &PullRequestResult{
+			Created:    false,
+			BranchName: branchName,
+			Error:      fmt.Errorf("rebase conflict: %s", string(rebaseOutput)),
+		}, nil
+	}
+
+	// Push the branch to origin
+	pushCmd := exec.Command("git", "push", "-u", "origin", branchName, "--force-with-lease")
+	pushCmd.Dir = wtPath
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("push branch: %w\n%s", err, output)
+	}
+
+	// Create the pull request using gh CLI
+	prCmd := exec.Command("gh", "pr", "create",
+		"--title", title,
+		"--body", body,
+		"--base", "main",
+		"--head", branchName,
+	)
+	prCmd.Dir = repoDir
+	prOutput, prErr := prCmd.CombinedOutput()
+	if prErr != nil {
+		return nil, fmt.Errorf("create PR: %w\n%s", prErr, prOutput)
+	}
+
+	// gh pr create outputs the PR URL - trim any whitespace
+	prURL := strings.TrimSpace(string(prOutput))
+
+	return &PullRequestResult{
+		Created:    true,
+		BranchName: branchName,
+		PRURL:      prURL,
+	}, nil
 }

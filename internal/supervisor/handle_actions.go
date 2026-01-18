@@ -43,15 +43,18 @@ func (s *Supervisor) handleAgentDone(ctx context.Context, req *daemon.Request) *
 		BranchName: result.BranchName,
 		SHA:        result.SHA,
 		MergeError: result.MergeError,
+		PRCreated:  result.PRCreated,
+		PRURL:      result.PRURL,
 	}
 
-	if !result.Merged {
+	// Check for conflicts (both merge and PR strategies can have rebase conflicts)
+	if !result.Merged && !result.PRCreated && result.MergeError != "" {
 		// Return success: false to signal agent should resolve conflicts
 		return &daemon.Response{
 			Type:    req.Type,
 			ID:      req.ID,
 			Success: false,
-			Error:   fmt.Sprintf("merge conflict on %s: %s", result.BranchName, result.MergeError),
+			Error:   fmt.Sprintf("conflict on %s: %s", result.BranchName, result.MergeError),
 			Payload: resp,
 		}
 	}

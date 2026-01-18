@@ -353,16 +353,34 @@ func (o *Orchestrator) executeKickstart(a *agent.Agent, prompt string) {
 
 // AgentDoneResult contains the outcome of HandleAgentDone.
 type AgentDoneResult struct {
-	Merged     bool   // True if merge to main succeeded
+	Merged     bool   // True if merge to main succeeded (only for direct merge strategy)
 	BranchName string // The branch that was processed
 	SHA        string // Commit SHA of merge commit (only set if Merged is true)
 	MergeError string // Conflict message if merge failed
+	PRCreated  bool   // True if PR was created (only for pull-request strategy)
+	PRURL      string // URL of created PR (only if PRCreated is true)
 }
 
 // HandleAgentDone handles an agent signaling task completion.
-// If merge succeeds, cleans up the agent and spawns a replacement.
-// If merge fails, rebases the worktree and returns error (agent stays running to fix conflicts).
+// Behavior depends on the project's merge strategy:
+// - "direct": merges to main, cleans up agent, spawns replacement
+// - "pull-request": creates a PR, keeps worktree until PR is merged
+// If merge/PR fails, rebases the worktree and returns error (agent stays running to fix conflicts).
 func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*AgentDoneResult, error) {
+	// Check merge strategy
+	mergeStrategy := o.project.GetMergeStrategy()
+
+	if mergeStrategy == project.MergeStrategyPullRequest {
+		// Create a pull request instead of merging directly
+		return o.handleAgentDonePR(agentID, taskID)
+	}
+
+	// Default: direct merge
+	return o.handleAgentDoneMerge(agentID, taskID)
+}
+
+// handleAgentDoneMerge handles agent completion with direct merge strategy.
+func (o *Orchestrator) handleAgentDoneMerge(agentID, taskID string) (*AgentDoneResult, error) {
 	result := &AgentDoneResult{}
 
 	// Try to merge agent's branch into main
@@ -421,6 +439,72 @@ func (o *Orchestrator) HandleAgentDone(agentID, taskID, errorMsg string) (*Agent
 			"agent", agentID,
 			"branch", mergeResult.BranchName,
 			"error", mergeResult.Error)
+	}
+
+	return result, nil
+}
+
+// handleAgentDonePR handles agent completion with pull-request merge strategy.
+func (o *Orchestrator) handleAgentDonePR(agentID, taskID string) (*AgentDoneResult, error) {
+	result := &AgentDoneResult{}
+
+	// Get agent description for PR title/body
+	var description string
+	if a, err := o.agents.Get(agentID); err == nil {
+		description = a.GetDescription()
+	}
+
+	// Build PR title and body
+	prTitle := description
+	if prTitle == "" {
+		prTitle = fmt.Sprintf("Agent %s changes", agentID)
+	}
+
+	prBody := fmt.Sprintf("Changes from agent %s", agentID)
+	if taskID != "" {
+		prBody = fmt.Sprintf("Closes #%s\n\nChanges from agent %s", taskID, agentID)
+	}
+
+	// Create the pull request
+	prResult, err := o.project.CreatePullRequest(agentID, prTitle, prBody)
+	if err != nil {
+		return nil, fmt.Errorf("create pull request: %w", err)
+	}
+
+	result.BranchName = prResult.BranchName
+
+	if prResult.Created {
+		// Success! PR was created
+		result.PRCreated = true
+		result.PRURL = prResult.PRURL
+		slog.Info("created pull request for agent", "agent", agentID, "branch", prResult.BranchName, "pr_url", prResult.PRURL)
+
+		// Stop the agent process but keep the worktree
+		// Worktree needs to stay around in case there is PR feedback
+		_ = o.agents.Stop(agentID)
+
+		// Do NOT delete the worktree - it needs to stay until PR is merged
+
+		// Release claims - the work is done (just waiting for PR review)
+		released := o.claims.ReleaseByAgent(agentID)
+		if released > 0 {
+			slog.Debug("released ticket claims after PR creation", "agent", agentID, "count", released)
+		}
+
+		// Check for new issues and spawn agents as needed
+		o.checkAndSpawnAgents()
+	} else {
+		// Rebase conflict - agent must fix conflicts
+		result.MergeError = prResult.Error.Error()
+
+		if err := o.project.RebaseWorktreeOnMain(agentID); err != nil {
+			slog.Warn("failed to rebase worktree after conflict", "agent", agentID, "error", err)
+		}
+
+		slog.Warn("rebase conflict, agent must resolve",
+			"agent", agentID,
+			"branch", prResult.BranchName,
+			"error", prResult.Error)
 	}
 
 	return result, nil
