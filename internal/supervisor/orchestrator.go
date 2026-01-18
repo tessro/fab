@@ -57,7 +57,11 @@ func issueBackendFactoryForProject(proj *project.Project, globalCfg *config.Glob
 		case "tk":
 			return tk.New(repoDir)
 		case "github", "gh":
-			return gh.New(repoDir, proj.AllowedAuthors)
+			apiKey := ""
+			if globalCfg != nil {
+				apiKey = globalCfg.GetAPIKey("github")
+			}
+			return gh.New(repoDir, proj.AllowedAuthors, apiKey)
 		case "linear":
 			apiKey := ""
 			if globalCfg != nil {

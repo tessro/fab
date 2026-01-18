@@ -36,20 +36,25 @@ type Backend struct {
 // repoDir should be a git repository with a GitHub remote.
 // allowedAuthors is a list of GitHub usernames allowed to create issues.
 // If empty, defaults to the repository owner inferred from the remote URL.
-func New(repoDir string, allowedAuthors []string) (*Backend, error) {
+// configAPIKey is an optional API key from the global config; if empty, falls back to
+// GITHUB_TOKEN or GH_TOKEN environment variables.
+func New(repoDir string, allowedAuthors []string, configAPIKey string) (*Backend, error) {
 	// Extract owner/repo from the git remote
 	nwo, err := detectNWO(repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("detect github repo: %w", err)
 	}
 
-	// Get GitHub token from environment
-	token := os.Getenv("GITHUB_TOKEN")
+	// Get GitHub token from config or environment
+	token := configAPIKey
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
 	if token == "" {
 		token = os.Getenv("GH_TOKEN")
 	}
 	if token == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN or GH_TOKEN environment variable not set")
+		return nil, fmt.Errorf("GITHUB_TOKEN or GH_TOKEN not set in config or environment")
 	}
 
 	// Default to repo owner if no allowed authors specified

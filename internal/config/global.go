@@ -38,6 +38,7 @@ type ProvidersConfig struct {
 	Anthropic *ProviderConfig `toml:"anthropic"`
 	OpenAI    *ProviderConfig `toml:"openai"`
 	Linear    *ProviderConfig `toml:"linear"`
+	GitHub    *ProviderConfig `toml:"github"`
 }
 
 // ProviderConfig contains configuration for a single API provider.
@@ -108,6 +109,10 @@ func (c *GlobalConfig) GetAPIKey(provider string) string {
 	case "linear":
 		if c.Providers.Linear != nil {
 			return c.Providers.Linear.APIKey
+		}
+	case "github":
+		if c.Providers.GitHub != nil {
+			return c.Providers.GitHub.APIKey
 		}
 	}
 	return ""

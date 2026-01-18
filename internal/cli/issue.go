@@ -328,7 +328,16 @@ func getIssueBackend() (issue.Backend, error) {
 	case "tk":
 		return tk.New(project.RepoDir())
 	case "github", "gh":
-		return gh.New(project.RepoDir(), project.AllowedAuthors)
+		// Load global config to get GitHub API key
+		globalCfg, err := config.LoadGlobalConfig()
+		if err != nil {
+			return nil, fmt.Errorf("load global config: %w", err)
+		}
+		apiKey := ""
+		if globalCfg != nil {
+			apiKey = globalCfg.GetAPIKey("github")
+		}
+		return gh.New(project.RepoDir(), project.AllowedAuthors, apiKey)
 	case "linear":
 		// Load global config to get Linear API key
 		globalCfg, err := config.LoadGlobalConfig()
