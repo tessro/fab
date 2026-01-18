@@ -1,4 +1,4 @@
-// Package gh provides a GitHub Issues backend using the gh CLI.
+// Package gh provides a GitHub Issues backend using the GitHub GraphQL API.
 package gh
 
 import (
@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -15,11 +18,18 @@ import (
 	"github.com/tessro/fab/internal/issue"
 )
 
-// Backend implements issue.Backend for GitHub Issues using the gh CLI.
+const (
+	graphqlEndpoint = "https://api.github.com/graphql"
+	restEndpoint    = "https://api.github.com"
+)
+
+// Backend implements issue.Backend for GitHub Issues using the GraphQL API.
 type Backend struct {
 	repoDir        string   // Path to a git repository with a GitHub remote
 	nwo            string   // GitHub owner/repo (e.g., "owner/repo")
 	allowedAuthors []string // GitHub usernames allowed to create issues (empty = owner only)
+	token          string   // GitHub personal access token
+	client         *http.Client
 }
 
 // New creates a new GitHub issues backend.
@@ -31,6 +41,15 @@ func New(repoDir string, allowedAuthors []string) (*Backend, error) {
 	nwo, err := detectNWO(repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("detect github repo: %w", err)
+	}
+
+	// Get GitHub token from environment
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GH_TOKEN")
+	}
+	if token == "" {
+		return nil, fmt.Errorf("GITHUB_TOKEN or GH_TOKEN environment variable not set")
 	}
 
 	// Default to repo owner if no allowed authors specified
@@ -45,6 +64,8 @@ func New(repoDir string, allowedAuthors []string) (*Backend, error) {
 		repoDir:        repoDir,
 		nwo:            nwo,
 		allowedAuthors: allowedAuthors,
+		token:          token,
+		client:         &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
@@ -62,19 +83,123 @@ func (b *Backend) Name() string {
 	return "github"
 }
 
-// ghIssue represents a GitHub issue from the gh CLI JSON output.
+// graphqlRequest sends a GraphQL request to the GitHub API.
+func (b *Backend) graphqlRequest(ctx context.Context, query string, variables map[string]any) (json.RawMessage, error) {
+	body := map[string]any{
+		"query": query,
+	}
+	if variables != nil {
+		body["variables"] = variables
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", graphqlEndpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+b.token)
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
+	}
+
+	return result.Data, nil
+}
+
+// restRequest sends a REST request to the GitHub API.
+func (b *Backend) restRequest(ctx context.Context, method, endpoint string, body any) (json.RawMessage, error) {
+	var reqBody io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request: %w", err)
+		}
+		reqBody = bytes.NewReader(jsonBody)
+	}
+
+	url := restEndpoint + endpoint
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}
+
+// ghIssue represents a GitHub issue from the GraphQL API.
 type ghIssue struct {
+	ID        string    `json:"id"` // GraphQL node ID
 	Number    int       `json:"number"`
 	Title     string    `json:"title"`
 	Body      string    `json:"body"`
 	State     string    `json:"state"` // OPEN, CLOSED
-	Labels    []ghLabel `json:"labels"`
+	Labels    ghLabels  `json:"labels"`
 	Author    ghAuthor  `json:"author"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	Parent    *struct {
+		Number int `json:"number"`
+	} `json:"parent"`
+}
+
+type ghLabels struct {
+	Nodes []ghLabel `json:"nodes"`
 }
 
 type ghLabel struct {
+	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -84,61 +209,134 @@ type ghAuthor struct {
 
 // Create creates a new issue on GitHub.
 func (b *Backend) Create(ctx context.Context, params issue.CreateParams) (*issue.Issue, error) {
-	args := []string{"issue", "create", "--repo", b.nwo, "--title", params.Title, "--body", params.Description}
+	// First, get the repository ID
+	repoID, err := b.getRepositoryID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get repository ID: %w", err)
+	}
 
-	// Add type label
+	// Get or create labels for type and priority
+	var labelIDs []string
 	issueType := params.Type
 	if issueType == "" {
 		issueType = "task"
 	}
-	args = append(args, "--label", "type:"+issueType)
-
-	// Add priority label
-	args = append(args, "--label", fmt.Sprintf("priority:%d", params.Priority))
-
-	// Run gh issue create and get the issue URL
-	out, err := b.runGH(ctx, args...)
-	if err != nil {
-		return nil, err
+	typeLabel, err := b.findOrCreateLabel(ctx, "type:"+issueType)
+	if err == nil && typeLabel != "" {
+		labelIDs = append(labelIDs, typeLabel)
 	}
 
-	// Parse the issue number from the output URL
-	// Output looks like: https://github.com/owner/repo/issues/123
-	num, err := parseIssueNumberFromURL(strings.TrimSpace(out))
+	priorityLabel, err := b.findOrCreateLabel(ctx, fmt.Sprintf("priority:%d", params.Priority))
+	if err == nil && priorityLabel != "" {
+		labelIDs = append(labelIDs, priorityLabel)
+	}
+
+	query := `
+		mutation CreateIssue($input: CreateIssueInput!) {
+			createIssue(input: $input) {
+				issue {
+					id
+					number
+					title
+					body
+					state
+					createdAt
+					updatedAt
+					author { login }
+					labels(first: 20) { nodes { id name } }
+				}
+			}
+		}
+	`
+
+	input := map[string]any{
+		"repositoryId": repoID,
+		"title":        params.Title,
+		"body":         params.Description,
+	}
+	if len(labelIDs) > 0 {
+		input["labelIds"] = labelIDs
+	}
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{"input": input})
 	if err != nil {
-		return nil, fmt.Errorf("parse created issue: %w", err)
+		return nil, fmt.Errorf("create issue: %w", err)
+	}
+
+	var result struct {
+		CreateIssue struct {
+			Issue ghIssue `json:"issue"`
+		} `json:"createIssue"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse create response: %w", err)
 	}
 
 	// Set up dependencies using GitHub sub-issues
-	// The new issue becomes a sub-issue of each dependency (parent)
 	for _, depID := range params.Dependencies {
-		if err := b.addSubIssue(ctx, depID, strconv.Itoa(num)); err != nil {
-			// Log warning but don't fail the create
+		if err := b.addSubIssue(ctx, depID, strconv.Itoa(result.CreateIssue.Issue.Number)); err != nil {
 			fmt.Fprintf(issue.Stderr, "warning: failed to add dependency %s: %v\n", depID, err)
 		}
 	}
 
-	return b.Get(ctx, strconv.Itoa(num))
+	return b.toIssue(&result.CreateIssue.Issue), nil
 }
 
 // Get retrieves an issue by ID (issue number as string).
 func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
-	out, err := b.runGH(ctx, "issue", "view", id, "--repo", b.nwo, "--json",
-		"number,title,body,state,labels,author,createdAt,updatedAt")
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid issue number: %s", id)
+	}
+
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	query := `
+		query GetIssue($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					id
+					number
+					title
+					body
+					state
+					createdAt
+					updatedAt
+					author { login }
+					labels(first: 20) { nodes { id name } }
+					parent { number }
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner":  owner,
+		"repo":   repo,
+		"number": num,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get issue %s: %w", id, err)
 	}
 
-	var gh ghIssue
-	if err := json.Unmarshal([]byte(out), &gh); err != nil {
+	var result struct {
+		Repository struct {
+			Issue ghIssue `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse issue: %w", err)
 	}
 
-	iss := b.toIssue(&gh)
+	iss := b.toIssue(&result.Repository.Issue)
 
-	// Fetch parent issue (dependency) if this issue is a sub-issue
-	if parent, err := b.getParentIssue(ctx, id); err == nil && parent != "" {
-		iss.Dependencies = []string{parent}
+	// Set dependencies from parent if available
+	if result.Repository.Issue.Parent != nil {
+		iss.Dependencies = []string{strconv.Itoa(result.Repository.Issue.Parent.Number)}
 	}
 
 	return iss, nil
@@ -146,60 +344,112 @@ func (b *Backend) Get(ctx context.Context, id string) (*issue.Issue, error) {
 
 // List returns issues matching the filter.
 func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.Issue, error) {
-	args := []string{"issue", "list", "--repo", b.nwo, "--json",
-		"number,title,body,state,labels,author,createdAt,updatedAt", "--limit", "100"}
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
 
-	// Apply status filter
+	// Build filter states
+	var states []string
 	if len(filter.Status) > 0 {
-		// gh CLI uses --state with values: open, closed, all
-		states := make([]string, 0, len(filter.Status))
 		for _, s := range filter.Status {
 			switch s {
 			case issue.StatusOpen, issue.StatusBlocked:
-				states = append(states, "open")
+				states = append(states, "OPEN")
 			case issue.StatusClosed:
-				states = append(states, "closed")
+				states = append(states, "CLOSED")
 			}
 		}
-		if len(states) > 0 {
-			// If both open and closed, use all
-			hasOpen := false
-			hasClosed := false
-			for _, s := range states {
-				if s == "open" {
-					hasOpen = true
-				}
-				if s == "closed" {
-					hasClosed = true
-				}
-			}
-			if hasOpen && hasClosed {
-				args = append(args, "--state", "all")
-			} else if hasClosed {
-				args = append(args, "--state", "closed")
-			}
-			// open is default, no need to specify
+		// Deduplicate
+		stateSet := make(map[string]bool)
+		for _, s := range states {
+			stateSet[s] = true
+		}
+		states = nil
+		for s := range stateSet {
+			states = append(states, s)
 		}
 	}
 
-	// Apply label filter
-	for _, label := range filter.Labels {
-		args = append(args, "--label", label)
+	// Note: Label filtering is done client-side after fetching issues
+	query := `
+		query ListIssues($owner: String!, $repo: String!, $states: [IssueState!], $first: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issues(states: $states, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+					nodes {
+						id
+						number
+						title
+						body
+						state
+						createdAt
+						updatedAt
+						author { login }
+						labels(first: 20) { nodes { id name } }
+						parent { number }
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]any{
+		"owner": owner,
+		"repo":  repo,
+		"first": 100,
+	}
+	if len(states) > 0 {
+		variables["states"] = states
 	}
 
-	out, err := b.runGH(ctx, args...)
+	data, err := b.graphqlRequest(ctx, query, variables)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list issues: %w", err)
 	}
 
-	var ghIssues []ghIssue
-	if err := json.Unmarshal([]byte(out), &ghIssues); err != nil {
+	var result struct {
+		Repository struct {
+			Issues struct {
+				Nodes []ghIssue `json:"nodes"`
+			} `json:"issues"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse issues: %w", err)
 	}
 
-	issues := make([]*issue.Issue, 0, len(ghIssues))
-	for _, gh := range ghIssues {
-		issues = append(issues, b.toIssue(&gh))
+	issues := make([]*issue.Issue, 0, len(result.Repository.Issues.Nodes))
+	for _, gh := range result.Repository.Issues.Nodes {
+		iss := b.toIssue(&gh)
+
+		// Set dependencies from parent
+		if gh.Parent != nil {
+			iss.Dependencies = []string{strconv.Itoa(gh.Parent.Number)}
+		}
+
+		// Apply label filter client-side
+		if len(filter.Labels) > 0 {
+			hasAllLabels := true
+			for _, requiredLabel := range filter.Labels {
+				found := false
+				for _, label := range gh.Labels.Nodes {
+					if label.Name == requiredLabel {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hasAllLabels = false
+					break
+				}
+			}
+			if !hasAllLabels {
+				continue
+			}
+		}
+
+		issues = append(issues, iss)
 	}
 
 	return issues, nil
@@ -207,112 +457,175 @@ func (b *Backend) List(ctx context.Context, filter issue.ListFilter) ([]*issue.I
 
 // Update modifies an existing issue.
 func (b *Backend) Update(ctx context.Context, id string, params issue.UpdateParams) (*issue.Issue, error) {
-	args := []string{"issue", "edit", id, "--repo", b.nwo}
+	// Get current issue to find its node ID
+	current, err := b.getIssueNodeID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get issue node ID: %w", err)
+	}
+
+	// Build update input
+	input := map[string]any{
+		"id": current.ID,
+	}
 
 	if params.Title != nil {
-		args = append(args, "--title", *params.Title)
+		input["title"] = *params.Title
 	}
 	if params.Description != nil {
-		args = append(args, "--body", *params.Description)
+		input["body"] = *params.Description
 	}
 
-	// Handle labels
-	if params.Labels != nil {
-		// Get current issue to manage label updates
-		current, err := b.Get(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-
-		// Remove old labels and add new ones
-		for _, label := range current.Labels {
-			args = append(args, "--remove-label", label)
-		}
-		for _, label := range params.Labels {
-			args = append(args, "--add-label", label)
-		}
-	}
-
-	// Update type via label if specified
-	if params.Type != nil {
-		// Get current to find old type label
-		current, err := b.Get(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		for _, label := range current.Labels {
-			if strings.HasPrefix(label, "type:") {
-				args = append(args, "--remove-label", label)
-				break
-			}
-		}
-		args = append(args, "--add-label", "type:"+*params.Type)
-	}
-
-	// Update priority via label if specified
-	if params.Priority != nil {
-		// Get current to find old priority label
-		current, err := b.Get(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		for _, label := range current.Labels {
-			if strings.HasPrefix(label, "priority:") {
-				args = append(args, "--remove-label", label)
-				break
-			}
-		}
-		args = append(args, "--add-label", fmt.Sprintf("priority:%d", *params.Priority))
-	}
-
-	if len(args) > 4 { // Only run if there are actual edits
-		if _, err := b.runGH(ctx, args...); err != nil {
-			return nil, err
-		}
-	}
-
-	// Handle status change separately (close/reopen)
+	// Handle state changes
 	if params.Status != nil {
 		switch *params.Status {
 		case issue.StatusClosed:
-			if _, err := b.runGH(ctx, "issue", "close", id, "--repo", b.nwo); err != nil {
-				return nil, err
-			}
-		case issue.StatusOpen:
-			if _, err := b.runGH(ctx, "issue", "reopen", id, "--repo", b.nwo); err != nil {
-				return nil, err
-			}
-		case issue.StatusBlocked:
-			// Mark as blocked using a label
-			if _, err := b.runGH(ctx, "issue", "edit", id, "--repo", b.nwo, "--add-label", "blocked"); err != nil {
-				return nil, err
-			}
+			input["state"] = "CLOSED"
+		case issue.StatusOpen, issue.StatusBlocked:
+			input["state"] = "OPEN"
 		}
 	}
 
-	return b.Get(ctx, id)
+	// Handle labels
+	if params.Labels != nil || params.Type != nil || params.Priority != nil || params.Status != nil {
+		// Get current issue to manage labels
+		currentIssue, err := b.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+
+		// Start with existing labels or new labels
+		var newLabels []string
+		if params.Labels != nil {
+			newLabels = params.Labels
+		} else {
+			newLabels = currentIssue.Labels
+		}
+
+		// Handle type label
+		if params.Type != nil {
+			// Remove old type label and add new one
+			filtered := make([]string, 0, len(newLabels))
+			for _, l := range newLabels {
+				if !strings.HasPrefix(l, "type:") {
+					filtered = append(filtered, l)
+				}
+			}
+			newLabels = append(filtered, "type:"+*params.Type)
+		} else if currentIssue.Type != "" && params.Labels == nil {
+			// Preserve existing type label if not explicitly clearing labels
+			newLabels = append(newLabels, "type:"+currentIssue.Type)
+		}
+
+		// Handle priority label
+		if params.Priority != nil {
+			// Remove old priority label and add new one
+			filtered := make([]string, 0, len(newLabels))
+			for _, l := range newLabels {
+				if !strings.HasPrefix(l, "priority:") {
+					filtered = append(filtered, l)
+				}
+			}
+			newLabels = append(filtered, fmt.Sprintf("priority:%d", *params.Priority))
+		} else if params.Labels == nil {
+			// Preserve existing priority label if not explicitly clearing labels
+			newLabels = append(newLabels, fmt.Sprintf("priority:%d", currentIssue.Priority))
+		}
+
+		// Handle blocked status via label
+		if params.Status != nil && *params.Status == issue.StatusBlocked {
+			// Add blocked label
+			hasBlocked := false
+			for _, l := range newLabels {
+				if l == "blocked" {
+					hasBlocked = true
+					break
+				}
+			}
+			if !hasBlocked {
+				newLabels = append(newLabels, "blocked")
+			}
+		} else if params.Status != nil && *params.Status != issue.StatusBlocked {
+			// Remove blocked label
+			filtered := make([]string, 0, len(newLabels))
+			for _, l := range newLabels {
+				if l != "blocked" {
+					filtered = append(filtered, l)
+				}
+			}
+			newLabels = filtered
+		}
+
+		// Get or create label IDs
+		var labelIDs []string
+		for _, labelName := range newLabels {
+			labelID, err := b.findOrCreateLabel(ctx, labelName)
+			if err != nil {
+				fmt.Fprintf(issue.Stderr, "warning: failed to find/create label %s: %v\n", labelName, err)
+				continue
+			}
+			if labelID != "" {
+				labelIDs = append(labelIDs, labelID)
+			}
+		}
+		if len(labelIDs) > 0 {
+			input["labelIds"] = labelIDs
+		}
+	}
+
+	query := `
+		mutation UpdateIssue($input: UpdateIssueInput!) {
+			updateIssue(input: $input) {
+				issue {
+					id
+					number
+					title
+					body
+					state
+					createdAt
+					updatedAt
+					author { login }
+					labels(first: 20) { nodes { id name } }
+					parent { number }
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{"input": input})
+	if err != nil {
+		return nil, fmt.Errorf("update issue: %w", err)
+	}
+
+	var result struct {
+		UpdateIssue struct {
+			Issue ghIssue `json:"issue"`
+		} `json:"updateIssue"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse update response: %w", err)
+	}
+
+	iss := b.toIssue(&result.UpdateIssue.Issue)
+	if result.UpdateIssue.Issue.Parent != nil {
+		iss.Dependencies = []string{strconv.Itoa(result.UpdateIssue.Issue.Parent.Number)}
+	}
+
+	return iss, nil
 }
 
 // Close marks an issue as closed.
 func (b *Backend) Close(ctx context.Context, id string) error {
-	_, err := b.runGH(ctx, "issue", "close", id, "--repo", b.nwo)
+	status := issue.StatusClosed
+	_, err := b.Update(ctx, id, issue.UpdateParams{Status: &status})
 	return err
 }
 
 // Ready returns open issues that are not blocked, have no open dependencies, and are authored by allowed users.
 func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
-	// Fetch raw issues to access author info for filtering
-	args := []string{"issue", "list", "--repo", b.nwo, "--json",
-		"number,title,body,state,labels,author,createdAt,updatedAt", "--limit", "100", "--state", "open"}
-
-	out, err := b.runGH(ctx, args...)
+	// Fetch all open issues
+	issues, err := b.List(ctx, issue.ListFilter{Status: []issue.Status{issue.StatusOpen}})
 	if err != nil {
 		return nil, err
-	}
-
-	var ghIssues []ghIssue
-	if err := json.Unmarshal([]byte(out), &ghIssues); err != nil {
-		return nil, fmt.Errorf("parse issues: %w", err)
 	}
 
 	// Build allowed authors set for quick lookup
@@ -322,31 +635,96 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 	}
 
 	// Build a set of open issue numbers for dependency checking
-	openIssues := make(map[string]bool, len(ghIssues))
-	for _, gh := range ghIssues {
-		openIssues[strconv.Itoa(gh.Number)] = true
+	openIssues := make(map[string]bool, len(issues))
+	for _, iss := range issues {
+		openIssues[iss.ID] = true
+	}
+
+	// Fetch authors for filtering (GraphQL response includes author)
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	query := `
+		query ListIssuesWithAuthors($owner: String!, $repo: String!) {
+			repository(owner: $owner, name: $repo) {
+				issues(states: [OPEN], first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {
+					nodes {
+						number
+						author { login }
+						labels(first: 20) { nodes { name } }
+						parent { number }
+					}
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner": owner,
+		"repo":  repo,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list issues with authors: %w", err)
+	}
+
+	var result struct {
+		Repository struct {
+			Issues struct {
+				Nodes []struct {
+					Number int      `json:"number"`
+					Author ghAuthor `json:"author"`
+					Labels struct {
+						Nodes []ghLabel `json:"nodes"`
+					} `json:"labels"`
+					Parent *struct {
+						Number int `json:"number"`
+					} `json:"parent"`
+				} `json:"nodes"`
+			} `json:"issues"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse issues: %w", err)
+	}
+
+	// Build a map of issue number to author and parent
+	issueAuthors := make(map[string]string)
+	issueParents := make(map[string]string)
+	issueBlocked := make(map[string]bool)
+	for _, node := range result.Repository.Issues.Nodes {
+		num := strconv.Itoa(node.Number)
+		issueAuthors[num] = strings.ToLower(node.Author.Login)
+		if node.Parent != nil {
+			issueParents[num] = strconv.Itoa(node.Parent.Number)
+		}
+		// Check for blocked label
+		for _, label := range node.Labels.Nodes {
+			if label.Name == "blocked" {
+				issueBlocked[num] = true
+				break
+			}
+		}
 	}
 
 	// Filter: not blocked + authored by allowed user + no open dependencies
-	ready := make([]*issue.Issue, 0, len(ghIssues))
-	for _, gh := range ghIssues {
-		iss := b.toIssue(&gh)
-
+	ready := make([]*issue.Issue, 0)
+	for _, iss := range issues {
 		// Skip blocked issues
-		if iss.Status == issue.StatusBlocked {
+		if iss.Status == issue.StatusBlocked || issueBlocked[iss.ID] {
 			continue
 		}
 
 		// Skip issues not authored by allowed users
-		if len(allowedSet) > 0 && !allowedSet[strings.ToLower(gh.Author.Login)] {
+		if len(allowedSet) > 0 && !allowedSet[issueAuthors[iss.ID]] {
 			continue
 		}
 
-		// Check if this issue has an open parent (dependency)
-		// If it's a sub-issue of an open issue, it's not ready
-		parent, err := b.getParentIssue(ctx, strconv.Itoa(gh.Number))
-		if err == nil && parent != "" && openIssues[parent] {
-			continue // Has open dependency, not ready
+		// Skip issues with open parent
+		if parent := issueParents[iss.ID]; parent != "" && openIssues[parent] {
+			continue
 		}
 
 		ready = append(ready, iss)
@@ -357,7 +735,6 @@ func (b *Backend) Ready(ctx context.Context) ([]*issue.Issue, error) {
 
 // Commit is a no-op for GitHub issues since changes are immediate.
 func (b *Backend) Commit(ctx context.Context) error {
-	// GitHub issues are updated immediately via API, no commit needed
 	return nil
 }
 
@@ -370,7 +747,7 @@ func (b *Backend) toIssue(gh *ghIssue) *issue.Issue {
 		Updated: gh.UpdatedAt,
 	}
 
-	// Extract description (first part of body before any metadata)
+	// Extract description
 	iss.Description = gh.Body
 
 	// Determine status
@@ -381,7 +758,7 @@ func (b *Backend) toIssue(gh *ghIssue) *issue.Issue {
 	}
 
 	// Parse labels for type, priority, and blocked status
-	for _, label := range gh.Labels {
+	for _, label := range gh.Labels.Nodes {
 		name := label.Name
 		switch {
 		case strings.HasPrefix(name, "type:"):
@@ -404,20 +781,229 @@ func (b *Backend) toIssue(gh *ghIssue) *issue.Issue {
 	return iss
 }
 
-// runGH executes a gh command and returns the output.
-func (b *Backend) runGH(ctx context.Context, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "gh", args...)
-	cmd.Dir = b.repoDir
+// getRepositoryID retrieves the GraphQL node ID for the repository.
+func (b *Backend) getRepositoryID(ctx context.Context) (string, error) {
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	query := `
+		query GetRepositoryID($owner: String!, $repo: String!) {
+			repository(owner: $owner, name: $repo) {
+				id
+			}
+		}
+	`
 
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("gh %s: %w: %s", strings.Join(args[:2], " "), err, stderr.String())
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner": owner,
+		"repo":  repo,
+	})
+	if err != nil {
+		return "", err
 	}
 
-	return stdout.String(), nil
+	var result struct {
+		Repository struct {
+			ID string `json:"id"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", err
+	}
+
+	return result.Repository.ID, nil
+}
+
+// getIssueNodeID retrieves the GraphQL node ID for an issue.
+func (b *Backend) getIssueNodeID(ctx context.Context, id string) (*ghIssue, error) {
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid issue number: %s", id)
+	}
+
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	query := `
+		query GetIssueNodeID($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					id
+					number
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner":  owner,
+		"repo":   repo,
+		"number": num,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Repository struct {
+			Issue ghIssue `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	return &result.Repository.Issue, nil
+}
+
+// findOrCreateLabel finds or creates a label with the given name.
+func (b *Backend) findOrCreateLabel(ctx context.Context, name string) (string, error) {
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	// First, try to find the existing label
+	query := `
+		query GetLabel($owner: String!, $repo: String!, $name: String!) {
+			repository(owner: $owner, name: $repo) {
+				label(name: $name) {
+					id
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner": owner,
+		"repo":  repo,
+		"name":  name,
+	})
+	if err != nil {
+		// Label might not exist, try to create it
+		return b.createLabel(ctx, name)
+	}
+
+	var result struct {
+		Repository struct {
+			Label *struct {
+				ID string `json:"id"`
+			} `json:"label"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", err
+	}
+
+	if result.Repository.Label != nil {
+		return result.Repository.Label.ID, nil
+	}
+
+	// Label not found, create it
+	return b.createLabel(ctx, name)
+}
+
+// createLabel creates a new label in the repository.
+func (b *Backend) createLabel(ctx context.Context, name string) (string, error) {
+	repoID, err := b.getRepositoryID(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Choose color based on label type
+	color := "ededed" // default gray
+	switch {
+	case strings.HasPrefix(name, "type:"):
+		color = "0366d6" // blue
+	case strings.HasPrefix(name, "priority:"):
+		color = "fbca04" // yellow
+	case name == "blocked":
+		color = "d73a4a" // red
+	}
+
+	query := `
+		mutation CreateLabel($input: CreateLabelInput!) {
+			createLabel(input: $input) {
+				label {
+					id
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"input": map[string]any{
+			"repositoryId": repoID,
+			"name":         name,
+			"color":        color,
+		},
+	})
+	if err != nil {
+		// If label already exists (race condition), try to fetch it again
+		if strings.Contains(err.Error(), "already exists") {
+			return b.findOrCreateLabel(ctx, name)
+		}
+		return "", err
+	}
+
+	var result struct {
+		CreateLabel struct {
+			Label struct {
+				ID string `json:"id"`
+			} `json:"label"`
+		} `json:"createLabel"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", err
+	}
+
+	return result.CreateLabel.Label.ID, nil
+}
+
+// addSubIssue adds childNum as a sub-issue of parentNum using GitHub's REST API.
+// This creates a dependency: child depends on parent (parent must complete first).
+func (b *Backend) addSubIssue(ctx context.Context, parentNum, childNum string) error {
+	// First, get the internal ID of the child issue
+	childID, err := b.getIssueInternalID(ctx, childNum)
+	if err != nil {
+		return fmt.Errorf("get child issue ID: %w", err)
+	}
+
+	// Use the REST API to add the sub-issue
+	endpoint := fmt.Sprintf("/repos/%s/issues/%s/sub_issues", b.nwo, parentNum)
+	_, err = b.restRequest(ctx, "POST", endpoint, map[string]any{
+		"sub_issue_id": childID,
+	})
+	if err != nil {
+		return fmt.Errorf("add sub-issue: %w", err)
+	}
+
+	return nil
+}
+
+// getIssueInternalID retrieves the internal numeric ID for an issue (not the node_id).
+func (b *Backend) getIssueInternalID(ctx context.Context, issueNum string) (int64, error) {
+	endpoint := fmt.Sprintf("/repos/%s/issues/%s", b.nwo, issueNum)
+	data, err := b.restRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return 0, err
+	}
+
+	return result.ID, nil
 }
 
 // detectNWO extracts the owner/repo from a git repository.
@@ -463,47 +1049,3 @@ func parseIssueNumberFromURL(url string) (int, error) {
 	}
 	return strconv.Atoi(matches[1])
 }
-
-// addSubIssue adds childNum as a sub-issue of parentNum using GitHub's REST API.
-// This creates a dependency: child depends on parent (parent must complete first).
-func (b *Backend) addSubIssue(ctx context.Context, parentNum, childNum string) error {
-	// First, get the internal ID of the child issue (not the node_id)
-	childID, err := b.getIssueID(ctx, childNum)
-	if err != nil {
-		return fmt.Errorf("get child issue ID: %w", err)
-	}
-
-	// Use the REST API to add the sub-issue
-	// POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues
-	endpoint := fmt.Sprintf("repos/%s/issues/%s/sub_issues", b.nwo, parentNum)
-	cmd := exec.CommandContext(ctx, "gh", "api", endpoint, "-X", "POST", "-f", fmt.Sprintf("sub_issue_id=%d", childID))
-	cmd.Dir = b.repoDir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("add sub-issue: %w: %s", err, stderr.String())
-	}
-	return nil
-}
-
-// getIssueID retrieves the internal numeric ID for an issue (not the node_id).
-func (b *Backend) getIssueID(ctx context.Context, issueNum string) (int64, error) {
-	endpoint := fmt.Sprintf("repos/%s/issues/%s", b.nwo, issueNum)
-	out, err := b.runGH(ctx, "api", endpoint, "--jq", ".id")
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(strings.TrimSpace(out), 10, 64)
-}
-
-// getParentIssue retrieves the parent issue number if this issue is a sub-issue.
-func (b *Backend) getParentIssue(ctx context.Context, issueNum string) (string, error) {
-	// Query the issue's parent using the REST API
-	endpoint := fmt.Sprintf("repos/%s/issues/%s", b.nwo, issueNum)
-	out, err := b.runGH(ctx, "api", endpoint, "--jq", ".parent.number // empty")
-	if err != nil {
-		return "", nil // No parent or API error, treat as no dependency
-	}
-	return strings.TrimSpace(out), nil
-}
-
