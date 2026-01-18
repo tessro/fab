@@ -29,12 +29,16 @@ type Backend struct {
 
 // New creates a new Linear issues backend.
 // repoDir is used for context but Linear doesn't require it.
-// The backend reads LINEAR_API_KEY from the environment.
+// configAPIKey is the API key from the global config (can be empty).
+// The backend falls back to LINEAR_API_KEY environment variable if configAPIKey is empty.
 // projectID should be set via project config (linear-project setting).
-func New(repoDir string, projectID string, allowedAuthors []string) (*Backend, error) {
-	apiKey := os.Getenv("LINEAR_API_KEY")
+func New(repoDir string, projectID string, allowedAuthors []string, configAPIKey string) (*Backend, error) {
+	apiKey := configAPIKey
 	if apiKey == "" {
-		return nil, fmt.Errorf("LINEAR_API_KEY environment variable not set")
+		apiKey = os.Getenv("LINEAR_API_KEY")
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("LINEAR_API_KEY not set in config or environment")
 	}
 
 	if projectID == "" {

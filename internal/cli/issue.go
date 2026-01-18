@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/issue"
 	"github.com/tessro/fab/internal/issue/gh"
 	"github.com/tessro/fab/internal/issue/linear"
@@ -329,7 +330,16 @@ func getIssueBackend() (issue.Backend, error) {
 	case "github", "gh":
 		return gh.New(project.RepoDir(), project.AllowedAuthors)
 	case "linear":
-		return linear.New(project.RepoDir(), project.LinearProject, project.AllowedAuthors)
+		// Load global config to get Linear API key
+		globalCfg, err := config.LoadGlobalConfig()
+		if err != nil {
+			return nil, fmt.Errorf("load global config: %w", err)
+		}
+		apiKey := ""
+		if globalCfg != nil {
+			apiKey = globalCfg.GetAPIKey("linear")
+		}
+		return linear.New(project.RepoDir(), project.LinearProject, project.AllowedAuthors, apiKey)
 	default:
 		return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 	}

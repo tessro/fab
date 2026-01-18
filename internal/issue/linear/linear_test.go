@@ -186,10 +186,9 @@ func TestToIssue_WithParent(t *testing.T) {
 
 func TestNew_MissingAPIKey(t *testing.T) {
 	// Temporarily clear the env var if set
-	origKey := ""
-	t.Setenv("LINEAR_API_KEY", origKey)
+	t.Setenv("LINEAR_API_KEY", "")
 
-	_, err := New("/tmp", "project-id", nil)
+	_, err := New("/tmp", "project-id", nil, "")
 	if err == nil {
 		t.Error("New() with missing API key should return error")
 	}
@@ -198,8 +197,47 @@ func TestNew_MissingAPIKey(t *testing.T) {
 func TestNew_MissingProjectID(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "test-key")
 
-	_, err := New("/tmp", "", nil)
+	_, err := New("/tmp", "", nil, "")
 	if err == nil {
 		t.Error("New() with missing project ID should return error")
+	}
+}
+
+func TestNew_APIKeyFromConfig(t *testing.T) {
+	// Clear env var to ensure config key is used
+	t.Setenv("LINEAR_API_KEY", "")
+
+	b, err := New("/tmp", "project-id", nil, "config-api-key")
+	if err != nil {
+		t.Errorf("New() with config API key should not error: %v", err)
+	}
+	if b.apiKey != "config-api-key" {
+		t.Errorf("apiKey = %q, want %q", b.apiKey, "config-api-key")
+	}
+}
+
+func TestNew_APIKeyFromEnvFallback(t *testing.T) {
+	// Set env var and leave config key empty
+	t.Setenv("LINEAR_API_KEY", "env-api-key")
+
+	b, err := New("/tmp", "project-id", nil, "")
+	if err != nil {
+		t.Errorf("New() with env API key should not error: %v", err)
+	}
+	if b.apiKey != "env-api-key" {
+		t.Errorf("apiKey = %q, want %q", b.apiKey, "env-api-key")
+	}
+}
+
+func TestNew_APIKeyConfigTakesPrecedence(t *testing.T) {
+	// Set both config and env - config should take precedence
+	t.Setenv("LINEAR_API_KEY", "env-api-key")
+
+	b, err := New("/tmp", "project-id", nil, "config-api-key")
+	if err != nil {
+		t.Errorf("New() should not error: %v", err)
+	}
+	if b.apiKey != "config-api-key" {
+		t.Errorf("apiKey = %q, want %q (config should take precedence)", b.apiKey, "config-api-key")
 	}
 }

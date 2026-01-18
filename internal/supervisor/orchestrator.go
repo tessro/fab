@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/issue"
 	"github.com/tessro/fab/internal/issue/gh"
 	"github.com/tessro/fab/internal/issue/linear"
@@ -31,7 +32,7 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 
 	// Configure orchestrator with issue backend factory for auto-spawning
 	cfg := s.orchConfig
-	cfg.IssueBackendFactory = issueBackendFactoryForProject(proj)
+	cfg.IssueBackendFactory = issueBackendFactoryForProject(proj, s.globalConfig)
 
 	// Create orchestrator
 	orch := orchestrator.New(proj, s.agents, cfg)
@@ -45,7 +46,7 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 }
 
 // issueBackendFactoryForProject creates an issue backend factory based on project config.
-func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
+func issueBackendFactoryForProject(proj *project.Project, globalCfg *config.GlobalConfig) issue.NewBackendFunc {
 	backendType := proj.IssueBackend
 	if backendType == "" {
 		backendType = "tk" // Default to tk backend
@@ -58,7 +59,11 @@ func issueBackendFactoryForProject(proj *project.Project) issue.NewBackendFunc {
 		case "github", "gh":
 			return gh.New(repoDir, proj.AllowedAuthors)
 		case "linear":
-			return linear.New(repoDir, proj.LinearProject, proj.AllowedAuthors)
+			apiKey := ""
+			if globalCfg != nil {
+				apiKey = globalCfg.GetAPIKey("linear")
+			}
+			return linear.New(repoDir, proj.LinearProject, proj.AllowedAuthors, apiKey)
 		default:
 			return nil, fmt.Errorf("unknown issue backend: %s", backendType)
 		}
