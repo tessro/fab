@@ -1,6 +1,12 @@
 package issue
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrNotSupported is returned when a backend does not support an operation.
+var ErrNotSupported = errors.New("operation not supported by this backend")
 
 // IssueReader provides read-only access to issues.
 type IssueReader interface {
@@ -32,9 +38,36 @@ type IssueWriter interface {
 	Commit(ctx context.Context) error
 }
 
+// IssueCollaborator provides methods for issue collaboration features.
+// Backends may return ErrNotSupported for operations they cannot perform.
+type IssueCollaborator interface {
+	// AddComment adds a comment to an issue.
+	// Returns ErrNotSupported if the backend does not support comments.
+	AddComment(ctx context.Context, id string, body string) error
+
+	// UpsertPlanSection updates or creates a ## Plan section in the issue body.
+	// The plan content should be bullet points describing the implementation plan.
+	// This operation is idempotent - calling it multiple times with the same content
+	// will not create duplicate sections.
+	// Returns ErrNotSupported if the backend does not support plan sections.
+	UpsertPlanSection(ctx context.Context, id string, planContent string) error
+
+	// CreateSubIssue creates a child issue linked to a parent issue.
+	// The child issue will have the parent as a dependency.
+	// Returns ErrNotSupported if the backend does not support sub-issues.
+	CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
+}
+
 // Backend is the interface for issue tracking backends.
 // It combines IssueReader and IssueWriter for full access.
 type Backend interface {
 	IssueReader
 	IssueWriter
+}
+
+// CollaborativeBackend extends Backend with collaboration features.
+// Backends that support comments, plans, and sub-issues should implement this.
+type CollaborativeBackend interface {
+	Backend
+	IssueCollaborator
 }

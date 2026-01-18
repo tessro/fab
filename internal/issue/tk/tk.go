@@ -295,3 +295,18 @@ func detectPrefix(ticketsDir string) (string, error) {
 
 	return "issue-", nil
 }
+
+// AddComment adds a comment to an issue.
+func (b *Backend) AddComment(ctx context.Context, id string, body string) error {
+	return issue.ErrNotSupported
+}
+
+// UpsertPlanSection updates or creates a ## Plan section in the issue body.
+func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
+	return issue.ErrNotSupported
+}
+
+// CreateSubIssue creates a child issue linked to a parent issue.
+func (b *Backend) CreateSubIssue(ctx context.Context, parentID string, params issue.CreateParams) (*issue.Issue, error) {
+	return nil, issue.ErrNotSupported
+}
