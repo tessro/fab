@@ -31,5 +31,4 @@ gradual_until = "2026-04-18"
 # Exclude non-PAVED docs from validation during gradual adoption
 exclude = [
     "docs/codex-integration.md",
-    "docs/codex-sample-output.jsonl",
 ]
