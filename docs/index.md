@@ -12,6 +12,7 @@
 <!-- List and link to component documentation. -->
 
 - [Issue Backends](components/issue-backends.md) - Pluggable issue tracking abstraction (tk, GitHub, Linear)
+- [Supervisor](components/supervisor.md) - Daemon request handler and agent orchestration
 
 ## Runbooks
 <!-- List and link to operational runbooks. -->
