@@ -13,7 +13,6 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 
 | Guide | Description |
 |-------|-------------|
-| [Permissions & Hooks](./permissions.md) | Configure which agent actions are auto-approved, denied, or require manual review |
 | [Codex CLI Integration](./codex-integration.md) | Using OpenAI's Codex CLI as an agent backend |
 
 ## Components
@@ -24,6 +23,7 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 | [Supervisor](./components/supervisor.md) | Central daemon that handles CLI requests, manages orchestrators, and coordinates permissions |
 | [Orchestrator](./components/orchestrator.md) | Per-project lifecycle manager that spawns agents and coordinates merges |
 | [Issue Backends](./components/issue-backends.md) | Pluggable issue tracking: tk (file-based), GitHub Issues, or Linear |
+| [Permissions](./components/permissions.md) | Configure which agent actions are auto-approved, denied, or require manual review |
 
 ## Quick Reference
 
