@@ -16,32 +16,39 @@ func TestMapPath(t *testing.T) {
 		want      string
 	}{
 		{
-			name:      "simple file",
+			name:      "simple file becomes directory",
 			sourceDir: "docs",
 			outputDir: "site/public/docs",
 			inputPath: "docs/foo.md",
-			want:      "site/public/docs/foo.html",
+			want:      "site/public/docs/foo/index.html",
 		},
 		{
-			name:      "nested file",
+			name:      "nested file becomes directory",
 			sourceDir: "docs",
 			outputDir: "site/public/docs",
 			inputPath: "docs/components/bar.md",
-			want:      "site/public/docs/components/bar.html",
+			want:      "site/public/docs/components/bar/index.html",
 		},
 		{
-			name:      "index file",
+			name:      "index file stays as index.html",
 			sourceDir: "docs",
 			outputDir: "site/public/docs",
 			inputPath: "docs/index.md",
 			want:      "site/public/docs/index.html",
 		},
 		{
-			name:      "deeply nested",
+			name:      "deeply nested becomes directory",
 			sourceDir: "docs",
 			outputDir: "out",
 			inputPath: "docs/a/b/c.md",
-			want:      "out/a/b/c.html",
+			want:      "out/a/b/c/index.html",
+		},
+		{
+			name:      "nested index stays as index.html",
+			sourceDir: "docs",
+			outputDir: "site/public/docs",
+			inputPath: "docs/components/index.md",
+			want:      "site/public/docs/components/index.html",
 		},
 	}
 
@@ -107,6 +114,69 @@ func TestExtractTitle(t *testing.T) {
 	}
 }
 
+func TestRewriteLinks(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "simple md link",
+			input: `<a href="./foo.md">Foo</a>`,
+			want:  `<a href="./foo/">Foo</a>`,
+		},
+		{
+			name:  "md link with anchor",
+			input: `<a href="./components/issue-backends.md#section">Issue Backends</a>`,
+			want:  `<a href="./components/issue-backends/#section">Issue Backends</a>`,
+		},
+		{
+			name:  "index.md link",
+			input: `<a href="index.md">Home</a>`,
+			want:  `<a href="./">Home</a>`,
+		},
+		{
+			name:  "nested index.md link",
+			input: `<a href="./components/index.md">Components</a>`,
+			want:  `<a href="./components/">Components</a>`,
+		},
+		{
+			name:  "index.md with anchor",
+			input: `<a href="index.md#intro">Intro</a>`,
+			want:  `<a href="./#intro">Intro</a>`,
+		},
+		{
+			name:  "non-md link unchanged",
+			input: `<a href="https://example.com">External</a>`,
+			want:  `<a href="https://example.com">External</a>`,
+		},
+		{
+			name:  "html link unchanged",
+			input: `<a href="./foo.html">Foo</a>`,
+			want:  `<a href="./foo.html">Foo</a>`,
+		},
+		{
+			name:  "multiple links",
+			input: `<a href="./a.md">A</a> and <a href="./b.md#x">B</a>`,
+			want:  `<a href="./a/">A</a> and <a href="./b/#x">B</a>`,
+		},
+		{
+			name:  "relative link without dot",
+			input: `<a href="components/bar.md">Bar</a>`,
+			want:  `<a href="components/bar/">Bar</a>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RewriteLinks(tt.input)
+			if got != tt.want {
+				t.Errorf("RewriteLinks() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGeneratorGolden(t *testing.T) {
 	// Create a temporary directory for our test
 	tmpDir := t.TempDir()
@@ -120,6 +190,8 @@ func TestGeneratorGolden(t *testing.T) {
 	mdContent := `# Test Page
 
 This is a test document.
+
+See also [Other Page](./other.md) and [Section](#section).
 
 | Column A | Column B |
 |----------|----------|
@@ -162,8 +234,8 @@ This is a test document.
 		t.Fatalf("generating docs: %v", err)
 	}
 
-	// Check the output file exists
-	outputFile := filepath.Join(outputDir, "test.html")
+	// Check the output file exists (pretty URL: test/index.html)
+	outputFile := filepath.Join(outputDir, "test", "index.html")
 	output, err := os.ReadFile(outputFile)
 	if err != nil {
 		t.Fatalf("reading output file: %v", err)
@@ -183,11 +255,18 @@ This is a test document.
 		{"footer", "<footer>"},
 		{"content heading", "<h1"},
 		{"table element", "<table>"},
+		{"rewritten link", `href="./other/"`},
+		{"anchor link preserved", `href="#section"`},
 	}
 
 	for _, check := range checks {
 		if !strings.Contains(outputStr, check.contains) {
 			t.Errorf("output missing %s: expected to contain %q", check.name, check.contains)
 		}
+	}
+
+	// Verify .md link was rewritten (should NOT contain .md in href)
+	if strings.Contains(outputStr, `href="./other.md"`) {
+		t.Error("output contains unrewritten .md link")
 	}
 }

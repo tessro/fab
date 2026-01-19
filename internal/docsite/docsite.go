@@ -109,6 +109,9 @@ func (g *Generator) processFile(inputPath string) error {
 		return fmt.Errorf("converting %s: %w", inputPath, err)
 	}
 
+	// Rewrite internal .md links to pretty URLs
+	htmlContent := RewriteLinks(htmlBuf.String())
+
 	// Extract title
 	title := ExtractTitle(content, inputPath)
 
@@ -123,7 +126,7 @@ func (g *Generator) processFile(inputPath string) error {
 	// Render the template
 	data := PageData{
 		Title:   title,
-		Content: template.HTML(htmlBuf.String()),
+		Content: template.HTML(htmlContent),
 	}
 
 	var outBuf bytes.Buffer
@@ -141,6 +144,42 @@ func (g *Generator) processFile(inputPath string) error {
 
 var h1Regex = regexp.MustCompile(`(?m)^#\s+(.+)$`)
 
+// mdLinkRegex matches href attributes that point to .md files.
+// Captures: (1) path before .md (2) .md extension (3) optional anchor
+var mdLinkRegex = regexp.MustCompile(`href="([^"]*?)(\.md)(#[^"]*)?"`)
+
+// RewriteLinks transforms internal .md links in HTML content to pretty URLs.
+// For example: href="./components/issue-backends.md#section" becomes href="./components/issue-backends/#section"
+// Links to index.md are handled specially: ./foo/index.md becomes ./foo/
+func RewriteLinks(html string) string {
+	return mdLinkRegex.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := mdLinkRegex.FindStringSubmatch(match)
+		if len(submatches) < 3 {
+			return match
+		}
+
+		path := submatches[1]   // Path before .md
+		anchor := ""            // Optional anchor
+		if len(submatches) > 3 {
+			anchor = submatches[3]
+		}
+
+		// Check if the path ends with /index or is just "index"
+		if strings.HasSuffix(path, "/index") {
+			// ./foo/index.md -> ./foo/
+			path = strings.TrimSuffix(path, "index")
+		} else if path == "index" {
+			// index.md -> ./
+			path = "./"
+		} else {
+			// ./foo.md -> ./foo/
+			path = path + "/"
+		}
+
+		return fmt.Sprintf(`href="%s%s"`, path, anchor)
+	})
+}
+
 // ExtractTitle extracts the title from markdown content.
 // It looks for the first H1 heading and falls back to the filename.
 func ExtractTitle(content []byte, filePath string) string {
@@ -154,8 +193,10 @@ func ExtractTitle(content []byte, filePath string) string {
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-// MapPath converts a source markdown path to an output HTML path.
-// Example: docs/foo.md -> site/public/docs/foo.html
+// MapPath converts a source markdown path to an output HTML path using pretty URLs.
+// Files named "index.md" stay as index.html, other files become directories with index.html.
+// Example: docs/foo.md -> site/public/docs/foo/index.html
+// Example: docs/index.md -> site/public/docs/index.html
 func MapPath(sourceDir, outputDir, inputPath string) string {
 	// Get the relative path from source directory
 	relPath, err := filepath.Rel(sourceDir, inputPath)
@@ -164,8 +205,17 @@ func MapPath(sourceDir, outputDir, inputPath string) string {
 		relPath = filepath.Base(inputPath)
 	}
 
-	// Change extension from .md to .html
-	relPath = strings.TrimSuffix(relPath, ".md") + ".html"
+	// Remove .md extension
+	relPath = strings.TrimSuffix(relPath, ".md")
 
-	return filepath.Join(outputDir, relPath)
+	// Get the base filename
+	base := filepath.Base(relPath)
+
+	// If it's already "index", just add .html extension
+	if base == "index" {
+		return filepath.Join(outputDir, relPath+".html")
+	}
+
+	// Otherwise, create a directory with the same name and put index.html inside
+	return filepath.Join(outputDir, relPath, "index.html")
 }
