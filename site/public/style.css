@@ -422,6 +422,153 @@ footer a:hover {
     text-decoration: underline;
 }
 
+/* Markdown Content Styles (for generated docs) */
+.docs h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--mauve);
+    margin: 32px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--surface1);
+}
+
+.docs h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 24px 0 12px;
+}
+
+.docs h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--subtext1);
+    margin: 20px 0 8px;
+}
+
+.docs p {
+    color: var(--subtext1);
+    margin-bottom: 16px;
+}
+
+.docs a {
+    color: var(--sapphire);
+    text-decoration: none;
+}
+
+.docs a:hover {
+    text-decoration: underline;
+}
+
+.docs pre {
+    background-color: var(--crust);
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+}
+
+.docs code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+}
+
+.docs p code,
+.docs li code,
+.docs td code {
+    background-color: var(--surface0);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.docs ul,
+.docs ol {
+    padding-left: 24px;
+    margin-bottom: 16px;
+    color: var(--subtext1);
+}
+
+.docs ul {
+    list-style-type: disc;
+}
+
+.docs ol {
+    list-style-type: decimal;
+}
+
+.docs li {
+    margin-bottom: 8px;
+}
+
+.docs li > ul,
+.docs li > ol {
+    margin-top: 8px;
+    margin-bottom: 0;
+}
+
+.docs blockquote {
+    border-left: 4px solid var(--mauve);
+    padding: 12px 20px;
+    margin: 16px 0;
+    background-color: var(--surface0);
+    border-radius: 0 8px 8px 0;
+    color: var(--subtext1);
+}
+
+.docs blockquote p {
+    margin-bottom: 0;
+}
+
+.docs table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    background-color: var(--surface0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.docs th,
+.docs td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--surface1);
+}
+
+.docs th {
+    background-color: var(--surface1);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.docs td {
+    color: var(--subtext1);
+}
+
+.docs tr:last-child td {
+    border-bottom: none;
+}
+
+.docs tr:hover td {
+    background-color: var(--surface1);
+}
+
+.docs hr {
+    border: none;
+    border-top: 1px solid var(--surface1);
+    margin: 32px 0;
+}
+
+.docs em {
+    font-style: italic;
+    color: var(--subtext0);
+}
+
+.docs strong {
+    font-weight: 600;
+    color: var(--text);
+}
+
 /* Steps */
 .step {
     display: flex;
