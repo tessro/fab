@@ -16,12 +16,12 @@
 <!-- What else did we consider and why not? -->
 
 ## Verification
-<!-- How to verify the decision was correctly implemented? Commands in bash blocks are executable via `pave verify`. -->
+<!-- How to verify the decision was correctly implemented? -->
 
 Check the implementation follows the decision:
 ```bash
-$ grep -r "pattern" src/
-src/module.rs:// pattern usage here
+$ grep -r "pattern" internal/
+internal/module/module.go:// pattern usage here
 ```
 
 ## Examples

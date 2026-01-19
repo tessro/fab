@@ -13,12 +13,11 @@
 
 ## Verification
 <!-- How do you know it's working? Include test commands with expected output. -->
-<!-- Commands in bash blocks are executable via `pave verify`. -->
 
 Run the unit tests:
 ```bash
-$ cargo test
-test result: ok
+$ go test ./...
+ok  	example.com/project/pkg	0.005s
 ```
 
 Check the health endpoint:

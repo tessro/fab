@@ -13,18 +13,18 @@
 <!-- How to undo if something goes wrong. -->
 
 ## Verification
-<!-- How to confirm success. Commands in bash blocks are executable via `pave verify`. -->
+<!-- How to confirm success. -->
 
-Verify the deployment completed:
+Verify the daemon is running:
 ```bash
-$ kubectl get pods -l app=myapp | grep Running
-myapp-1234   1/1     Running
+$ fab server status
+🚌 fab daemon is running (pid: 12345)
 ```
 
 Check the service is responding:
 ```bash
-$ curl -s http://myapp.internal/health
-OK
+$ curl -s http://localhost:8080/health
+{"status":"healthy"}
 ```
 
 ## Escalation
@@ -33,8 +33,8 @@ OK
 ## Examples
 <!-- Example invocations of this runbook. -->
 
-Example deployment:
+Example service start:
 ```bash
-$ kubectl apply -f manifests/deployment.yaml
-deployment.apps/myapp created
+$ fab server start
+🚌 fab daemon started
 ```
