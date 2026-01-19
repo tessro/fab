@@ -236,6 +236,57 @@ The app-server emits events via JSON-RPC notifications matching the `EventMsg` s
 
 If fab needs true bidirectional communication with Codex, the app-server approach may be preferable to spawning multiple `codex exec` processes.
 
+## Verification
+
+Validate the sample JSONL file and check event types:
+
+```bash
+$ jq -e '.type' internal/backend/testdata/codex-sample-output.jsonl > /dev/null && echo "All events have type field"
+All events have type field
+$ jq -r '.type' internal/backend/testdata/codex-sample-output.jsonl | sort -u
+item.completed
+item.started
+thread.started
+turn.completed
+turn.started
+```
+
+## Examples
+
+### Starting a New Session
+
+```bash
+$ codex exec --json --full-auto "Create hello.txt with 'Hello World'"
+{"type":"thread.started","thread_id":"019bac20-11a2-7061-9708-dda3b7642ac3"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Creating a new file...**"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"...","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Created `hello.txt`."}}
+{"type":"turn.completed","usage":{"input_tokens":8202,"output_tokens":55}}
+```
+
+### Resuming a Session
+
+Use `thread_id` from the initial session:
+
+```bash
+$ codex exec resume --json --full-auto "019bac20-11a2-7061-9708-dda3b7642ac3" "Convert to uppercase"
+{"type":"thread.started","thread_id":"019bac20-4c70-78d2-a452-e54fb16a161a"}
+...
+{"type":"turn.completed","usage":{"input_tokens":12471,"output_tokens":97}}
+```
+
+### Handling Failed Commands
+
+Failed commands have `status: "failed"` and non-zero `exit_code`:
+
+```bash
+$ codex exec --json --full-auto "Read nonexistent.txt"
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'cat nonexistent.txt'","aggregated_output":"cat: nonexistent.txt: No such file or directory\n","exit_code":1,"status":"failed"}}
+```
+
+Full sample output is available in `internal/backend/testdata/codex-sample-output.jsonl`.
+
 ## References
 
 - [Codex CLI Reference](https://developers.openai.com/codex/cli/reference/)
