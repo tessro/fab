@@ -94,6 +94,52 @@ fab project config set myproject issue-backend tk
 
 For more details on issue backends, see the [Issue Backends](./components/issue-backends.md) documentation.
 
+## Verification
+
+Verify your installation:
+
+```bash
+$ fab version
+fab version v0.x.x
+```
+
+Check that the daemon is running:
+
+```bash
+$ fab status
+Daemon: running
+```
+
+List registered projects:
+
+```bash
+$ fab project list
+NAME       STATUS    AGENTS
+myproject  running   2/3
+```
+
+## Examples
+
+### Adding a project from a local path
+
+```bash
+fab project add /path/to/local/repo --name myproject
+```
+
+### Setting up GitHub Issues backend
+
+```bash
+fab project config set myproject issue-backend gh
+fab project start myproject
+```
+
+### Viewing agent activity
+
+```bash
+fab agent list
+fab tui
+```
+
 ## Next Steps
 
 - Browse the [component documentation](./index.md) for detailed guides
