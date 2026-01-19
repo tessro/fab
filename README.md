@@ -160,12 +160,12 @@ When `FAB_DIR` is set, all paths resolve under that directory:
 - Socket: `$FAB_DIR/fab.sock`
 - PID file: `$FAB_DIR/fab.pid`
 - Log file: `$FAB_DIR/fab.log`
-- Config: `$FAB_DIR/config.toml`
+- Config: `$FAB_DIR/config/config.toml`
 - Projects: `$FAB_DIR/projects/`
 
 ### Global Configuration
 
-Config lives at `~/.config/fab/config.toml` (or `$FAB_DIR/config.toml` if FAB_DIR is set):
+Config lives at `~/.config/fab/config.toml` (or `$FAB_DIR/config/config.toml` if FAB_DIR is set):
 
 ```toml
 # Logging level: debug, info, warn, error
@@ -178,27 +178,81 @@ api-key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
 [providers.openai]
 api-key = "sk-..."      # Or use OPENAI_API_KEY env var
 
+[providers.linear]
+api-key = "lin_api_..."  # Linear API key for issue backend
+
+[providers.github]
+api-key = "ghp_..."      # GitHub token (or use GITHUB_TOKEN env var)
+
 # LLM Authorization Settings
 [llm_auth]
 provider = "anthropic"  # or "openai"
 model = "claude-haiku-4-5"
+
+# Default settings for new projects
+[defaults]
+agent-backend = "claude"      # "claude" or "codex"
+merge-strategy = "direct"     # "direct" or "pull-request"
+
+# Webhook server (for GitHub/Linear integrations)
+[webhook]
+enabled = false
+bind-addr = ":8080"
+secret = "your-webhook-secret"
+path-prefix = "/webhooks"
+
+# Project definitions (use [[projects]] for each project)
+[[projects]]
+name = "myapp"
+remote-url = "git@github.com:user/myapp.git"
+max-agents = 3
+autostart = false
+issue-backend = "tk"           # "tk", "github", "gh", or "linear"
+permissions-checker = "manual" # "manual" or "llm"
+agent-backend = "claude"       # "claude" or "codex"
+planner-backend = "claude"     # Backend for planning agents
+coding-backend = "claude"      # Backend for coding agents
+merge-strategy = "direct"      # "direct" or "pull-request"
+allowed-authors = ["user1", "user2"]  # GitHub users allowed to create issues
+linear-team = "TEAM-123"       # Linear team ID (for "linear" backend)
+linear-project = "PROJECT-456" # Linear project ID (optional)
 ```
 
 ### Project Configuration
+
+Configure projects via the CLI or directly in `config.toml`:
 
 | Key | Values | Description |
 |-----|--------|-------------|
 | `max-agents` | 1-100 | Maximum concurrent agents (default: 3) |
 | `autostart` | true/false | Start orchestration when daemon starts |
-| `issue-backend` | tk/gh/github | Issue tracking system |
+| `issue-backend` | tk/gh/github/linear | Issue tracking system |
 | `permissions-checker` | manual/llm | Permission authorization method |
+| `agent-backend` | claude/codex | Default CLI backend for agents |
+| `planner-backend` | claude/codex | CLI backend for planning agents |
+| `coding-backend` | claude/codex | CLI backend for coding agents |
+| `merge-strategy` | direct/pull-request | How completed work is merged |
+| `allowed-authors` | comma-separated | GitHub usernames allowed to create issues |
+| `linear-team` | string | Linear team ID (required for linear backend) |
+| `linear-project` | string | Linear project ID (optional) |
 
 Example:
 ```bash
 fab project config set myproject max-agents 5
 fab project config set myproject permissions-checker llm
 fab project config set myproject issue-backend gh
+fab project config set myproject merge-strategy pull-request
 ```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FAB_DIR` | Base directory for all fab data (see [Base Directory](#base-directory)) |
+| `FAB_SOCKET_PATH` | Override daemon socket path |
+| `FAB_PID_PATH` | Override daemon PID file path |
+| `FAB_AGENT_HOST_SOCKET_PATH` | Override agent host socket path |
+| `FAB_PROJECT` | Set project context for agent commands |
 
 ### Worktrees
 
