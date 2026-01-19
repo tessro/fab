@@ -11,7 +11,7 @@
 ## Components
 <!-- List and link to component documentation. -->
 
-- *No components documented yet. Use `pave new component <name>` to create one.*
+- [Issue Backends](components/issue-backends.md) - Pluggable issue tracking abstraction (tk, GitHub, Linear)
 
 ## Runbooks
 <!-- List and link to operational runbooks. -->
