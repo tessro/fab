@@ -39,15 +39,23 @@ type Issue struct {
 
 Issue backends are configured per-project in `~/.config/fab/config.toml`:
 
+### Project Configuration Keys
+
 | Key | Type | Description |
 |-----|------|-------------|
-| `issue-backend` | string | Backend type: `tk`, `github`, or `linear` |
-| `github-api-key` | string | GitHub token (or use `GITHUB_TOKEN`/`GH_TOKEN` env) |
-| `github-allowed-authors` | []string | GitHub usernames allowed to create issues |
-| `linear-api-key` | string | Linear API key (or use `LINEAR_API_KEY` env) |
+| `issue-backend` | string | Backend type: `tk`, `github`, `gh`, or `linear` |
+| `allowed-authors` | []string | Usernames allowed to create issues (GitHub or Linear) |
 | `linear-team` | string | Linear team ID (required for Linear backend) |
 | `linear-project` | string | Linear project ID (optional, scopes issues) |
-| `linear-allowed-authors` | []string | Linear usernames for filtering |
+
+### Provider API Keys
+
+API keys are configured globally under `[providers.<name>]`:
+
+| Provider | Config Key | Environment Variable |
+|----------|------------|---------------------|
+| GitHub | `[providers.github]` with `api-key` | `GITHUB_TOKEN` or `GH_TOKEN` |
+| Linear | `[providers.linear]` with `api-key` | `LINEAR_API_KEY` |
 
 ## Paths
 
@@ -82,9 +90,9 @@ $ go test ./internal/issue/tk -run TestParse -v
 The tk backend stores issues as markdown files in `.tickets/`:
 
 ```toml
-# Project config
-[projects.myproject]
-path = "/path/to/repo"
+[[projects]]
+name = "myproject"
+remote-url = "git@github.com:user/repo.git"
 issue-backend = "tk"
 ```
 
@@ -106,26 +114,33 @@ Description of the issue here.
 ### GitHub Backend Configuration
 
 ```toml
-# Global config
-github-api-key = "ghp_xxxxx"  # or use GITHUB_TOKEN env
+# Global provider config
+[providers.github]
+api-key = "ghp_xxxxx"  # or use GITHUB_TOKEN env
 
-[projects.myproject]
-path = "/path/to/repo"
-issue-backend = "github"
-github-allowed-authors = ["owner", "contributor"]
+# Project config
+[[projects]]
+name = "myproject"
+remote-url = "git@github.com:user/repo.git"
+issue-backend = "github"  # or "gh"
+allowed-authors = ["owner", "contributor"]
 ```
 
 ### Linear Backend Configuration
 
 ```toml
-# Global config
-linear-api-key = "lin_api_xxxxx"  # or use LINEAR_API_KEY env
+# Global provider config
+[providers.linear]
+api-key = "lin_api_xxxxx"  # or use LINEAR_API_KEY env
 
-[projects.myproject]
-path = "/path/to/repo"
+# Project config
+[[projects]]
+name = "myproject"
+remote-url = "git@github.com:user/repo.git"
 issue-backend = "linear"
 linear-team = "TEAM-UUID"
 linear-project = "PROJECT-UUID"  # optional
+allowed-authors = ["user@example.com"]  # optional
 ```
 
 ## Gotchas
@@ -134,6 +149,7 @@ linear-project = "PROJECT-UUID"  # optional
 - **GitHub/Linear backends**: Changes are immediate via API, `Commit()` is a no-op
 - **Priority mapping**: fab uses 0=low, 1=medium, 2=high; Linear uses inverted scale (1=urgent, 4=low)
 - **Dependencies**: tk uses explicit `deps` field; GitHub uses `blockedBy` API; Linear uses parent-child
+- **Collaboration features**: `fab issue comment` and `fab issue plan` require a backend that implements `IssueCollaborator`. Backends that don't support these features return `ErrNotSupported`.
 - **ErrNotSupported**: Backends may return this for unsupported operations
 
 ## Decisions
