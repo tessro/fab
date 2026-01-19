@@ -1,4 +1,4 @@
-.PHONY: build install clean test lint e2e
+.PHONY: build install clean test lint e2e docs site clean-docs
 
 BINARY := fab
 VERSION ?= dev
@@ -25,3 +25,11 @@ e2e:
 
 lint:
 	golangci-lint run
+
+docs:
+	go run ./cmd/docsite --source docs --out site/public/docs
+
+site: docs
+
+clean-docs:
+	rm -rf site/public/docs

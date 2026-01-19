@@ -298,6 +298,21 @@ fab plan list
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
 
+### Building the Site
+
+The project website includes generated HTML documentation from the `docs/` directory. Generated files are not committed to git.
+
+```bash
+# Generate HTML docs from docs/ into site/public/docs/
+make docs
+
+# Build the full site (currently just generates docs)
+make site
+
+# Clean generated docs
+make clean-docs
+```
+
 ## License
 
 MIT
