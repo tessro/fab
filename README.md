@@ -6,7 +6,7 @@ A coding agent supervisor that manages multiple Claude Code or Codex instances a
 
 - 🤖 **Multi-agent orchestration** - Run multiple Claude Code or Codex agents in parallel across different projects
 - 🌲 **Elastic worktree pool** - Each agent gets its own git worktree; pool size scales from 1-100 agents per project
-- 🎫 **Pluggable issue backends** - Automatic task assignment from tk or GitHub Issues
+- 🎫 **Pluggable issue backends** - Automatic task assignment from tk, GitHub Issues, or Linear
 - ✅ **Done detection** - Recognizes when agents complete tasks and recycles them for new work
 - 📺 **Interactive TUI** - Monitor and interact with all agents from a single terminal interface
 - 🛡️ **Strong permission controls** - TOML-based rule engine with pattern matching for fine-grained access control
@@ -83,6 +83,7 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab project stop [name] [--all]` | Stop orchestration |
 | `fab project remove <name>` | Unregister a project |
 | `fab project config show <project>` | Show all configuration |
+| `fab project config get <project> <key>` | Get a configuration value |
 | `fab project config set <project> <key> <value>` | Set configuration |
 
 ### Agents
@@ -94,8 +95,8 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab agent claim <ticket-id>` | Claim a ticket (used by agents) |
 | `fab agent done` | Signal task completion (used by agents) |
 | `fab agent describe <description>` | Set agent status (used by agents) |
-| `fab agent plan start <prompt>` | Start a planning agent |
-| `fab agent plan start --project <name> <prompt>` | Plan in a project worktree |
+| `fab agent plan <prompt>` | Start a planning agent |
+| `fab agent plan --project <name> <prompt>` | Plan in a project worktree |
 | `fab agent plan list` | List planning agents |
 | `fab agent plan stop <id>` | Stop a planning agent |
 
@@ -107,7 +108,11 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab issue show <id>` | Show issue details |
 | `fab issue ready` | List ready/unblocked issues |
 | `fab issue create <title>` | Create a new issue |
+| `fab issue update <id>` | Update an issue |
 | `fab issue close <id>` | Close an issue |
+| `fab issue commit` | Commit and push issue changes |
+| `fab issue comment <id> --body "..."` | Add a comment to an issue |
+| `fab issue plan <id> --body "..."` | Upsert a plan section in an issue |
 
 ### Plan Storage
 
@@ -117,6 +122,15 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab plan read <id>` | Read a stored plan |
 | `fab plan list` | List stored plans |
 
+### Manager
+
+| Command | Description |
+|---------|-------------|
+| `fab manager start <project>` | Start the manager agent for a project |
+| `fab manager stop <project>` | Stop the manager agent |
+| `fab manager status <project>` | Show manager agent status |
+| `fab manager clear <project>` | Clear the manager agent's context |
+
 ### Other
 
 | Command | Description |
@@ -125,6 +139,7 @@ go install github.com/tessro/fab/cmd/fab@latest
 | `fab tui` / `fab attach` | Launch interactive TUI |
 | `fab branch cleanup` | Clean up merged fab/* branches |
 | `fab claims` | List claimed tickets |
+| `fab version` | Print version information |
 
 ## How It Works
 
@@ -318,10 +333,10 @@ Planning agents explore codebases and design implementation approaches without c
 
 ```bash
 # Start a planning session
-fab agent plan start "Add user authentication with OAuth"
+fab agent plan "Add user authentication with OAuth"
 
 # Plan within a specific project's worktree
-fab agent plan start --project myapp "Implement dark mode"
+fab agent plan --project myapp "Implement dark mode"
 
 # List running planning agents
 fab agent plan list
