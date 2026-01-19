@@ -51,21 +51,30 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 | `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
 | `fab agent done` | Signal task completion (called by agents) |
 | `fab agent describe "<text>"` | Set agent description (called by agents) |
-| `fab agent plan start <prompt>` | Start a planning agent |
+| `fab agent plan <prompt>` | Start a planning agent |
 | `fab agent plan list` | List planning agents |
 | `fab agent plan stop <id>` | Stop a planning agent |
+| **Manager Agent** | |
+| `fab manager start <project>` | Start the manager agent for a project |
+| `fab manager stop <project>` | Stop the manager agent |
+| `fab manager status <project>` | Show manager agent status |
+| `fab manager clear <project>` | Clear manager agent's context window |
 | **Issue/Task Management** | |
 | `fab issue list` | List all issues |
 | `fab issue show <id>` | Show issue details |
 | `fab issue ready` | List unblocked issues ready to work |
-| `fab issue create` | Create a new issue |
+| `fab issue create <title>` | Create a new issue |
 | `fab issue update <id>` | Update an issue |
 | `fab issue close <id>` | Close an issue |
-| `fab issue commit <id> <sha>` | Record a commit for an issue |
+| `fab issue commit` | Commit and push pending issue changes |
+| `fab issue comment <id>` | Add a comment to an issue |
+| `fab issue plan <id>` | Upsert a plan section in an issue |
 | **Plan Storage** | |
 | `fab plan write` | Write plan from stdin (uses FAB_AGENT_ID) |
 | `fab plan read <id>` | Read a stored plan |
 | `fab plan list` | List stored plans |
+| **Hooks** | |
+| `fab hook <hook-name>` | Handle Claude Code hook callbacks (PreToolUse, Stop) |
 | **Other** | |
 | `fab claims` | List active ticket claims |
 | `fab branch cleanup` | Clean up merged branches |
@@ -73,11 +82,14 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 
 ## Agent Types
 
+All agent types support both Claude and Codex backends via the `agent-backend`, `planner-backend`, and `coding-backend` config keys.
+
 ### Task Agents
 Standard agents that work on issues. Each runs in an isolated worktree and:
 - Claims issues via `fab agent claim <id>`
 - Signals completion via `fab agent done`
 - Counts against `max-agents` limit per project
+- Uses `coding-backend` config (falls back to `agent-backend`, then `claude`)
 
 ### Planner Agents
 Specialized agents for design and exploration work:
@@ -86,13 +98,16 @@ Specialized agents for design and exploration work:
 - Plans stored in `~/.fab/plans/<id>.md` (or `$FAB_DIR/plans/`)
 - Do NOT count against `max-agents` limit
 - Identified by `plan:` prefix in TUI
-- Managed via `fab agent plan start/list/stop`
+- Managed via `fab agent plan` commands
+- Uses `planner-backend` config (falls back to `agent-backend`, then `claude`)
 
 ### Manager Agents
 Interactive agents for user coordination:
 - One per project, runs in dedicated `wt-manager` worktree
 - For direct user conversation and task delegation
 - Persists across sessions
+- Managed via `fab manager` commands
+- Uses `agent-backend` config (defaults to `claude`)
 
 ## TUI Layout
 
@@ -137,13 +152,20 @@ Interactive agents for user coordination:
 
 **Registry** (`~/.config/fab/config.toml`):
 ```toml
-[projects.myapp]
+[[projects]]
+name = "myapp"
 remote-url = "git@github.com:user/myapp.git"
 max-agents = 3
-issue-backend = "tk"
+issue-backend = "tk"  # or "github", "gh", "linear"
 autostart = true
-permissions-checker = "manual"
+permissions-checker = "manual"  # or "llm"
 allowed-authors = ["user@example.com"]
+agent-backend = "claude"  # or "codex" (fallback for all agent types)
+planner-backend = "claude"  # or "codex" (for planning agents)
+coding-backend = "claude"  # or "codex" (for coding/task agents)
+merge-strategy = "direct"  # or "pull-request"
+linear-team = ""  # Linear team ID (required for "linear" backend)
+linear-project = ""  # Linear project ID (optional)
 ```
 
 **Project directory structure** (`~/.fab/projects/<name>/`):
@@ -170,27 +192,36 @@ The issue backend abstraction (`internal/issue/`) supports pluggable task tracki
 
 ```go
 type Backend interface {
-    ReadBackend
-    WriteBackend
+    IssueReader
+    IssueWriter
 }
 
-type ReadBackend interface {
+type IssueReader interface {
+    Name() string
     Get(ctx context.Context, id string) (*Issue, error)
-    List(ctx context.Context, opts ListOptions) ([]*Issue, error)
+    List(ctx context.Context, filter ListFilter) ([]*Issue, error)
     Ready(ctx context.Context) ([]*Issue, error)  // Unblocked issues
 }
 
-type WriteBackend interface {
-    Create(ctx context.Context, i *Issue) error
-    Update(ctx context.Context, i *Issue) error
+type IssueWriter interface {
+    Create(ctx context.Context, params CreateParams) (*Issue, error)
+    CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
+    Update(ctx context.Context, id string, params UpdateParams) (*Issue, error)
     Close(ctx context.Context, id string) error
-    Commit(ctx context.Context, id, sha string) error
+    Commit(ctx context.Context) error  // Stage, commit, push pending changes
+}
+
+type IssueCollaborator interface {
+    AddComment(ctx context.Context, id string, body string) error
+    UpsertPlanSection(ctx context.Context, id string, planContent string) error
+    CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
 }
 ```
 
 **Implementations:**
 - **tk** (default): Plain text TOML files in `.tickets/` directory
-- **gh**: GitHub Issues API integration
+- **gh** / **github**: GitHub Issues API integration
+- **linear**: Linear API integration (requires `linear-team` config)
 
 **Issue type:**
 ```go
@@ -241,14 +272,13 @@ Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
 **Message categories:**
 - Server management: `ping`, `shutdown`
 - Supervisor control: `start`, `stop`, `status`
-- Project management: `project.add`, `project.remove`, `project.list`, `project.config.*`
-- Agent management: `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.done`, `agent.claim`, `agent.describe`
+- Project management: `project.add`, `project.remove`, `project.list`, `project.config.show`, `project.config.get`, `project.config.set`
+- Agent management: `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.done`, `agent.claim`, `agent.describe`, `agent.idle`, `agent.input`, `agent.output`
 - TUI streaming: `attach`, `detach`, `agent.chat_history`, `agent.send_message`
-- Orchestrator: `orchestrator.actions`, `orchestrator.approve`, `orchestrator.reject`
 - Permissions: `permission.request`, `permission.respond`, `permission.list`
 - Questions: `question.request`, `question.respond`
 - Planning: `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history`
-- Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`
+- Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`, `manager.clear_history`
 - Stats: `stats`, `claim.list`, `commit.list`
 
 ### Agent Host Protocol
@@ -337,8 +367,8 @@ fab/
 │   │   ├── server.go            # server start/stop/restart
 │   │   ├── project.go           # project add/remove/list/start/stop/config
 │   │   ├── agent.go             # agent list/abort/claim/done/describe
-│   │   ├── issue.go             # issue list/show/ready/create/update/close/commit
-│   │   ├── plan.go              # plan start/list/stop/chat
+│   │   ├── issue.go             # issue list/show/ready/create/update/close/commit/comment/plan
+│   │   ├── plan.go              # plan write/read/list (storage)
 │   │   ├── manager.go           # manager commands
 │   │   ├── attach.go            # tui/attach command
 │   │   ├── status.go            # status command
@@ -378,7 +408,8 @@ fab/
 │   │   ├── issue.go             # Issue type
 │   │   ├── resolver.go          # Backend resolution
 │   │   ├── tk/                  # tk backend (TOML files)
-│   │   └── gh/                  # GitHub backend
+│   │   ├── gh/                  # GitHub backend
+│   │   └── linear/              # Linear backend
 │   ├── planner/                 # Planning agents
 │   │   ├── planner.go           # Planner type
 │   │   └── manager.go           # Planner registry
