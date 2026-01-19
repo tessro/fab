@@ -9,12 +9,6 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 3. Each agent works in isolation—implementing, testing, and committing changes
 4. When finished, fab rebases and merges their work to main (or opens a PR)
 
-## Guides
-
-| Guide | Description |
-|-------|-------------|
-| [Codex CLI Integration](./codex-integration.md) | Using OpenAI's Codex CLI as an agent backend |
-
 ## Components
 
 | Component | Description |
@@ -25,6 +19,13 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 | [Issue Backends](./components/issue-backends.md) | Pluggable issue tracking: tk (file-based), GitHub Issues, or Linear |
 | [Permissions](./components/permissions.md) | Configure which agent actions are auto-approved, denied, or require manual review |
 | [TUI](./components/tui.md) | Interactive Bubbletea-based interface for monitoring and managing fab agents |
+
+## Integrations
+
+| Integration | Description |
+|-------------|-------------|
+| [Claude Code](./components/integrations/claude.md) | Default agent backend using Anthropic's Claude Code CLI with hook-based permission handling and bidirectional stdin communication |
+| [Codex CLI](./components/integrations/codex.md) | Alternative agent backend using OpenAI's Codex CLI with event-based JSONL protocol and thread resume flow |
 
 ## Quick Reference
 
