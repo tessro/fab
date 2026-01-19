@@ -20,7 +20,7 @@ Use the **Task tool** to spawn a sub-agent for code review. This provides a fres
 Use the Task tool with `subagent_type: "general-purpose"` and a prompt like:
 
 ```
-Review the code changes in this branch for a pull request. Run `git diff main...HEAD` to see all changes.
+Review all code changes between main and the current branch. Run `git diff main...HEAD` to see all changes.
 
 Check each of these areas:
 
@@ -60,6 +60,6 @@ Run the test suite one more time to ensure your fixes didn't introduce new issue
 After completing the review process, summarize:
 - What the sub-agent found
 - What you fixed (be specific - list each fix)
-- Confidence level that the implementation is ready to merge
+- Confidence level that the implementation is complete and ready
 
 **IMPORTANT:** You may NOT proceed to commit or close the issue until ALL review feedback has been addressed. If the review found issues, you must fix them first. Do not proceed with unresolved feedback.
