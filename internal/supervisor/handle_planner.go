@@ -252,6 +252,7 @@ func (s *Supervisor) handlePlanChatHistory(_ context.Context, req *daemon.Reques
 			ToolName:   e.ToolName,
 			ToolInput:  e.ToolInput,
 			ToolResult: e.ToolResult,
+			IsError:    e.IsError,
 			Timestamp:  e.Timestamp.Format(time.RFC3339),
 		}
 	}

@@ -355,6 +355,7 @@ type ChatEntryDTO struct {
 	ToolName   string `json:"tool_name,omitempty"`   // Tool name (e.g., "Bash")
 	ToolInput  string `json:"tool_input,omitempty"`  // Tool input summary
 	ToolResult string `json:"tool_result,omitempty"` // Tool output
+	IsError    bool   `json:"is_error,omitempty"`    // True if tool result is an error
 	Timestamp  string `json:"timestamp"`             // RFC3339 format
 }
 

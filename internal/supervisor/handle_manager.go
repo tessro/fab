@@ -329,6 +329,7 @@ func (s *Supervisor) handleManagerChatHistory(_ context.Context, req *daemon.Req
 			ToolName:   e.ToolName,
 			ToolInput:  e.ToolInput,
 			ToolResult: e.ToolResult,
+			IsError:    e.IsError,
 			Timestamp:  e.Timestamp.Format(time.RFC3339),
 		}
 	}

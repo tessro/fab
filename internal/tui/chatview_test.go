@@ -12,6 +12,7 @@ func TestSummarizeToolResult(t *testing.T) {
 		toolName string
 		result   string
 		maxWidth int
+		isError  bool
 		want     string
 	}{
 		{
@@ -91,13 +92,21 @@ func TestSummarizeToolResult(t *testing.T) {
 			maxWidth: 80,
 			want:     "some result",
 		},
+		{
+			name:     "Error shows full output",
+			toolName: "Bash",
+			result:   "line1\nline2\nline3\nline4\nline5\nline6\nline7",
+			maxWidth: 80,
+			isError:  true,
+			want:     "line1\n     line2\n     line3\n     line4\n     line5\n     line6\n     line7",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := summarizeToolResult(tt.toolName, tt.result, tt.maxWidth)
+			got := summarizeToolResult(tt.toolName, tt.result, tt.maxWidth, tt.isError)
 			if got != tt.want {
-				t.Errorf("summarizeToolResult(%q, result, %d) = %q, want %q", tt.toolName, tt.maxWidth, got, tt.want)
+				t.Errorf("summarizeToolResult(%q, result, %d, %v) = %q, want %q", tt.toolName, tt.maxWidth, tt.isError, got, tt.want)
 			}
 		})
 	}

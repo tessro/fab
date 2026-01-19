@@ -137,6 +137,7 @@ func (s *Supervisor) broadcastChatEntry(agentID, project string, entry agent.Cha
 		ToolName:   entry.ToolName,
 		ToolInput:  entry.ToolInput,
 		ToolResult: entry.ToolResult,
+		IsError:    entry.IsError,
 		Timestamp:  entry.Timestamp.Format(time.RFC3339),
 	}
 	srv.Broadcast(&daemon.StreamEvent{
@@ -255,6 +256,7 @@ func (s *Supervisor) broadcastManagerChatEntry(projectName string, entry agent.C
 		ToolName:   entry.ToolName,
 		ToolInput:  entry.ToolInput,
 		ToolResult: entry.ToolResult,
+		IsError:    entry.IsError,
 		Timestamp:  entry.Timestamp.Format(time.RFC3339),
 	}
 	srv.Broadcast(&daemon.StreamEvent{
@@ -332,6 +334,7 @@ func (s *Supervisor) broadcastPlannerChatEntry(plannerID, project string, entry 
 		ToolName:   entry.ToolName,
 		ToolInput:  entry.ToolInput,
 		ToolResult: entry.ToolResult,
+		IsError:    entry.IsError,
 		Timestamp:  entry.Timestamp.Format(time.RFC3339),
 	}
 	srv.Broadcast(&daemon.StreamEvent{

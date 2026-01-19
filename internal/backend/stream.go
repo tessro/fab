@@ -89,6 +89,7 @@ type ChatEntry struct {
 	ToolName   string    // For tool entries (e.g., "Bash")
 	ToolInput  string    // Tool input summary
 	ToolResult string    // Tool output
+	IsError    bool      // True if tool result is an error
 	Timestamp  time.Time // When the entry was created
 }
 
@@ -145,6 +146,7 @@ func (m *StreamMessage) ToChatEntries() []ChatEntry {
 			entries = append(entries, ChatEntry{
 				Role:       "tool",
 				ToolResult: string(block.Content),
+				IsError:    block.IsError,
 				Timestamp:  now,
 			})
 		}

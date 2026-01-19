@@ -442,7 +442,7 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) s
 			if toolName == "" {
 				toolName = lastToolName
 			}
-			resultLine := "  " + chatResultStyle.Render("->") + " " + summarizeToolResult(toolName, entry.ToolResult, v.width-6)
+			resultLine := "  " + chatResultStyle.Render("->") + " " + summarizeToolResult(toolName, entry.ToolResult, v.width-6, entry.IsError)
 			parts = append(parts, resultLine)
 		}
 
@@ -522,8 +522,14 @@ func truncateResult(result string, maxWidth int) string {
 
 // summarizeToolResult returns a one-line summary for certain tool results.
 // For Read and Grep tools, it shows line counts instead of content.
+// For error results, it shows the full output to help diagnose failures.
 // For other tools, it uses the existing truncateResult behavior.
-func summarizeToolResult(toolName, result string, maxWidth int) string {
+func summarizeToolResult(toolName, result string, maxWidth int, isError bool) string {
+	// Show full output for errors (e.g., test failures)
+	if isError {
+		return formatFullResult(result, maxWidth)
+	}
+
 	switch toolName {
 	case "Read":
 		// Count lines in the result
@@ -551,6 +557,31 @@ func summarizeToolResult(toolName, result string, maxWidth int) string {
 	default:
 		return truncateResult(result, maxWidth)
 	}
+}
+
+// formatFullResult formats a result for display without line truncation.
+// Used for error output where we need to see the full content.
+func formatFullResult(result string, maxWidth int) string {
+	lines := strings.Split(result, "\n")
+
+	// Truncate each line to terminal width
+	for i, line := range lines {
+		if len(line) > maxWidth {
+			lines[i] = line[:maxWidth-3] + "..."
+		}
+	}
+
+	// Join with indentation for continuation lines
+	var parts []string
+	for i, line := range lines {
+		if i == 0 {
+			parts = append(parts, line)
+		} else {
+			parts = append(parts, "     "+line)
+		}
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 // formatLineCount formats a line count for display.
