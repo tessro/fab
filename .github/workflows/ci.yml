@@ -47,3 +47,17 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pave
+        run: cargo install --git https://github.com/tessro/pave --tag v0.1.0
+
+      - name: Check documentation
+        run: pave check --format github
