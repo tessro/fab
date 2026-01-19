@@ -21,12 +21,9 @@ require_verification = true
 # Require examples sections in documents
 require_examples = true
 
-# Enable gradual adoption mode (warnings instead of errors)
-gradual = true
-
-# Date until gradual mode is active (after this, full enforcement)
-gradual_until = "2026-04-18"
+# Gradual adoption mode disabled - full enforcement active
+gradual = false
 
 [mapping]
-# Exclude non-PAVED docs from validation during gradual adoption
+# No exclusions - all docs are PAVE-compliant
 exclude = []
