@@ -56,6 +56,13 @@ func TestCodexBackend_BuildCommand(t *testing.T) {
 		if strings.Contains(args, "resume") {
 			t.Errorf("BuildCommand() args should not contain 'resume' without ThreadID, got %v", cmd.Args)
 		}
+		// Should include reasoning effort configuration
+		if !strings.Contains(args, "model_reasoning_effort") {
+			t.Errorf("BuildCommand() args should contain 'model_reasoning_effort', got %v", cmd.Args)
+		}
+		if !strings.Contains(args, "xhigh") {
+			t.Errorf("BuildCommand() args should contain 'xhigh', got %v", cmd.Args)
+		}
 	})
 
 	t.Run("with initial prompt", func(t *testing.T) {
@@ -103,6 +110,10 @@ func TestCodexBackend_BuildCommand(t *testing.T) {
 		}
 		if !strings.Contains(args, "--full-auto") {
 			t.Errorf("BuildCommand() args should contain '--full-auto', got %v", cmd.Args)
+		}
+		// Should include reasoning effort configuration
+		if !strings.Contains(args, "model_reasoning_effort") {
+			t.Errorf("BuildCommand() args should contain 'model_reasoning_effort', got %v", cmd.Args)
 		}
 	})
 

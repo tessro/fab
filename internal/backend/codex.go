@@ -20,9 +20,9 @@ func (b *CodexBackend) BuildCommand(cfg CommandConfig) (*exec.Cmd, error) {
 
 	// If ThreadID is provided, use "exec resume" to continue the conversation
 	if cfg.ThreadID != "" {
-		args = []string{"exec", "resume", "--json", "--full-auto", cfg.ThreadID}
+		args = []string{"exec", "resume", "--json", "--full-auto", "-c", `model_reasoning_effort="xhigh"`, cfg.ThreadID}
 	} else {
-		args = []string{"exec", "--json", "--full-auto"}
+		args = []string{"exec", "--json", "--full-auto", "-c", `model_reasoning_effort="xhigh"`}
 	}
 
 	// Add prompt if provided (required for resume, optional for new exec)
@@ -232,12 +232,12 @@ type codexEvent struct {
 // codexItem represents an item in item.started/item.completed events.
 type codexItem struct {
 	ID               string `json:"id"`
-	Type             string `json:"type"`             // "reasoning", "command_execution", "agent_message"
-	Text             string `json:"text"`             // For reasoning, agent_message
-	Command          string `json:"command"`          // For command_execution
+	Type             string `json:"type"`    // "reasoning", "command_execution", "agent_message"
+	Text             string `json:"text"`    // For reasoning, agent_message
+	Command          string `json:"command"` // For command_execution
 	AggregatedOutput string `json:"aggregated_output"`
-	ExitCode         *int   `json:"exit_code"`        // Pointer to distinguish 0 from absent
-	Status           string `json:"status"`           // "in_progress", "completed", "failed"
+	ExitCode         *int   `json:"exit_code"` // Pointer to distinguish 0 from absent
+	Status           string `json:"status"`    // "in_progress", "completed", "failed"
 }
 
 // codexUsage contains token usage from turn.completed events.
@@ -249,8 +249,8 @@ type codexUsage struct {
 
 // codexSubmission represents a submission to Codex stdin.
 type codexSubmission struct {
-	ID string   `json:"id"`
-	Op codexOp  `json:"op"`
+	ID string  `json:"id"`
+	Op codexOp `json:"op"`
 }
 
 // codexOp represents an operation in a submission.
