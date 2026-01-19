@@ -24,6 +24,7 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 | [Orchestrator](./components/orchestrator.md) | Per-project lifecycle manager that spawns agents and coordinates merges |
 | [Issue Backends](./components/issue-backends.md) | Pluggable issue tracking: tk (file-based), GitHub Issues, or Linear |
 | [Permissions](./components/permissions.md) | Configure which agent actions are auto-approved, denied, or require manual review |
+| [TUI](./components/tui.md) | Interactive Bubbletea-based interface for monitoring and managing fab agents |
 
 ## Quick Reference
 
