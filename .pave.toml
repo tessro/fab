@@ -1,0 +1,35 @@
+# Paver configuration file
+# See https://github.com/tessro/pave for documentation
+
+[pave]
+version = "0.1"
+
+[docs]
+# Root directory for documentation
+root = "docs"
+
+# Directory containing document templates
+templates = "templates"
+
+[rules]
+# Maximum lines per document
+max_lines = 300
+
+# Require verification sections in documents
+require_verification = true
+
+# Require examples sections in documents
+require_examples = true
+
+# Enable gradual adoption mode (warnings instead of errors)
+gradual = true
+
+# Date until gradual mode is active (after this, full enforcement)
+gradual_until = "2026-04-18"
+
+[mapping]
+# Exclude non-PAVED docs from validation during gradual adoption
+exclude = [
+    "docs/codex-integration.md",
+    "docs/codex-sample-output.jsonl",
+]
