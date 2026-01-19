@@ -19,14 +19,14 @@ The Supervisor implements `daemon.Handler` and processes requests via the `Handl
 |----------|----------|-------------|
 | Server | `ping`, `shutdown` | Health check and graceful shutdown |
 | Orchestration | `start`, `stop`, `status`, `agent.done` | Start/stop project orchestration, agent task completion |
-| Projects | `project.add`, `project.remove`, `project.list`, `project.set`, `project.config.*` | Manage registered projects |
+| Projects | `project.add`, `project.remove`, `project.list`, `project.set` (deprecated), `project.config.*` | Manage registered projects |
 | Agents | `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.input`, `agent.output`, `agent.send_message`, `agent.chat_history`, `agent.describe`, `agent.idle` | Control agent lifecycle |
 | Streaming | `attach`, `detach` | TUI streaming connections |
 | Claims | `agent.claim`, `claim.list` | Ticket claim management |
 | Commits | `commit.list` | List commits made by agents |
 | Stats | `stats` | Aggregate agent statistics |
 | Permissions | `permission.request`, `permission.respond`, `permission.list` | Tool permission handling |
-| Questions | `user_question.request`, `user_question.respond` | AskUserQuestion tool handling |
+| Questions | `question.request`, `question.respond` | AskUserQuestion tool handling |
 | Manager | `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`, `manager.clear_history` | Per-project manager agents |
 | Planner | `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history` | Issue planning agents |
 
