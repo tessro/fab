@@ -2,6 +2,8 @@
 
 fab is a coding agent supervisor that manages multiple Claude Code or Codex instances across projects with automatic task orchestration. It spawns agents in isolated git worktrees, assigns them issues from your tracker, and coordinates their work back to your main branch.
 
+**New to fab?** Start with the [Getting Started](./getting-started.md) guide.
+
 ## How It Works
 
 1. fab creates a pool of git worktrees for each registered project
@@ -42,4 +44,4 @@ fab project start myproject
 fab tui
 ```
 
-See the [README](../README.md) for installation, full CLI reference, and configuration examples.
+See the [Getting Started](./getting-started.md) guide for installation and the [README](../README.md) for full CLI reference.
