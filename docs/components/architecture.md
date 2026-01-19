@@ -1,8 +1,10 @@
-# 🚌 fab - Coding Agent Supervisor
+# Architecture
 
-A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple projects, with automatic task orchestration via pluggable issue backends.
+## Purpose
 
-## Architecture
+This document provides a high-level architectural overview of fab, showing how its components fit together to supervise coding agents across multiple projects.
+
+## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -27,72 +29,23 @@ A Go 1.25 CLI tool that supervises multiple Claude Code agents across multiple p
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `fab server start` | Start the daemon process |
-| `fab server stop` | Stop the daemon |
-| `fab server restart` | Restart the daemon |
-| `fab status` | Show daemon, supervisor, and agent status |
-| `fab tui` / `fab attach` | Launch interactive TUI |
-| **Project Management** | |
-| `fab project add <remote-url>` | Register a project by git remote URL |
-| `fab project remove <name>` | Unregister a project |
-| `fab project list` | List registered projects |
-| `fab project start <name>` | Start orchestration for a project |
-| `fab project stop <name>` | Stop orchestration for a project |
-| `fab project config show <name>` | Show project configuration |
-| `fab project config get <name> <key>` | Get a config value |
-| `fab project config set <name> <key> <value>` | Set a config value |
-| **Agent Management** | |
-| `fab agent list` | List all agents |
-| `fab agent abort <id>` | Abort/kill an agent |
-| `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
-| `fab agent done` | Signal task completion (called by agents) |
-| `fab agent describe "<text>"` | Set agent description (called by agents) |
-| `fab agent plan <prompt>` | Start a planning agent |
-| `fab agent plan list` | List planning agents |
-| `fab agent plan stop <id>` | Stop a planning agent |
-| **Manager Agent** | |
-| `fab manager start <project>` | Start the manager agent for a project |
-| `fab manager stop <project>` | Stop the manager agent |
-| `fab manager status <project>` | Show manager agent status |
-| `fab manager clear <project>` | Clear manager agent's context window |
-| **Issue/Task Management** | |
-| `fab issue list` | List all issues |
-| `fab issue show <id>` | Show issue details |
-| `fab issue ready` | List unblocked issues ready to work |
-| `fab issue create <title>` | Create a new issue |
-| `fab issue update <id>` | Update an issue |
-| `fab issue close <id>` | Close an issue |
-| `fab issue commit` | Commit and push pending issue changes |
-| `fab issue comment <id>` | Add a comment to an issue |
-| `fab issue plan <id>` | Upsert a plan section in an issue |
-| **Plan Storage** | |
-| `fab plan write` | Write plan from stdin (uses FAB_AGENT_ID) |
-| `fab plan read <id>` | Read a stored plan |
-| `fab plan list` | List stored plans |
-| **Hooks** | |
-| `fab hook <hook-name>` | Handle Claude Code hook callbacks (PreToolUse, Stop) |
-| **Other** | |
-| `fab claims` | List active ticket claims |
-| `fab branch cleanup` | Clean up merged branches |
-| `fab version` | Show version information |
-
 ## Agent Types
 
 All agent types support both Claude and Codex backends via the `agent-backend`, `planner-backend`, and `coding-backend` config keys.
 
 ### Task Agents
+
 Standard agents that work on issues. Each runs in an isolated worktree and:
+
 - Claims issues via `fab agent claim <id>`
 - Signals completion via `fab agent done`
 - Counts against `max-agents` limit per project
 - Uses `coding-backend` config (falls back to `agent-backend`, then `claude`)
 
 ### Planner Agents
+
 Specialized agents for design and exploration work:
+
 - Run in plan mode with codebase exploration tools
 - Write plans explicitly via `fab plan write` (reads from stdin)
 - Plans stored in `~/.fab/plans/<id>.md` (or `$FAB_DIR/plans/`)
@@ -102,189 +55,18 @@ Specialized agents for design and exploration work:
 - Uses `planner-backend` config (falls back to `agent-backend`, then `claude`)
 
 ### Manager Agents
+
 Interactive agents for user coordination:
+
 - One per project, runs in dedicated `wt-manager` worktree
 - For direct user conversation and task delegation
 - Persists across sessions
 - Managed via `fab manager` commands
 - Uses `agent-backend` config (defaults to `claude`)
 
-## TUI Layout
+## Agent Host Protocol
 
-```
-┌─ 🚌 fab ──────────────────────────────────────────────────────────────────┐
-│ 6 agents (5 run, 1 idle)  │  12 closed  8 commits  │  Usage: ████░░ 67%  │
-├───────────────────┬───────────────────────────────────────────────────────┤
-│ myapp             │                                                       │
-│ ────────────────  │  $ claude                                             │
-│ > agent-a1b [R]   │  I'll help you implement that feature.               │
-│   agent-c2d [R]   │                                                       │
-│   agent-e3f [I]   │  Let me start by reading the code...                 │
-│                   │                                                       │
-│ api-svc           │  Reading src/handlers/auth.go...                     │
-│ ────────────────  │                                                       │
-│   agent-g4h [R]   │  I see the authentication handler. Now let me...     │
-│   agent-i5j [D]   │                                                       │
-│                   │                                                       │
-│ plan:abc123 [R]   │                                                       │
-│ ────────────────  │                                                       │
-├───────────────────┴───────────────────────────────────────────────────────┤
-│ j/k:nav  Enter:chat  a:approve  r:reject  d:delete  q:quit               │
-└───────────────────────────────────────────────────────────────────────────┘
-```
-
-**Key features:**
-- Top bar: status summary (agent counts), session stats (tickets closed, commits made), usage meter
-- Left rail: all agents grouped by project, state indicators [S]tarting/[R]unning/[I]dle/[D]one
-- Main pane: selected agent's chat view (scrollable, interactive)
-- Permission requests and user questions displayed inline
-
-**Key bindings:**
-- `j/k` or arrows: navigate agents
-- `Enter`: open input line for chat
-- `y`: approve pending permission
-- `n`: deny pending permission
-- `d`: delete selected agent
-- `Esc`: cancel input / return to navigation
-- `q`: quit TUI (detach, agents keep running)
-
-## Project & Worktree Model
-
-**Registry** (`~/.config/fab/config.toml`):
-```toml
-[[projects]]
-name = "myapp"
-remote-url = "git@github.com:user/myapp.git"
-max-agents = 3
-issue-backend = "tk"  # or "github", "gh", "linear"
-autostart = true
-permissions-checker = "manual"  # or "llm"
-allowed-authors = ["user@example.com"]
-agent-backend = "claude"  # or "codex" (fallback for all agent types)
-planner-backend = "claude"  # or "codex" (for planning agents)
-coding-backend = "claude"  # or "codex" (for coding/task agents)
-merge-strategy = "direct"  # or "pull-request"
-linear-team = ""  # Linear team ID (required for "linear" backend)
-linear-project = ""  # Linear project ID (optional)
-```
-
-**Project directory structure** (`~/.fab/projects/<name>/`):
-```
-myapp/
-├── repo/                    # Cloned git repository
-│   └── .tickets/            # Issue files (tk backend)
-├── worktrees/               # Agent worktrees
-│   ├── wt-abc123/           # Agent worktree
-│   └── wt-def456/           # Another agent worktree
-└── manager/                 # Manager agent worktree
-    └── wt-manager/
-```
-
-**Worktree pool behavior:**
-- Pool created when project is added (size = `max-agents`)
-- Each agent gets exclusive worktree from pool
-- Worktree returned to pool when agent signals `fab agent done`
-- Orchestrator handles merge to main and worktree reset
-
-## Issue Backend System
-
-The issue backend abstraction (`internal/issue/`) supports pluggable task tracking:
-
-```go
-type Backend interface {
-    IssueReader
-    IssueWriter
-}
-
-type IssueReader interface {
-    Name() string
-    Get(ctx context.Context, id string) (*Issue, error)
-    List(ctx context.Context, filter ListFilter) ([]*Issue, error)
-    Ready(ctx context.Context) ([]*Issue, error)  // Unblocked issues
-}
-
-type IssueWriter interface {
-    Create(ctx context.Context, params CreateParams) (*Issue, error)
-    CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
-    Update(ctx context.Context, id string, params UpdateParams) (*Issue, error)
-    Close(ctx context.Context, id string) error
-    Commit(ctx context.Context) error  // Stage, commit, push pending changes
-}
-
-type IssueCollaborator interface {
-    AddComment(ctx context.Context, id string, body string) error
-    UpsertPlanSection(ctx context.Context, id string, planContent string) error
-    CreateSubIssue(ctx context.Context, parentID string, params CreateParams) (*Issue, error)
-}
-```
-
-**Implementations:**
-- **tk** (default): Plain text TOML files in `.tickets/` directory
-- **gh** / **github**: GitHub Issues API integration
-- **linear**: Linear API integration (requires `linear-team` config)
-
-**Issue type:**
-```go
-type Issue struct {
-    ID           string
-    Title        string
-    Description  string
-    Status       Status  // open, closed, blocked
-    Priority     int
-    Type         string
-    Dependencies []string
-    Labels       []string
-    Links        []Link
-    Created      time.Time
-    Updated      time.Time
-}
-```
-
-## Orchestrator Logic
-
-Each project gets an `Orchestrator` that manages the agent lifecycle:
-
-1. **Task polling**: Periodically checks `backend.Ready()` for unblocked issues
-2. **Agent spawning**: Creates agents up to `max-agents` with kickstart prompt
-3. **Claim tracking**: Prevents multiple agents claiming the same issue
-4. **Done handling**: On `fab agent done`:
-   - Merges agent's branch to main
-   - Records commit via `backend.Commit()`
-   - Returns worktree to pool
-   - Spawns replacement agent if tasks remain
-
-## Permission System
-
-Claude Code tool permissions can be handled via:
-
-1. **Manual**: TUI prompts user to approve/deny each permission request
-2. **LLM**: LLM evaluates requests for safety and task consistency
-3. **Rules**: Pattern-based rules in `permissions.toml`
-
-Permission requests flow through the `fab hook` command, which the Claude Code plugin calls before tool execution.
-
-## IPC Protocol
-
-### Daemon Protocol
-
-Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
-
-**Message categories:**
-- Server management: `ping`, `shutdown`
-- Supervisor control: `start`, `stop`, `status`
-- Project management: `project.add`, `project.remove`, `project.list`, `project.config.show`, `project.config.get`, `project.config.set`
-- Agent management: `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.done`, `agent.claim`, `agent.describe`, `agent.idle`, `agent.input`, `agent.output`
-- TUI streaming: `attach`, `detach`, `agent.chat_history`, `agent.send_message`
-- Permissions: `permission.request`, `permission.respond`, `permission.list`
-- Questions: `question.request`, `question.respond`
-- Planning: `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history`
-- Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`, `manager.clear_history`
-- Stats: `stats`, `claim.list`, `commit.list`
-
-### Agent Host Protocol
-
-Each agent runs in a host process with its own Unix socket at `~/.fab/hosts/<agent-id>.sock`.
-This allows the daemon to restart and reattach to running agents.
+Each agent runs in a host process with its own Unix socket at `~/.fab/hosts/<agent-id>.sock`. This allows the daemon to restart and reattach to running agents.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -314,13 +96,81 @@ This allows the daemon to restart and reattach to running agents.
 **Protocol version:** 1.0 (defined in `internal/agenthost/protocol.go`)
 
 **Message types:**
+
 - Host management: `host.ping`, `host.status`
 - Agent listing: `host.list`
 - Stream management: `host.attach`, `host.detach`
 - Agent communication: `host.send`
 - Lifecycle control: `host.stop`
 
-**Request/Response envelope:**
+**Socket path resolution:**
+
+1. `FAB_AGENT_HOST_SOCKET_PATH` environment variable (exact path)
+2. `FAB_DIR/hosts/<agent-id>.sock` (base dir override)
+3. `~/.fab/hosts/<agent-id>.sock` (default)
+
+## Project & Worktree Model
+
+**Registry** (`~/.config/fab/config.toml`):
+
+```toml
+[[projects]]
+name = "myapp"
+remote-url = "git@github.com:user/myapp.git"
+max-agents = 3
+issue-backend = "tk"  # or "github", "gh", "linear"
+autostart = true
+permissions-checker = "manual"  # or "llm"
+allowed-authors = ["user@example.com"]
+agent-backend = "claude"  # or "codex" (fallback for all agent types)
+planner-backend = "claude"  # or "codex" (for planning agents)
+coding-backend = "claude"  # or "codex" (for coding/task agents)
+merge-strategy = "direct"  # or "pull-request"
+linear-team = ""  # Linear team ID (required for "linear" backend)
+linear-project = ""  # Linear project ID (optional)
+```
+
+**Project directory structure** (`~/.fab/projects/<name>/`):
+
+```
+myapp/
+├── repo/                    # Cloned git repository
+│   └── .tickets/            # Issue files (tk backend)
+├── worktrees/               # Agent worktrees
+│   ├── wt-abc123/           # Agent worktree
+│   └── wt-def456/           # Another agent worktree
+└── manager/                 # Manager agent worktree
+    └── wt-manager/
+```
+
+**Worktree pool behavior:**
+
+- Pool created when project is added (size = `max-agents`)
+- Each agent gets exclusive worktree from pool
+- Worktree returned to pool when agent signals `fab agent done`
+- Orchestrator handles merge to main and worktree reset
+
+## IPC Protocol
+
+### Daemon Protocol
+
+Unix socket server at `~/.fab/fab.sock` with JSON request/response messaging.
+
+**Message categories:**
+
+- Server management: `ping`, `shutdown`
+- Supervisor control: `start`, `stop`, `status`
+- Project management: `project.add`, `project.remove`, `project.list`, `project.config.show`, `project.config.get`, `project.config.set`
+- Agent management: `agent.list`, `agent.create`, `agent.delete`, `agent.abort`, `agent.done`, `agent.claim`, `agent.describe`, `agent.idle`, `agent.input`, `agent.output`
+- TUI streaming: `attach`, `detach`, `agent.chat_history`, `agent.send_message`
+- Permissions: `permission.request`, `permission.respond`, `permission.list`
+- Questions: `question.request`, `question.respond`
+- Planning: `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history`
+- Manager: `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`, `manager.clear_history`
+- Stats: `stats`, `claim.list`, `commit.list`
+
+### Request/Response Envelope
+
 ```json
 // Request
 {
@@ -339,6 +189,7 @@ This allows the daemon to restart and reattach to running agents.
 ```
 
 **Stream events** (sent to attached clients):
+
 ```json
 {
   "type": "output",
@@ -348,11 +199,6 @@ This allows the daemon to restart and reattach to running agents.
   "data": "..."
 }
 ```
-
-**Socket path resolution:**
-1. `FAB_AGENT_HOST_SOCKET_PATH` environment variable (exact path)
-2. `FAB_DIR/hosts/<agent-id>.sock` (base dir override)
-3. `~/.fab/hosts/<agent-id>.sock` (default)
 
 ## Directory Structure
 
@@ -454,6 +300,59 @@ fab/
 └── go.sum
 ```
 
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `fab server start` | Start the daemon process |
+| `fab server stop` | Stop the daemon |
+| `fab server restart` | Restart the daemon |
+| `fab status` | Show daemon, supervisor, and agent status |
+| `fab tui` / `fab attach` | Launch interactive TUI |
+| **Project Management** | |
+| `fab project add <remote-url>` | Register a project by git remote URL |
+| `fab project remove <name>` | Unregister a project |
+| `fab project list` | List registered projects |
+| `fab project start <name>` | Start orchestration for a project |
+| `fab project stop <name>` | Stop orchestration for a project |
+| `fab project config show <name>` | Show project configuration |
+| `fab project config get <name> <key>` | Get a config value |
+| `fab project config set <name> <key> <value>` | Set a config value |
+| **Agent Management** | |
+| `fab agent list` | List all agents |
+| `fab agent abort <id>` | Abort/kill an agent |
+| `fab agent claim <ticket-id>` | Claim a ticket (called by agents) |
+| `fab agent done` | Signal task completion (called by agents) |
+| `fab agent describe "<text>"` | Set agent description (called by agents) |
+| `fab agent plan <prompt>` | Start a planning agent |
+| `fab agent plan list` | List planning agents |
+| `fab agent plan stop <id>` | Stop a planning agent |
+| **Manager Agent** | |
+| `fab manager start <project>` | Start the manager agent for a project |
+| `fab manager stop <project>` | Stop the manager agent |
+| `fab manager status <project>` | Show manager agent status |
+| `fab manager clear <project>` | Clear manager agent's context window |
+| **Issue/Task Management** | |
+| `fab issue list` | List all issues |
+| `fab issue show <id>` | Show issue details |
+| `fab issue ready` | List unblocked issues ready to work |
+| `fab issue create <title>` | Create a new issue |
+| `fab issue update <id>` | Update an issue |
+| `fab issue close <id>` | Close an issue |
+| `fab issue commit` | Commit and push pending issue changes |
+| `fab issue comment <id>` | Add a comment to an issue |
+| `fab issue plan <id>` | Upsert a plan section in an issue |
+| **Plan Storage** | |
+| `fab plan write` | Write plan from stdin (uses FAB_AGENT_ID) |
+| `fab plan read <id>` | Read a stored plan |
+| `fab plan list` | List stored plans |
+| **Hooks** | |
+| `fab hook <hook-name>` | Handle Claude Code hook callbacks (PreToolUse, Stop) |
+| **Other** | |
+| `fab claims` | List active ticket claims |
+| `fab branch cleanup` | Clean up merged branches |
+| `fab version` | Show version information |
+
 ## Dependencies
 
 ```go
@@ -466,19 +365,10 @@ require (
 )
 ```
 
-## Key Files
+## See Also
 
-| File | Purpose |
-|------|---------|
-| `internal/daemon/server.go` | Unix socket RPC server |
-| `internal/daemon/protocol.go` | IPC message types (40+ message types) |
-| `internal/supervisor/supervisor.go` | Main request handler, implements daemon.Handler |
-| `internal/orchestrator/orchestrator.go` | Per-project agent lifecycle and task orchestration |
-| `internal/agent/agent.go` | Agent type, state machine, process management |
-| `internal/agent/streamjson.go` | Stream-JSON protocol parsing for Claude Code I/O |
-| `internal/project/worktree.go` | Worktree pool: create, assign, recycle |
-| `internal/issue/backend.go` | Pluggable issue backend interface |
-| `internal/registry/registry.go` | Project configuration persistence |
-| `internal/tui/tui.go` | Bubbletea main model |
-| `internal/tui/chatview.go` | Chat message rendering and interaction |
-| `internal/planner/planner.go` | Planning agent implementation |
+- [Supervisor](./supervisor.md) - Central daemon request handler
+- [Orchestrator](./orchestrator.md) - Per-project agent lifecycle management
+- [Issue Backends](./issue-backends.md) - Pluggable issue tracking
+- [Permissions](./permissions.md) - Permission system configuration
+- [TUI](./tui.md) - Interactive terminal interface

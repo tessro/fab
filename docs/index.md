@@ -13,6 +13,7 @@ fab is a coding agent supervisor that manages multiple Claude Code or Codex inst
 
 | Component | Description |
 |-----------|-------------|
+| [Architecture](./components/architecture.md) | High-level system overview, agent types, IPC protocol, and directory structure |
 | [Configuration](./components/configuration.md) | Global and per-project settings including API keys, backends, and merge strategies |
 | [Supervisor](./components/supervisor.md) | Central daemon that handles CLI requests, manages orchestrators, and coordinates permissions |
 | [Orchestrator](./components/orchestrator.md) | Per-project lifecycle manager that spawns agents and coordinates merges |
