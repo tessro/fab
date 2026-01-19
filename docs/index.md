@@ -5,6 +5,7 @@
 ## Quick Links
 
 - [Codex CLI Integration Research](./codex-integration.md)
+- [Permissions & Hooks](./permissions.md)
 
 ## Components
 
