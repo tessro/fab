@@ -1,6 +1,9 @@
 package tui
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Mode represents the current interaction mode of the TUI.
 // Only one mode can be active at a time, providing clear state management.
@@ -67,6 +70,12 @@ type ModeState struct {
 
 	// PlanProjectIndex is the currently selected project index (only valid when Mode == ModePlanProjectSelect).
 	PlanProjectIndex int
+
+	// PlanProjectFilter is the current filter text for fuzzy matching (only valid when Mode == ModePlanProjectSelect).
+	PlanProjectFilter string
+
+	// PlanProjectFiltered is the list of projects that match the filter (only valid when Mode == ModePlanProjectSelect).
+	PlanProjectFiltered []string
 }
 
 // NewModeState creates a new ModeState with default values.
@@ -263,6 +272,8 @@ func (s *ModeState) EnterPlanProjectSelect(projects []string) error {
 	s.Mode = ModePlanProjectSelect
 	s.PlanProjects = projects
 	s.PlanProjectIndex = 0
+	s.PlanProjectFilter = ""
+	s.PlanProjectFiltered = projects // Initially show all projects
 	return nil
 }
 
@@ -281,7 +292,7 @@ func (s *ModeState) PlanProjectSelectDown() {
 	if s.Mode != ModePlanProjectSelect {
 		return
 	}
-	if s.PlanProjectIndex < len(s.PlanProjects)-1 {
+	if s.PlanProjectIndex < len(s.PlanProjectFiltered)-1 {
 		s.PlanProjectIndex++
 	}
 }
@@ -291,10 +302,13 @@ func (s *ModeState) SelectPlanProject() (string, error) {
 	if s.Mode != ModePlanProjectSelect {
 		return "", ErrInvalidModeTransition
 	}
-	if s.PlanProjectIndex < 0 || s.PlanProjectIndex >= len(s.PlanProjects) {
+	if len(s.PlanProjectFiltered) == 0 {
+		return "", errors.New("no matching projects")
+	}
+	if s.PlanProjectIndex < 0 || s.PlanProjectIndex >= len(s.PlanProjectFiltered) {
 		return "", errors.New("invalid project selection")
 	}
-	s.PlanProject = s.PlanProjects[s.PlanProjectIndex]
+	s.PlanProject = s.PlanProjectFiltered[s.PlanProjectIndex]
 	s.Mode = ModePlanPrompt
 	s.Focus = FocusInputLine
 	return s.PlanProject, nil
@@ -308,6 +322,8 @@ func (s *ModeState) CancelPlanProjectSelect() error {
 	s.Mode = ModeNormal
 	s.PlanProjects = nil
 	s.PlanProjectIndex = 0
+	s.PlanProjectFilter = ""
+	s.PlanProjectFiltered = nil
 	return nil
 }
 
@@ -349,7 +365,71 @@ func (s *ModeState) IsPlanPrompt() bool {
 	return s.Mode == ModePlanPrompt
 }
 
-// SelectedPlanProject returns the selected project name and the list of projects.
+// SelectedPlanProject returns the selected project name and the filtered list of projects.
 func (s *ModeState) SelectedPlanProject() (string, []string, int) {
-	return s.PlanProject, s.PlanProjects, s.PlanProjectIndex
+	return s.PlanProject, s.PlanProjectFiltered, s.PlanProjectIndex
+}
+
+// PlanProjectFilterState returns the current filter string.
+func (s *ModeState) PlanProjectFilterState() string {
+	return s.PlanProjectFilter
+}
+
+// PlanProjectSetFilter updates the filter and recomputes the filtered list.
+func (s *ModeState) PlanProjectSetFilter(filter string) {
+	if s.Mode != ModePlanProjectSelect {
+		return
+	}
+	s.PlanProjectFilter = filter
+	s.PlanProjectFiltered = filterProjects(s.PlanProjects, filter)
+	// Reset index to 0, but ensure it's valid
+	s.PlanProjectIndex = 0
+}
+
+// PlanProjectAppendFilter appends a character to the filter.
+func (s *ModeState) PlanProjectAppendFilter(ch rune) {
+	if s.Mode != ModePlanProjectSelect {
+		return
+	}
+	s.PlanProjectSetFilter(s.PlanProjectFilter + string(ch))
+}
+
+// PlanProjectBackspaceFilter removes the last character from the filter.
+func (s *ModeState) PlanProjectBackspaceFilter() {
+	if s.Mode != ModePlanProjectSelect {
+		return
+	}
+	if len(s.PlanProjectFilter) > 0 {
+		s.PlanProjectSetFilter(s.PlanProjectFilter[:len(s.PlanProjectFilter)-1])
+	}
+}
+
+// filterProjects returns projects that fuzzy match the filter string.
+// A project matches if it contains all characters from the filter in order (case-insensitive).
+func filterProjects(projects []string, filter string) []string {
+	if filter == "" {
+		return projects
+	}
+	var result []string
+	filterLower := strings.ToLower(filter)
+	for _, project := range projects {
+		if fuzzyMatch(strings.ToLower(project), filterLower) {
+			result = append(result, project)
+		}
+	}
+	return result
+}
+
+// fuzzyMatch checks if text contains all characters from pattern in order.
+func fuzzyMatch(text, pattern string) bool {
+	if pattern == "" {
+		return true
+	}
+	pi := 0
+	for i := 0; i < len(text) && pi < len(pattern); i++ {
+		if text[i] == pattern[pi] {
+			pi++
+		}
+	}
+	return pi == len(pattern)
 }

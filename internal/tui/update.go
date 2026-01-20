@@ -99,7 +99,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Cancel project selection
 				_ = m.modeState.CancelPlanProjectSelect()
 				m.chatView.ClearPlanProjectSelection()
-			case key.Matches(msg, m.keys.Approve), key.Matches(msg, m.keys.Submit):
+			case key.Matches(msg, m.keys.Submit):
 				// Select project and enter prompt mode
 				project, err := m.modeState.SelectPlanProject()
 				if err == nil {
@@ -114,11 +114,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.Up):
 				m.modeState.PlanProjectSelectUp()
 				_, projects, idx := m.modeState.SelectedPlanProject()
-				m.chatView.SetPlanProjectSelection(projects, idx)
+				filter := m.modeState.PlanProjectFilterState()
+				m.chatView.SetPlanProjectSelectionWithFilter(projects, idx, filter)
 			case key.Matches(msg, m.keys.Down):
 				m.modeState.PlanProjectSelectDown()
 				_, projects, idx := m.modeState.SelectedPlanProject()
-				m.chatView.SetPlanProjectSelection(projects, idx)
+				filter := m.modeState.PlanProjectFilterState()
+				m.chatView.SetPlanProjectSelectionWithFilter(projects, idx, filter)
+			case msg.Type == tea.KeyBackspace:
+				// Handle backspace for filter
+				m.modeState.PlanProjectBackspaceFilter()
+				_, projects, idx := m.modeState.SelectedPlanProject()
+				filter := m.modeState.PlanProjectFilterState()
+				m.chatView.SetPlanProjectSelectionWithFilter(projects, idx, filter)
+			case msg.Type == tea.KeyRunes:
+				// Handle character input for filter
+				for _, r := range msg.Runes {
+					m.modeState.PlanProjectAppendFilter(r)
+				}
+				_, projects, idx := m.modeState.SelectedPlanProject()
+				filter := m.modeState.PlanProjectFilterState()
+				m.chatView.SetPlanProjectSelectionWithFilter(projects, idx, filter)
 			}
 			return m, tea.Batch(cmds...)
 		}

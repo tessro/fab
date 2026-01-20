@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -249,6 +251,10 @@ func (m Model) fetchProjectsForPlan() tea.Cmd {
 		for _, p := range resp.Projects {
 			projects = append(projects, p.Name)
 		}
+		// Sort projects alphabetically (case-insensitive)
+		slices.SortFunc(projects, func(a, b string) int {
+			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+		})
 		return projectListMsg{Projects: projects}
 	}
 }

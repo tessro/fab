@@ -70,9 +70,9 @@ func (h HelpBar) View() string {
 
 	// Plan project selection mode
 	if h.modeState.IsPlanProjectSelect() {
-		bindings = []key.Binding{h.keys.Approve, h.keys.Down, h.keys.Cancel, h.keys.Quit}
+		bindings = []key.Binding{h.keys.Submit, h.keys.Down, h.keys.Cancel, h.keys.Quit}
 		helpText := formatHelp(bindings)
-		return statusStyle.Width(h.width).Render("-- SELECT PROJECT -- " + helpText)
+		return statusStyle.Width(h.width).Render("-- SELECT PROJECT (type to filter) -- " + helpText)
 	}
 
 	// Plan prompt mode

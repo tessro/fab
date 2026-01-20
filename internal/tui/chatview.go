@@ -37,6 +37,7 @@ type ChatView struct {
 	planProjectSelect bool     // in plan project selection mode
 	planProjects      []string // list of available projects
 	planProjectIndex  int      // selected project index
+	planProjectFilter string   // current filter text for fuzzy matching
 	planPromptMode    bool     // in plan prompt mode
 	planPromptProject string   // project for plan prompt
 }
@@ -822,6 +823,16 @@ func (v *ChatView) SetPlanProjectSelection(projects []string, selectedIndex int)
 	v.planProjectSelect = true
 	v.planProjects = projects
 	v.planProjectIndex = selectedIndex
+	v.planProjectFilter = ""
+	v.updateViewportSize()
+}
+
+// SetPlanProjectSelectionWithFilter sets the plan project selection mode state with a filter.
+func (v *ChatView) SetPlanProjectSelectionWithFilter(projects []string, selectedIndex int, filter string) {
+	v.planProjectSelect = true
+	v.planProjects = projects
+	v.planProjectIndex = selectedIndex
+	v.planProjectFilter = filter
 	v.updateViewportSize()
 }
 
@@ -830,6 +841,7 @@ func (v *ChatView) ClearPlanProjectSelection() {
 	v.planProjectSelect = false
 	v.planProjects = nil
 	v.planProjectIndex = 0
+	v.planProjectFilter = ""
 	v.updateViewportSize()
 }
 
@@ -849,7 +861,7 @@ func (v *ChatView) ClearPlanPromptMode() {
 
 // renderPlanProjectSelection renders the project selection UI.
 func (v *ChatView) renderPlanProjectSelection() string {
-	if !v.planProjectSelect || len(v.planProjects) == 0 {
+	if !v.planProjectSelect {
 		return ""
 	}
 
@@ -869,21 +881,40 @@ func (v *ChatView) renderPlanProjectSelection() string {
 		Background(lipgloss.Color("#3B6B4B")).
 		Bold(true)
 
+	filterStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#3B5B4B"))
+
 	var lines []string
 	lines = append(lines, headerStyle.Render("Select a project to plan for:"))
+
+	// Show filter input
+	filterDisplay := v.planProjectFilter
+	if filterDisplay == "" {
+		filterDisplay = "Type to filter..."
+	}
+	lines = append(lines, filterStyle.Render("▸ "+filterDisplay+"█"))
 	lines = append(lines, "") // Empty line
 
-	for i, project := range v.planProjects {
-		if i == v.planProjectIndex {
-			lines = append(lines, selectedStyle.Render("▶ "+project))
-		} else {
-			lines = append(lines, optionStyle.Render("  "+project))
+	if len(v.planProjects) == 0 {
+		// No matching projects
+		noMatchStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6666")).
+			Italic(true)
+		lines = append(lines, noMatchStyle.Render("  No matching projects"))
+	} else {
+		for i, project := range v.planProjects {
+			if i == v.planProjectIndex {
+				lines = append(lines, selectedStyle.Render("▶ "+project))
+			} else {
+				lines = append(lines, optionStyle.Render("  "+project))
+			}
 		}
 	}
 
 	lines = append(lines, "")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
-	lines = append(lines, hintStyle.Render("↑/↓: select  Enter/y: confirm  Esc: cancel"))
+	lines = append(lines, hintStyle.Render("↑/↓: select  Enter: confirm  Esc: cancel"))
 
 	content := strings.Join(lines, "\n")
 	return style.Width(v.width - 4).Render(content)

@@ -340,3 +340,171 @@ func TestMode_String(t *testing.T) {
 		}
 	}
 }
+
+func TestFuzzyMatch(t *testing.T) {
+	tests := []struct {
+		text    string
+		pattern string
+		want    bool
+	}{
+		{"", "", true},
+		{"hello", "", true},
+		{"", "a", false},
+		{"hello", "hlo", true},
+		{"hello", "helo", true},
+		{"hello", "hello", true},
+		{"hello", "HELLO", false}, // case-sensitive at this level
+		{"hello", "xyz", false},
+		{"my-project", "mp", true},
+		{"my-project", "mypro", true},
+		{"my-project", "myproject", true},
+		{"my-project", "my-pro", true},
+		{"fab", "fb", true},
+		{"fab", "fab", true},
+		{"fab", "fa", true},
+		{"fab", "ab", true},
+		{"fab", "b", true},
+		{"fab", "fba", false}, // order matters
+	}
+
+	for _, tt := range tests {
+		got := fuzzyMatch(tt.text, tt.pattern)
+		if got != tt.want {
+			t.Errorf("fuzzyMatch(%q, %q) = %v, want %v", tt.text, tt.pattern, got, tt.want)
+		}
+	}
+}
+
+func TestFilterProjects(t *testing.T) {
+	projects := []string{"Alpha", "Beta", "gamma", "AlphaBeta", "Zebra"}
+
+	tests := []struct {
+		filter string
+		want   []string
+	}{
+		{"", projects},
+		{"a", []string{"Alpha", "Beta", "gamma", "AlphaBeta", "Zebra"}}, // All contain 'a' (case-insensitive)
+		{"al", []string{"Alpha", "AlphaBeta"}},
+		{"ab", []string{"AlphaBeta"}}, // Only AlphaBeta has 'a' followed by 'b' in order
+		{"g", []string{"gamma"}},
+		{"xyz", nil},
+		{"bet", []string{"Beta", "AlphaBeta"}}, // Both have b-e-t in order
+	}
+
+	for _, tt := range tests {
+		got := filterProjects(projects, tt.filter)
+		if len(got) != len(tt.want) {
+			t.Errorf("filterProjects(%v, %q) = %v, want %v", projects, tt.filter, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("filterProjects(%v, %q) = %v, want %v", projects, tt.filter, got, tt.want)
+				break
+			}
+		}
+	}
+}
+
+func TestModeState_PlanProjectFilter(t *testing.T) {
+	state := NewModeState()
+	projects := []string{"Zebra", "Alpha", "Beta"}
+
+	// Enter plan project select mode
+	err := state.EnterPlanProjectSelect(projects)
+	if err != nil {
+		t.Fatalf("EnterPlanProjectSelect() error: %v", err)
+	}
+
+	// Initially all projects visible
+	if len(state.PlanProjectFiltered) != 3 {
+		t.Errorf("expected 3 filtered projects initially, got %d", len(state.PlanProjectFiltered))
+	}
+	if state.PlanProjectFilter != "" {
+		t.Errorf("expected empty filter initially, got %q", state.PlanProjectFilter)
+	}
+
+	// Append filter characters
+	state.PlanProjectAppendFilter('a')
+	if state.PlanProjectFilter != "a" {
+		t.Errorf("expected filter 'a', got %q", state.PlanProjectFilter)
+	}
+	// Alpha, Beta, Zebra all contain 'a' (case-insensitive)
+	if len(state.PlanProjectFiltered) != 3 {
+		t.Errorf("expected 3 filtered projects with 'a', got %d: %v", len(state.PlanProjectFiltered), state.PlanProjectFiltered)
+	}
+
+	state.PlanProjectAppendFilter('l')
+	if state.PlanProjectFilter != "al" {
+		t.Errorf("expected filter 'al', got %q", state.PlanProjectFilter)
+	}
+	// Only Alpha matches "al"
+	if len(state.PlanProjectFiltered) != 1 || state.PlanProjectFiltered[0] != "Alpha" {
+		t.Errorf("expected [Alpha] with 'al', got %v", state.PlanProjectFiltered)
+	}
+
+	// Backspace
+	state.PlanProjectBackspaceFilter()
+	if state.PlanProjectFilter != "a" {
+		t.Errorf("expected filter 'a' after backspace, got %q", state.PlanProjectFilter)
+	}
+	if len(state.PlanProjectFiltered) != 3 {
+		t.Errorf("expected 3 filtered projects after backspace, got %d", len(state.PlanProjectFiltered))
+	}
+
+	// Clear filter completely
+	state.PlanProjectBackspaceFilter()
+	if state.PlanProjectFilter != "" {
+		t.Errorf("expected empty filter after backspace, got %q", state.PlanProjectFilter)
+	}
+	if len(state.PlanProjectFiltered) != 3 {
+		t.Errorf("expected 3 filtered projects with empty filter, got %d", len(state.PlanProjectFiltered))
+	}
+}
+
+func TestModeState_SelectPlanProjectFromFiltered(t *testing.T) {
+	state := NewModeState()
+	projects := []string{"Alpha", "Beta", "Gamma"}
+
+	err := state.EnterPlanProjectSelect(projects)
+	if err != nil {
+		t.Fatalf("EnterPlanProjectSelect() error: %v", err)
+	}
+
+	// Filter to only show "Beta"
+	state.PlanProjectSetFilter("bet")
+	if len(state.PlanProjectFiltered) != 1 {
+		t.Fatalf("expected 1 filtered project, got %d", len(state.PlanProjectFiltered))
+	}
+
+	// Select the filtered project
+	project, err := state.SelectPlanProject()
+	if err != nil {
+		t.Errorf("SelectPlanProject() error: %v", err)
+	}
+	if project != "Beta" {
+		t.Errorf("expected 'Beta', got %q", project)
+	}
+}
+
+func TestModeState_SelectPlanProjectNoMatches(t *testing.T) {
+	state := NewModeState()
+	projects := []string{"Alpha", "Beta"}
+
+	err := state.EnterPlanProjectSelect(projects)
+	if err != nil {
+		t.Fatalf("EnterPlanProjectSelect() error: %v", err)
+	}
+
+	// Filter to no matches
+	state.PlanProjectSetFilter("xyz")
+	if len(state.PlanProjectFiltered) != 0 {
+		t.Fatalf("expected 0 filtered projects, got %d", len(state.PlanProjectFiltered))
+	}
+
+	// Try to select - should fail
+	_, err = state.SelectPlanProject()
+	if err == nil {
+		t.Error("expected error when selecting with no matches")
+	}
+}
