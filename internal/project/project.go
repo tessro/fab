@@ -13,6 +13,17 @@ import (
 // DefaultMaxAgents is the default number of concurrent agents per project.
 const DefaultMaxAgents = 3
 
+// Defaults provides global default values for project configuration.
+// This interface allows injecting global config without circular imports.
+type Defaults interface {
+	GetDefaultAgentBackend() string
+	GetDefaultPlannerBackend() string
+	GetDefaultCodingBackend() string
+	GetDefaultMergeStrategy() string
+	GetDefaultIssueBackend() string
+	GetDefaultPermissionsChecker() string
+}
+
 // ManagerWorktreeID is the worktree ID for the project manager.
 const ManagerWorktreeID = "manager"
 
@@ -38,6 +49,9 @@ type Project struct {
 	CodingBackend      string   // Coding agent CLI backend: "claude" (default), "codex"
 	MergeStrategy      string   // Merge strategy: "direct" (default), "pull-request"
 	BaseDir            string   // Base directory for project storage (default: ~/.fab/projects)
+	// Defaults provides global default values for configuration.
+	// When set, getters use config precedence: project -> global -> internal.
+	Defaults Defaults
 	// +checklocks:mu
 	Running bool // Whether orchestration is active
 	// +checklocks:mu
@@ -240,48 +254,98 @@ func (p *Project) IsRunning() bool {
 	return p.Running
 }
 
-// DefaultAgentBackend is the default agent CLI backend.
+// DefaultAgentBackend is the internal default agent CLI backend.
 const DefaultAgentBackend = "claude"
 
-// GetAgentBackend returns the configured agent backend, or the default ("claude").
+// GetAgentBackend returns the configured agent backend.
+// Uses config precedence: project -> global defaults -> internal defaults.
 // This is used as a fallback when planner-backend or coding-backend are not set.
 func (p *Project) GetAgentBackend() string {
-	if p.AgentBackend == "" {
-		return DefaultAgentBackend
+	if p.AgentBackend != "" {
+		return p.AgentBackend
 	}
-	return p.AgentBackend
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultAgentBackend()
+	}
+	return DefaultAgentBackend
 }
 
 // GetPlannerBackend returns the configured planner backend.
-// Falls back to AgentBackend if not explicitly set, then to "claude".
+// Uses config precedence: project planner -> project agent -> global defaults -> internal defaults.
 func (p *Project) GetPlannerBackend() string {
 	if p.PlannerBackend != "" {
 		return p.PlannerBackend
 	}
-	return p.GetAgentBackend()
+	if p.AgentBackend != "" {
+		return p.AgentBackend
+	}
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultPlannerBackend()
+	}
+	return DefaultAgentBackend
 }
 
 // GetCodingBackend returns the configured coding agent backend.
-// Falls back to AgentBackend if not explicitly set, then to "claude".
+// Uses config precedence: project coding -> project agent -> global defaults -> internal defaults.
 func (p *Project) GetCodingBackend() string {
 	if p.CodingBackend != "" {
 		return p.CodingBackend
 	}
-	return p.GetAgentBackend()
+	if p.AgentBackend != "" {
+		return p.AgentBackend
+	}
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultCodingBackend()
+	}
+	return DefaultAgentBackend
 }
 
-// DefaultMergeStrategy is the default merge strategy.
+// DefaultMergeStrategy is the internal default merge strategy.
 const DefaultMergeStrategy = "direct"
 
 // MergeStrategyPullRequest is the value for pull-request merge strategy.
 const MergeStrategyPullRequest = "pull-request"
 
-// GetMergeStrategy returns the configured merge strategy, or the default ("direct").
+// GetMergeStrategy returns the configured merge strategy.
+// Uses config precedence: project -> global defaults -> internal defaults.
 func (p *Project) GetMergeStrategy() string {
-	if p.MergeStrategy == "" {
-		return DefaultMergeStrategy
+	if p.MergeStrategy != "" {
+		return p.MergeStrategy
 	}
-	return p.MergeStrategy
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultMergeStrategy()
+	}
+	return DefaultMergeStrategy
+}
+
+// DefaultIssueBackend is the internal default issue backend.
+const DefaultIssueBackend = "tk"
+
+// GetIssueBackend returns the configured issue backend.
+// Uses config precedence: project -> global defaults -> internal defaults.
+func (p *Project) GetIssueBackend() string {
+	if p.IssueBackend != "" {
+		return p.IssueBackend
+	}
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultIssueBackend()
+	}
+	return DefaultIssueBackend
+}
+
+// DefaultPermissionsChecker is the internal default permissions checker.
+const DefaultPermissionsChecker = "manual"
+
+// GetPermissionsChecker returns the configured permissions checker.
+// Uses config precedence: project -> global defaults -> internal defaults.
+func (p *Project) GetPermissionsChecker() string {
+	if p.PermissionsChecker != "" {
+		return p.PermissionsChecker
+	}
+	if p.Defaults != nil {
+		return p.Defaults.GetDefaultPermissionsChecker()
+	}
+	return DefaultPermissionsChecker
 }
 
 // ManagerWorktreePath returns the path to the manager's worktree.

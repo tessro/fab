@@ -89,7 +89,8 @@ func (s *Supervisor) handlePermissionRequest(ctx context.Context, req *daemon.Re
 	)
 
 	// Check if LLM permissions checker is enabled for this project
-	if proj != nil && proj.PermissionsChecker == "llm" {
+	// Uses config precedence: project -> global defaults -> internal defaults
+	if proj != nil && proj.GetPermissionsChecker() == "llm" {
 		resp := s.handleLLMAuth(ctx, permReq, projectName, agentTask, conversationCtx, log)
 		if resp != nil {
 			return successResponse(req, resp)

@@ -46,11 +46,10 @@ func (s *Supervisor) startOrchestrator(_ context.Context, proj *project.Project)
 }
 
 // issueBackendFactoryForProject creates an issue backend factory based on project config.
+// Uses config precedence: project -> global defaults -> internal defaults.
 func issueBackendFactoryForProject(proj *project.Project, globalCfg *config.GlobalConfig) issue.NewBackendFunc {
-	backendType := proj.IssueBackend
-	if backendType == "" {
-		backendType = "tk" // Default to tk backend
-	}
+	// Use the project's getter which respects config precedence
+	backendType := proj.GetIssueBackend()
 
 	return func(repoDir string) (issue.Backend, error) {
 		switch backendType {

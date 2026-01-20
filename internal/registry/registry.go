@@ -114,7 +114,11 @@ type Registry struct {
 	// globalConfig holds non-project config fields to preserve when saving.
 	// +checklocks:mu
 	globalConfig *Config
-	mu           sync.RWMutex
+	// defaults holds the parsed global config for reading default values.
+	// This follows the config precedence: project -> global defaults -> internal defaults.
+	// +checklocks:mu
+	defaults *configPkg.GlobalConfig
+	mu       sync.RWMutex
 }
 
 // New creates a new Registry with the default config path.
@@ -143,10 +147,15 @@ func NewWithPath(configPath string) (*Registry, error) {
 		}
 	}
 
+	// Load global config for default values
+	// This provides the config precedence: project -> global defaults -> internal defaults
+	defaults, _ := configPkg.LoadGlobalConfigFromPath(configPath)
+
 	r := &Registry{
 		configPath:     configPath,
 		projectBaseDir: projectsDir,
 		projects:       make(map[string]*project.Project),
+		defaults:       defaults,
 	}
 
 	if err := r.load(); err != nil && !os.IsNotExist(err) {
@@ -204,6 +213,8 @@ func (r *Registry) load() error {
 
 		p := project.NewProject(entry.Name, remoteURL)
 		p.BaseDir = r.projectBaseDir
+		// Inject global defaults for config precedence: project -> global -> internal
+		p.Defaults = r.defaults
 		if maxAgents > 0 {
 			p.MaxAgents = maxAgents
 		}
@@ -295,9 +306,9 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool, ba
 		return nil, err
 	}
 
-	// Default max agents
+	// Default max agents using global defaults
 	if maxAgents <= 0 {
-		maxAgents = project.DefaultMaxAgents
+		maxAgents = r.defaults.GetDefaultMaxAgents()
 	}
 
 	// Validate max agents
@@ -322,6 +333,8 @@ func (r *Registry) Add(remoteURL, name string, maxAgents int, autostart bool, ba
 	}
 
 	p := project.NewProject(name, remoteURL)
+	// Inject global defaults for config precedence: project -> global -> internal
+	p.Defaults = r.defaults
 	p.MaxAgents = maxAgents
 	p.Autostart = autostart
 	p.AgentBackend = backend
@@ -448,6 +461,7 @@ func IsValidConfigKey(key string) bool {
 }
 
 // GetConfigValue returns the value of a single configuration key for a project.
+// Uses the config precedence stack: project -> global defaults -> internal defaults.
 func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -463,11 +477,7 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 	case ConfigKeyAutostart:
 		return p.Autostart, nil
 	case ConfigKeyIssueBackend:
-		backend := p.IssueBackend
-		if backend == "" {
-			backend = "tk"
-		}
-		return backend, nil
+		return p.GetIssueBackend(), nil
 	case ConfigKeyLinearTeam:
 		return p.LinearTeam, nil
 	case ConfigKeyLinearProject:
@@ -475,11 +485,7 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 	case ConfigKeyAllowedAuthors:
 		return p.AllowedAuthors, nil
 	case ConfigKeyPermissionsChecker:
-		checker := p.PermissionsChecker
-		if checker == "" {
-			checker = "manual"
-		}
-		return checker, nil
+		return p.GetPermissionsChecker(), nil
 	case ConfigKeyAgentBackend:
 		return p.GetAgentBackend(), nil
 	case ConfigKeyPlannerBackend:
@@ -494,6 +500,7 @@ func (r *Registry) GetConfigValue(name string, key ConfigKey) (any, error) {
 }
 
 // GetConfig returns all configuration for a project as a map.
+// Uses the config precedence stack: project -> global defaults -> internal defaults.
 func (r *Registry) GetConfig(name string) (map[string]any, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -503,24 +510,14 @@ func (r *Registry) GetConfig(name string) (map[string]any, error) {
 		return nil, ErrProjectNotFound
 	}
 
-	issueBackend := p.IssueBackend
-	if issueBackend == "" {
-		issueBackend = "tk"
-	}
-
-	permissionsChecker := p.PermissionsChecker
-	if permissionsChecker == "" {
-		permissionsChecker = "manual"
-	}
-
 	return map[string]any{
 		string(ConfigKeyMaxAgents):          p.MaxAgents,
 		string(ConfigKeyAutostart):          p.Autostart,
-		string(ConfigKeyIssueBackend):       issueBackend,
+		string(ConfigKeyIssueBackend):       p.GetIssueBackend(),
 		string(ConfigKeyLinearTeam):         p.LinearTeam,
 		string(ConfigKeyLinearProject):      p.LinearProject,
 		string(ConfigKeyAllowedAuthors):     p.AllowedAuthors,
-		string(ConfigKeyPermissionsChecker): permissionsChecker,
+		string(ConfigKeyPermissionsChecker): p.GetPermissionsChecker(),
 		string(ConfigKeyAgentBackend):       p.GetAgentBackend(),
 		string(ConfigKeyPlannerBackend):     p.GetPlannerBackend(),
 		string(ConfigKeyCodingBackend):      p.GetCodingBackend(),
@@ -624,4 +621,12 @@ func (r *Registry) Count() int {
 // ConfigPath returns the path to the config file.
 func (r *Registry) ConfigPath() string {
 	return r.configPath
+}
+
+// GlobalDefaults returns the global config for reading defaults.
+// This allows other packages to access global defaults directly when needed.
+func (r *Registry) GlobalDefaults() *configPkg.GlobalConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.defaults
 }

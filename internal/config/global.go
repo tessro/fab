@@ -26,11 +26,27 @@ type GlobalConfig struct {
 }
 
 // DefaultsConfig contains default values for project configuration.
+// These values are used when a project doesn't specify its own value.
+// The config precedence stack is: project -> global defaults -> internal defaults.
 type DefaultsConfig struct {
 	// AgentBackend is the default agent CLI backend ("claude" or "codex").
 	AgentBackend string `toml:"agent-backend"`
+	// PlannerBackend is the default planner CLI backend ("claude" or "codex").
+	// Falls back to AgentBackend if not set.
+	PlannerBackend string `toml:"planner-backend"`
+	// CodingBackend is the default coding agent CLI backend ("claude" or "codex").
+	// Falls back to AgentBackend if not set.
+	CodingBackend string `toml:"coding-backend"`
 	// MergeStrategy is the default merge strategy ("direct" or "pull-request").
 	MergeStrategy string `toml:"merge-strategy"`
+	// IssueBackend is the default issue backend ("tk", "github", "gh", or "linear").
+	IssueBackend string `toml:"issue-backend"`
+	// PermissionsChecker is the default permission checker ("manual" or "llm").
+	PermissionsChecker string `toml:"permissions-checker"`
+	// Autostart determines whether new projects should auto-start by default.
+	Autostart *bool `toml:"autostart"`
+	// MaxAgents is the default max concurrent agents per project.
+	MaxAgents int `toml:"max-agents"`
 }
 
 // ProvidersConfig contains API provider configurations.
@@ -159,4 +175,64 @@ func (c *GlobalConfig) GetDefaultMergeStrategy() string {
 		return c.Defaults.MergeStrategy
 	}
 	return DefaultMergeStrategy
+}
+
+// GetDefaultPlannerBackend returns the configured default planner backend.
+// Falls back to agent backend if not set.
+func (c *GlobalConfig) GetDefaultPlannerBackend() string {
+	if c != nil && c.Defaults.PlannerBackend != "" {
+		return c.Defaults.PlannerBackend
+	}
+	return c.GetDefaultAgentBackend()
+}
+
+// GetDefaultCodingBackend returns the configured default coding backend.
+// Falls back to agent backend if not set.
+func (c *GlobalConfig) GetDefaultCodingBackend() string {
+	if c != nil && c.Defaults.CodingBackend != "" {
+		return c.Defaults.CodingBackend
+	}
+	return c.GetDefaultAgentBackend()
+}
+
+// DefaultIssueBackend is the internal default for issue backend.
+const DefaultIssueBackend = "tk"
+
+// GetDefaultIssueBackend returns the configured default issue backend or "tk".
+func (c *GlobalConfig) GetDefaultIssueBackend() string {
+	if c != nil && c.Defaults.IssueBackend != "" {
+		return c.Defaults.IssueBackend
+	}
+	return DefaultIssueBackend
+}
+
+// DefaultPermissionsChecker is the internal default for permission checking.
+const DefaultPermissionsChecker = "manual"
+
+// GetDefaultPermissionsChecker returns the configured default permissions checker or "manual".
+func (c *GlobalConfig) GetDefaultPermissionsChecker() string {
+	if c != nil && c.Defaults.PermissionsChecker != "" {
+		return c.Defaults.PermissionsChecker
+	}
+	return DefaultPermissionsChecker
+}
+
+// GetDefaultAutostart returns the configured default autostart setting.
+// Returns false if not set (internal default).
+func (c *GlobalConfig) GetDefaultAutostart() bool {
+	if c != nil && c.Defaults.Autostart != nil {
+		return *c.Defaults.Autostart
+	}
+	return false
+}
+
+// DefaultMaxAgents is the internal default for max agents per project.
+const DefaultMaxAgents = 3
+
+// GetDefaultMaxAgents returns the configured default max agents or 3.
+func (c *GlobalConfig) GetDefaultMaxAgents() int {
+	if c != nil && c.Defaults.MaxAgents > 0 {
+		return c.Defaults.MaxAgents
+	}
+	return DefaultMaxAgents
 }

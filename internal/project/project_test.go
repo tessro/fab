@@ -444,3 +444,184 @@ func TestProjectDir_FAB_DIR(t *testing.T) {
 		}
 	})
 }
+
+// mockDefaults implements the Defaults interface for testing
+type mockDefaults struct {
+	agentBackend       string
+	plannerBackend     string
+	codingBackend      string
+	mergeStrategy      string
+	issueBackend       string
+	permissionsChecker string
+}
+
+func (m *mockDefaults) GetDefaultAgentBackend() string       { return m.agentBackend }
+func (m *mockDefaults) GetDefaultPlannerBackend() string     { return m.plannerBackend }
+func (m *mockDefaults) GetDefaultCodingBackend() string      { return m.codingBackend }
+func (m *mockDefaults) GetDefaultMergeStrategy() string      { return m.mergeStrategy }
+func (m *mockDefaults) GetDefaultIssueBackend() string       { return m.issueBackend }
+func (m *mockDefaults) GetDefaultPermissionsChecker() string { return m.permissionsChecker }
+
+func TestGetAgentBackendWithDefaults(t *testing.T) {
+	tests := []struct {
+		name            string
+		agentBackend    string
+		defaultBackend  string
+		want            string
+	}{
+		{
+			name:           "project value takes precedence",
+			agentBackend:   "codex",
+			defaultBackend: "claude",
+			want:           "codex",
+		},
+		{
+			name:           "uses global default when project empty",
+			agentBackend:   "",
+			defaultBackend: "codex",
+			want:           "codex",
+		},
+		{
+			name:           "uses internal default when both empty",
+			agentBackend:   "",
+			defaultBackend: "",
+			want:           DefaultAgentBackend,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.AgentBackend = tt.agentBackend
+			if tt.defaultBackend != "" {
+				p.Defaults = &mockDefaults{agentBackend: tt.defaultBackend}
+			}
+			if got := p.GetAgentBackend(); got != tt.want {
+				t.Errorf("GetAgentBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIssueBackend(t *testing.T) {
+	tests := []struct {
+		name           string
+		issueBackend   string
+		defaultBackend string
+		want           string
+	}{
+		{
+			name:           "project value takes precedence",
+			issueBackend:   "github",
+			defaultBackend: "tk",
+			want:           "github",
+		},
+		{
+			name:           "uses global default when project empty",
+			issueBackend:   "",
+			defaultBackend: "linear",
+			want:           "linear",
+		},
+		{
+			name:           "uses internal default when no defaults set",
+			issueBackend:   "",
+			defaultBackend: "",
+			want:           DefaultIssueBackend,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.IssueBackend = tt.issueBackend
+			if tt.defaultBackend != "" {
+				p.Defaults = &mockDefaults{issueBackend: tt.defaultBackend}
+			}
+			if got := p.GetIssueBackend(); got != tt.want {
+				t.Errorf("GetIssueBackend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetPermissionsChecker(t *testing.T) {
+	tests := []struct {
+		name           string
+		permChecker    string
+		defaultChecker string
+		want           string
+	}{
+		{
+			name:           "project value takes precedence",
+			permChecker:    "llm",
+			defaultChecker: "manual",
+			want:           "llm",
+		},
+		{
+			name:           "uses global default when project empty",
+			permChecker:    "",
+			defaultChecker: "llm",
+			want:           "llm",
+		},
+		{
+			name:           "uses internal default when no defaults set",
+			permChecker:    "",
+			defaultChecker: "",
+			want:           DefaultPermissionsChecker,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.PermissionsChecker = tt.permChecker
+			if tt.defaultChecker != "" {
+				p.Defaults = &mockDefaults{permissionsChecker: tt.defaultChecker}
+			}
+			if got := p.GetPermissionsChecker(); got != tt.want {
+				t.Errorf("GetPermissionsChecker() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetMergeStrategyWithDefaults(t *testing.T) {
+	tests := []struct {
+		name            string
+		mergeStrategy   string
+		defaultStrategy string
+		want            string
+	}{
+		{
+			name:            "project value takes precedence",
+			mergeStrategy:   "pull-request",
+			defaultStrategy: "direct",
+			want:            "pull-request",
+		},
+		{
+			name:            "uses global default when project empty",
+			mergeStrategy:   "",
+			defaultStrategy: "pull-request",
+			want:            "pull-request",
+		},
+		{
+			name:            "uses internal default when no defaults set",
+			mergeStrategy:   "",
+			defaultStrategy: "",
+			want:            DefaultMergeStrategy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewProject("test", "")
+			p.MergeStrategy = tt.mergeStrategy
+			if tt.defaultStrategy != "" {
+				p.Defaults = &mockDefaults{mergeStrategy: tt.defaultStrategy}
+			}
+			if got := p.GetMergeStrategy(); got != tt.want {
+				t.Errorf("GetMergeStrategy() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
