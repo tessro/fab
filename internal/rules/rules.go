@@ -49,6 +49,12 @@ type Config struct {
 // DefaultManagerAllowedPatterns returns the default allowed patterns for the manager.
 var DefaultManagerAllowedPatterns = []string{"fab:*"}
 
+// DefaultRules are the built-in permission rules applied when no permissions.toml exists.
+// These allow common fab commands that are safe for agents to run without prompting.
+var DefaultRules = []Rule{
+	{Tool: "Bash", Action: ActionAllow, Pattern: "fab:*"},
+}
+
 // LoadConfig loads a permissions configuration from the given path.
 // Returns nil config and nil error if the file doesn't exist.
 func LoadConfig(path string) (*Config, error) {

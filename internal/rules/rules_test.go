@@ -720,3 +720,97 @@ allowed_patterns = ["fab:*", ""]
 		t.Error("LoadConfig expected error for empty pattern, got nil")
 	}
 }
+
+func TestDefaultRules(t *testing.T) {
+	// Verify default rules are defined and valid
+	if len(DefaultRules) == 0 {
+		t.Error("DefaultRules should not be empty")
+	}
+
+	// Check that fab commands are allowed by default
+	tests := []struct {
+		name       string
+		toolName   string
+		toolInput  string
+		wantAction Action
+		wantMatch  bool
+	}{
+		{"fab issue ready", "Bash", `{"command":"fab issue ready"}`, ActionAllow, true},
+		{"fab agent claim", "Bash", `{"command":"fab agent claim 123"}`, ActionAllow, true},
+		{"fab agent done", "Bash", `{"command":"fab agent done"}`, ActionAllow, true},
+		{"fab plan write", "Bash", `{"command":"fab plan write"}`, ActionAllow, true},
+		{"non-fab command", "Bash", `{"command":"rm -rf /"}`, ActionPass, false},
+		{"Read tool unaffected", "Read", `{"file_path":"/etc/passwd"}`, ActionPass, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			primaryField := ResolvePrimaryField(tt.toolName, json.RawMessage(tt.toolInput))
+
+			gotAction := ActionPass
+			gotMatch := false
+
+			for _, rule := range DefaultRules {
+				if rule.Tool != tt.toolName {
+					continue
+				}
+				if MatchPattern(rule.Pattern, primaryField) {
+					gotAction = rule.Action
+					gotMatch = true
+					break
+				}
+			}
+
+			if gotAction != tt.wantAction {
+				t.Errorf("action = %v, want %v", gotAction, tt.wantAction)
+			}
+			if gotMatch != tt.wantMatch {
+				t.Errorf("matched = %v, want %v", gotMatch, tt.wantMatch)
+			}
+		})
+	}
+}
+
+func TestEvaluatorWithDefaultRules(t *testing.T) {
+	// Test that evaluator uses default rules when no config files exist
+	// Create a temp directory with no permissions.toml files
+	dir := t.TempDir()
+
+	// Override environment to use temp directory
+	oldEnv := os.Getenv("FAB_DIR")
+	os.Setenv("FAB_DIR", dir)
+	defer os.Setenv("FAB_DIR", oldEnv)
+
+	// Create required directories but no permissions.toml
+	os.MkdirAll(filepath.Join(dir, "config"), 0755)
+
+	evaluator := NewEvaluator()
+	ctx := context.Background()
+
+	tests := []struct {
+		name       string
+		toolName   string
+		toolInput  string
+		wantAction Action
+		wantMatch  bool
+	}{
+		{"fab command allowed", "Bash", `{"command":"fab issue ready"}`, ActionAllow, true},
+		{"fab agent done allowed", "Bash", `{"command":"fab agent done"}`, ActionAllow, true},
+		{"non-fab command no match", "Bash", `{"command":"ls -la"}`, ActionPass, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action, matched, err := evaluator.Evaluate(ctx, "", tt.toolName, json.RawMessage(tt.toolInput), dir)
+			if err != nil {
+				t.Fatalf("Evaluate error: %v", err)
+			}
+			if action != tt.wantAction {
+				t.Errorf("action = %v, want %v", action, tt.wantAction)
+			}
+			if matched != tt.wantMatch {
+				t.Errorf("matched = %v, want %v", matched, tt.wantMatch)
+			}
+		})
+	}
+}

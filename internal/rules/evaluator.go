@@ -40,6 +40,7 @@ func NewEvaluator() *Evaluator {
 func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, toolInput json.RawMessage, cwd string) (Action, bool, error) {
 	// Load rules: project first, then global
 	var allRules []Rule
+	hasConfigFile := false
 
 	// Load project-specific rules if project name is provided
 	if projectName != "" {
@@ -51,6 +52,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 				return ActionPass, false, err
 			}
 			if config != nil {
+				hasConfigFile = true
 				slog.Debug("loaded project rules", "path", projectPath, "count", len(config.Rules))
 				allRules = append(allRules, config.Rules...)
 			}
@@ -68,8 +70,15 @@ func (e *Evaluator) Evaluate(ctx context.Context, projectName, toolName string, 
 		return ActionPass, false, err
 	}
 	if globalConfig != nil {
+		hasConfigFile = true
 		slog.Debug("loaded global rules", "path", globalPath, "count", len(globalConfig.Rules))
 		allRules = append(allRules, globalConfig.Rules...)
+	}
+
+	// If no config files exist, use built-in default rules
+	if !hasConfigFile {
+		slog.Debug("no permissions config found, using default rules", "count", len(DefaultRules))
+		allRules = DefaultRules
 	}
 
 	// Evaluate rules in order
