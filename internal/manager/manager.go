@@ -72,6 +72,15 @@ func New(workDir string, project string, b backend.Backend, allowedPatterns []st
 		allowedPatterns: allowedPatterns,
 	}
 
+	// Get fab binary path for the system prompt
+	fabPath, err := os.Executable()
+	if err != nil {
+		fabPath = "fab"
+	}
+
+	// Build the manager system prompt to send after process starts
+	systemPrompt := buildManagerSystemPrompt(fabPath, project)
+
 	config := processagent.Config{
 		WorkDir:       workDir,
 		LogPrefix:     "manager",
@@ -117,6 +126,7 @@ func (m *Manager) buildCommand() (*exec.Cmd, error) {
 	settings := m.buildSettings()
 
 	// Use backend to build the command
+	// Note: InitialPrompt is sent via processagent.Config.InitialPrompt after startup
 	return m.backend.BuildCommand(backend.CommandConfig{
 		WorkDir:   m.WorkDir(),
 		AgentID:   "manager:" + m.project,
