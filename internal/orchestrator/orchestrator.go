@@ -71,9 +71,10 @@ When implementation is complete:
 2. Run /review to perform a thorough code review of your changes
    Note: /review runs against your local worktree (unmerged). PR numbers are not available until after 'fab agent done' automation. Use issue IDs for references.
 3. IMPORTANT: You MUST address ALL issues found during code review before proceeding. Do not skip or ignore review feedback. Re-run /review if needed to confirm fixes.
-4. Commit all your changes with a descriptive message (include "Closes #<id>" in the commit body to link the commit to the task)
-5. Run 'fab issue close <id>' to close the task
-6. Run 'fab agent done'
+4. Run /docs-review to check if documentation needs updates for your changes
+5. Commit all your changes with a descriptive message (include "Closes #<id>" in the commit body to link the commit to the task)
+6. Run 'fab issue close <id>' to close the task
+7. Run 'fab agent done'
 
 IMPORTANT: Do NOT run 'git push' - merging and pushing happens automatically when you run 'fab agent done'.
 IMPORTANT: Only close an issue when you have COMPLETED the implementation. Do NOT close if you only added comments or a plan.`,

@@ -3,6 +3,7 @@
   "description": "fab coding agent supervisor integration",
   "version": "1.0.0",
   "skills": [
-    "./skills/review"
+    "./skills/review",
+    "./skills/docs-review"
   ]
 }
