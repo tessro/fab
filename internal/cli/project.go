@@ -23,9 +23,9 @@ var projectAddAutostart bool
 var projectAddBackend string
 
 var projectAddCmd = &cobra.Command{
-	Use:   "add <path>",
+	Use:   "add <path|url|owner/repo>",
 	Short: "Add a project to fab",
-	Long:  "Register a project directory with the fab daemon for agent orchestration.",
+	Long:  "Register a project with the fab daemon for agent orchestration.\n\nAccepts a local path, git URL, or GitHub owner/repo shorthand (e.g., tessro/fab).",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runProjectAdd,
 }
@@ -107,30 +107,18 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	// Check if input looks like a git URL
 	if isGitURL(input) {
 		remoteURL = input
-	} else {
+	} else if absPath, isLocalDir := resolveLocalDir(input); isLocalDir {
 		// Treat as local path, extract remote URL
-		absPath, err := filepath.Abs(input)
-		if err != nil {
-			return fmt.Errorf("resolve path: %w", err)
-		}
-
-		// Verify path exists and is a directory
-		info, err := os.Stat(absPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("path does not exist: %s", absPath)
-			}
-			return fmt.Errorf("stat path: %w", err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("path is not a directory: %s", absPath)
-		}
-
-		// Extract remote URL from local repo
+		var err error
 		remoteURL, err = getRemoteURL(absPath)
 		if err != nil {
 			return fmt.Errorf("get remote URL from %s: %w", absPath, err)
 		}
+	} else if isGitHubShorthand(input) {
+		// Expand owner/repo shorthand to full GitHub URL
+		remoteURL = expandGitHubShorthand(input)
+	} else {
+		return fmt.Errorf("path does not exist: %s", input)
 	}
 
 	client := MustConnect()
@@ -158,6 +146,49 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 // isGitURL returns true if the string looks like a git URL.
 func isGitURL(s string) bool {
 	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@")
+}
+
+// resolveLocalDir checks if the input is an existing local directory.
+// Returns the absolute path and true if it exists, otherwise empty string and false.
+func resolveLocalDir(input string) (string, bool) {
+	absPath, err := filepath.Abs(input)
+	if err != nil {
+		return "", false
+	}
+	info, err := os.Stat(absPath)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	return absPath, true
+}
+
+// isGitHubShorthand returns true if the string looks like a GitHub owner/repo shorthand.
+// It matches patterns like "owner/repo" but not paths with multiple slashes or other URL-like patterns.
+func isGitHubShorthand(s string) bool {
+	// Must contain exactly one slash
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 {
+		return false
+	}
+
+	owner, repo := parts[0], parts[1]
+
+	// Both parts must be non-empty
+	if owner == "" || repo == "" {
+		return false
+	}
+
+	// Should not look like a path (no dots at start, no common path prefixes)
+	if strings.HasPrefix(s, ".") || strings.HasPrefix(s, "~") {
+		return false
+	}
+
+	return true
+}
+
+// expandGitHubShorthand converts "owner/repo" to "https://github.com/owner/repo.git".
+func expandGitHubShorthand(s string) string {
+	return fmt.Sprintf("https://github.com/%s.git", s)
 }
 
 // getRemoteURL extracts the origin remote URL from a local git repository.
