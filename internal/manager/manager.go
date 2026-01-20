@@ -57,6 +57,15 @@ type Manager struct {
 // allowedPatterns specifies Bash command patterns that are allowed without prompting.
 // Uses fab pattern syntax (e.g., "fab:*" for prefix match).
 func New(workDir string, project string, b backend.Backend, allowedPatterns []string) *Manager {
+	// Get fab binary path for the system prompt
+	fabPath, err := os.Executable()
+	if err != nil {
+		fabPath = "fab"
+	}
+
+	// Build system prompt that makes the manager project-aware
+	systemPrompt := buildManagerSystemPrompt(fabPath, project)
+
 	m := &Manager{
 		backend:         b,
 		project:         project,
@@ -64,8 +73,9 @@ func New(workDir string, project string, b backend.Backend, allowedPatterns []st
 	}
 
 	config := processagent.Config{
-		WorkDir:   workDir,
-		LogPrefix: "manager",
+		WorkDir:       workDir,
+		LogPrefix:     "manager",
+		InitialPrompt: systemPrompt,
 		BuildCommand: func() (*exec.Cmd, error) {
 			return m.buildCommand()
 		},
@@ -103,26 +113,16 @@ func (m *Manager) SendMessage(content string) error {
 
 // buildCommand creates the exec.Cmd for the agent CLI process.
 func (m *Manager) buildCommand() (*exec.Cmd, error) {
-	// Get fab binary path for the system prompt
-	fabPath, err := os.Executable()
-	if err != nil {
-		fabPath = "fab"
-	}
-
-	// Build system prompt that makes the manager project-aware
-	systemPrompt := buildManagerSystemPrompt(fabPath, m.project)
-
 	// Build settings with allowed tools based on configured patterns
 	settings := m.buildSettings()
 
 	// Use backend to build the command
 	return m.backend.BuildCommand(backend.CommandConfig{
-		WorkDir:       m.WorkDir(),
-		AgentID:       "manager:" + m.project,
-		InitialPrompt: systemPrompt,
-		PluginDir:     plugin.DefaultInstallDir(),
-		Settings:      settings,
-		Env:           []string{"FAB_MANAGER=1"},
+		WorkDir:   m.WorkDir(),
+		AgentID:   "manager:" + m.project,
+		PluginDir: plugin.DefaultInstallDir(),
+		Settings:  settings,
+		Env:       []string{"FAB_MANAGER=1"},
 	})
 }
 
