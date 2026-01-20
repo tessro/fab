@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 // maxHistorySize limits the number of entries stored in history.
@@ -44,11 +45,15 @@ func NewInputLine() InputLine {
 	}
 }
 
+// inputPadding is the total horizontal padding for the input component.
+// Includes prompt width (2 for "> ") and style padding (2).
+const inputPadding = 4
+
 // SetSize updates the component dimensions.
 func (i *InputLine) SetSize(width, height int) {
 	i.width = width
 	i.height = height
-	i.input.SetWidth(width - 6) // Account for padding (2) and prompt (4)
+	i.input.SetWidth(width - inputPadding)
 }
 
 // SetFocused sets the focus state.
@@ -183,16 +188,58 @@ func (i *InputLine) InsertNewline() {
 	i.updateHeight()
 }
 
-// ContentHeight returns the height needed to display the current content.
-// Minimum 1, maximum maxInputHeight.
+// ContentHeight returns the height needed to display the current content,
+// including soft-wrapped lines. Minimum 1, maximum maxInputHeight.
 func (i *InputLine) ContentHeight() int {
-	lines := i.input.LineCount()
-	if lines < 1 {
-		lines = 1
+	// Get the content and calculate visual lines
+	value := i.input.Value()
+	if value == "" {
+		return 1
 	}
-	if lines > maxInputHeight {
-		lines = maxInputHeight
+
+	// Calculate the effective width for content (use same padding as SetSize)
+	contentWidth := i.width - inputPadding
+	if contentWidth < 10 {
+		contentWidth = 10 // minimum reasonable width
 	}
+
+	// Split by actual newlines and calculate wrapped lines for each
+	lines := splitLines(value)
+	visualLines := 0
+	for _, line := range lines {
+		// Calculate display width accounting for unicode characters
+		lineWidth := runewidth.StringWidth(line)
+		if lineWidth == 0 {
+			visualLines++
+		} else {
+			// Each line takes at least 1 row, plus additional rows for wrapping
+			visualLines += (lineWidth + contentWidth - 1) / contentWidth
+		}
+	}
+
+	if visualLines < 1 {
+		visualLines = 1
+	}
+	if visualLines > maxInputHeight {
+		visualLines = maxInputHeight
+	}
+	return visualLines
+}
+
+// splitLines splits a string by newlines, preserving empty lines.
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{""}
+	}
+	var lines []string
+	start := 0
+	for i, c := range s {
+		if c == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	lines = append(lines, s[start:])
 	return lines
 }
 

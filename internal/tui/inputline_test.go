@@ -189,3 +189,85 @@ func TestInputLine_ContentHeight(t *testing.T) {
 		t.Errorf("after Clear, ContentHeight = %d, want 1", il.ContentHeight())
 	}
 }
+
+func TestInputLine_ContentHeight_Wrapping(t *testing.T) {
+	il := NewInputLine()
+	// Set a narrow width to trigger wrapping
+	// Width 20, inputPadding = 4 (prompt 2 + padding 2), content width = 16
+	il.SetSize(20, 10)
+
+	// Short text that doesn't wrap - should be 1 line
+	il.input.SetValue("short")
+	if il.ContentHeight() != 1 {
+		t.Errorf("short text ContentHeight = %d, want 1", il.ContentHeight())
+	}
+
+	// Long text that wraps - should be more than 1 line
+	// "This text is long enough to wrap" is 32 chars -> 2 lines at width 16
+	il.input.SetValue("This text is long enough to wrap")
+	height := il.ContentHeight()
+	if height < 2 {
+		t.Errorf("wrapped text ContentHeight = %d, want >= 2", height)
+	}
+
+	// Very long text should cap at maxInputHeight
+	il.input.SetValue("This is a very very very very very very very very very very very very very very very very long text that should wrap many many times")
+	if il.ContentHeight() > maxInputHeight {
+		t.Errorf("very long text ContentHeight = %d, should be capped at %d", il.ContentHeight(), maxInputHeight)
+	}
+}
+
+func TestInputLine_ContentHeight_Unicode(t *testing.T) {
+	il := NewInputLine()
+	// Set width 20, inputPadding = 4, content width = 16
+	il.SetSize(20, 10)
+
+	// CJK characters are double-width, so 8 CJK chars = 16 display width = 1 line
+	il.input.SetValue("你好世界测试文本") // 8 CJK chars = 16 display width
+	if il.ContentHeight() != 1 {
+		t.Errorf("8 CJK chars ContentHeight = %d, want 1", il.ContentHeight())
+	}
+
+	// 9 CJK chars = 18 display width -> should wrap to 2 lines at width 16
+	il.input.SetValue("你好世界测试文本中") // 9 CJK chars = 18 display width
+	if il.ContentHeight() != 2 {
+		t.Errorf("9 CJK chars ContentHeight = %d, want 2", il.ContentHeight())
+	}
+
+	// Emojis are typically double-width too
+	il.input.SetValue("🎉🎊🎁🎈") // 4 emojis = 8 display width = 1 line
+	if il.ContentHeight() != 1 {
+		t.Errorf("4 emojis ContentHeight = %d, want 1", il.ContentHeight())
+	}
+}
+
+func TestSplitLines(t *testing.T) {
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"", []string{""}},
+		{"one", []string{"one"}},
+		{"one\ntwo", []string{"one", "two"}},
+		{"one\ntwo\nthree", []string{"one", "two", "three"}},
+		{"\n", []string{"", ""}},
+		{"one\n", []string{"one", ""}},
+		{"\none", []string{"", "one"}},
+		{"\n\n", []string{"", "", ""}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := splitLines(tt.input)
+			if len(got) != len(tt.want) {
+				t.Errorf("splitLines(%q) = %v (len %d), want %v (len %d)", tt.input, got, len(got), tt.want, len(tt.want))
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("splitLines(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
