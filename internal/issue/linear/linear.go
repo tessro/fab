@@ -789,6 +789,81 @@ func (b *Backend) AddComment(ctx context.Context, id string, body string) error 
 	return nil
 }
 
+// ListComments returns comments for an issue created after the given time.
+// Comments are ordered by creation time (oldest first).
+func (b *Backend) ListComments(ctx context.Context, id string, since time.Time) ([]*issue.Comment, error) {
+	// Resolve the issue ID (convert identifier to UUID if needed)
+	issueID, err := b.resolveIssueID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("resolve issue ID: %w", err)
+	}
+
+	query := `
+		query IssueComments($issueId: String!, $first: Int!) {
+			issue(id: $issueId) {
+				comments(first: $first, orderBy: createdAt) {
+					nodes {
+						id
+						body
+						createdAt
+						user {
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"issueId": issueID,
+		"first":   100, // Fetch up to 100 comments per poll
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list comments: %w", err)
+	}
+
+	var result struct {
+		Issue struct {
+			Comments struct {
+				Nodes []struct {
+					ID        string `json:"id"`
+					Body      string `json:"body"`
+					CreatedAt string `json:"createdAt"`
+					User      struct {
+						Name string `json:"name"`
+					} `json:"user"`
+				} `json:"nodes"`
+			} `json:"comments"`
+		} `json:"issue"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse comments: %w", err)
+	}
+
+	// Filter comments by since time and convert to issue.Comment
+	var comments []*issue.Comment
+	for _, c := range result.Issue.Comments.Nodes {
+		createdAt, _ := time.Parse(time.RFC3339, c.CreatedAt)
+		if createdAt.IsZero() {
+			continue
+		}
+		// Only include comments created after 'since'
+		if !since.IsZero() && !createdAt.After(since) {
+			continue
+		}
+		comments = append(comments, &issue.Comment{
+			ID:        c.ID,
+			IssueID:   id,
+			Author:    c.User.Name,
+			Body:      c.Body,
+			CreatedAt: createdAt,
+		})
+	}
+
+	return comments, nil
+}
+
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
 func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
 	// First, fetch the current issue to get its description
@@ -810,4 +885,3 @@ func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent 
 
 	return nil
 }
-

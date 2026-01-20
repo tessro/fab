@@ -1095,6 +1095,90 @@ func (b *Backend) AddComment(ctx context.Context, id string, body string) error 
 	return nil
 }
 
+// ListComments returns comments for an issue created after the given time.
+// Comments are ordered by creation time (oldest first).
+func (b *Backend) ListComments(ctx context.Context, id string, since time.Time) ([]*issue.Comment, error) {
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid issue number: %s", id)
+	}
+
+	parts := strings.Split(b.nwo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nwo: %s", b.nwo)
+	}
+	owner, repo := parts[0], parts[1]
+
+	query := `
+		query GetIssueComments($owner: String!, $repo: String!, $number: Int!, $first: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					comments(first: $first, orderBy: {field: UPDATED_AT, direction: ASC}) {
+						nodes {
+							id
+							body
+							createdAt
+							author { login }
+						}
+					}
+				}
+			}
+		}
+	`
+
+	data, err := b.graphqlRequest(ctx, query, map[string]any{
+		"owner":  owner,
+		"repo":   repo,
+		"number": num,
+		"first":  100, // Fetch up to 100 comments per poll
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list comments: %w", err)
+	}
+
+	var result struct {
+		Repository struct {
+			Issue struct {
+				Comments struct {
+					Nodes []struct {
+						ID        string `json:"id"`
+						Body      string `json:"body"`
+						CreatedAt string `json:"createdAt"`
+						Author    struct {
+							Login string `json:"login"`
+						} `json:"author"`
+					} `json:"nodes"`
+				} `json:"comments"`
+			} `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse comments: %w", err)
+	}
+
+	// Filter comments by since time and convert to issue.Comment
+	var comments []*issue.Comment
+	for _, c := range result.Repository.Issue.Comments.Nodes {
+		createdAt, _ := time.Parse(time.RFC3339, c.CreatedAt)
+		if createdAt.IsZero() {
+			continue
+		}
+		// Only include comments created after 'since'
+		if !since.IsZero() && !createdAt.After(since) {
+			continue
+		}
+		comments = append(comments, &issue.Comment{
+			ID:        c.ID,
+			IssueID:   id,
+			Author:    c.Author.Login,
+			Body:      c.Body,
+			CreatedAt: createdAt,
+		})
+	}
+
+	return comments, nil
+}
+
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
 // It fetches the current issue body, applies the plan section update using the
 // shared helper, and updates the issue via the GitHub GraphQL API.

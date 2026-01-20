@@ -331,6 +331,12 @@ func (b *Backend) AddComment(ctx context.Context, id string, body string) error 
 	return b.writeIssue(iss)
 }
 
+// ListComments is not supported for the tk backend.
+// Comments are stored in the issue body and can be accessed via Get().
+func (b *Backend) ListComments(_ context.Context, _ string, _ time.Time) ([]*issue.Comment, error) {
+	return nil, issue.ErrNotSupported
+}
+
 // UpsertPlanSection updates or creates a ## Plan section in the issue body.
 func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent string) error {
 	iss, err := b.Get(ctx, id)
@@ -344,4 +350,3 @@ func (b *Backend) UpsertPlanSection(ctx context.Context, id string, planContent 
 
 	return b.writeIssue(iss)
 }
-

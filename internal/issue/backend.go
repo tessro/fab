@@ -3,6 +3,7 @@ package issue
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotSupported is returned when a backend does not support an operation.
@@ -48,6 +49,11 @@ type IssueCollaborator interface {
 	// AddComment adds a comment to an issue.
 	// Returns ErrNotSupported if the backend does not support comments.
 	AddComment(ctx context.Context, id string, body string) error
+
+	// ListComments returns comments for an issue, ordered by creation time (oldest first).
+	// The since parameter filters to comments created after the given time.
+	// Returns ErrNotSupported if the backend does not support listing comments.
+	ListComments(ctx context.Context, id string, since time.Time) ([]*Comment, error)
 
 	// UpsertPlanSection updates or creates a ## Plan section in the issue body.
 	// The plan content should be bullet points describing the implementation plan.

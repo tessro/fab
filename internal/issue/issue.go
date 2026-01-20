@@ -34,6 +34,15 @@ type Issue struct {
 	Updated      time.Time
 }
 
+// Comment represents a comment on an issue.
+type Comment struct {
+	ID        string    // Unique identifier for the comment
+	IssueID   string    // Issue this comment belongs to
+	Author    string    // Username/identifier of the comment author
+	Body      string    // Comment content
+	CreatedAt time.Time // When the comment was created
+}
+
 // CreateParams are options for creating an issue.
 type CreateParams struct {
 	Title        string
