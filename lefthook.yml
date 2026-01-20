@@ -4,15 +4,21 @@
 pre-commit:
   parallel: true
   commands:
-    golangci-lint:
+    build:
+      glob: "*.go"
+      run: go build -v ./...
+
+    test:
+      glob: "*.go"
+      run: go test -race ./...
+
+    lint:
       glob: "*.go"
       run: golangci-lint run ./...
 
-    gofmt:
-      glob: "*.go"
-      run: gofmt -l {staged_files}
-      fail_text: "Files are not formatted. Run: gofmt -w <files>"
-
-    govet:
-      glob: "*.go"
-      run: go vet ./...
+    docs:
+      glob: "*.md"
+      run: |
+        if command -v pave >/dev/null 2>&1; then
+          pave check
+        fi
