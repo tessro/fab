@@ -6,7 +6,7 @@
       "Bash(git push:*)",
       "Bash(go get:*)",
       "Bash(go run ./cmd/fab:*)",
-      "Bash(./fab:*)"
+      "Bash(fab:*)"
     ]
   }
 }
