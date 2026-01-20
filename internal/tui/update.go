@@ -198,8 +198,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Handle abort confirmation
 			if m.modeState.IsAbortConfirming() {
 				agentID, _ := m.modeState.ConfirmAbort()
-				slog.Debug("confirming abort", "agent_id", agentID)
-				cmds = append(cmds, m.abortAgent(agentID, false))
+				project := m.chatView.Project() // Needed for manager abort
+				slog.Debug("confirming abort", "agent_id", agentID, "project", project)
+				cmds = append(cmds, m.abortAgent(agentID, project, false))
 				m.chatView.SetAbortConfirming(false, "")
 			} else {
 				// Handle pending items for selected agent

@@ -23,6 +23,7 @@ type TUIClient interface {
 	ManagerSendMessage(project, content string) error
 	ManagerChatHistory(project string, limit int) (*ManagerChatHistoryResponse, error)
 	ManagerClearHistory(project string) error
+	ManagerStop(project string) error
 
 	// Planner operations
 	PlanStart(project, prompt string) (*PlanStartResponse, error)
