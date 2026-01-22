@@ -20,7 +20,7 @@ Use the **Task tool** to spawn a sub-agent for code review. This provides a fres
 Use the Task tool with `subagent_type: "general-purpose"` and a prompt like:
 
 ```
-Review all code changes between main and the current branch. Run `git diff main...HEAD` to see all changes.
+Review all code changes (committed and uncommitted) between main and the current worktree. Run `git diff main` to see all changes.
 
 Check each of these areas:
 

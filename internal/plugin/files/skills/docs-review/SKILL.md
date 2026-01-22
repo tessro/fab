@@ -25,7 +25,7 @@ Use the **Task tool** to spawn a sub-agent for documentation review. This provid
 Use the Task tool with `subagent_type: "general-purpose"` and a prompt like:
 
 ```
-Review all code changes between main and the current branch for documentation impact. Run `git diff main...HEAD` to see all changes.
+Review all code changes (committed and uncommitted) between main and the current worktree for documentation impact. Run `git diff main` to see all changes.
 
 Analyze the changes to identify:
 
