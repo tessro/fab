@@ -268,6 +268,7 @@ fab project config set myproject merge-strategy pull-request
 | `FAB_PID_PATH` | Override daemon PID file path |
 | `FAB_AGENT_HOST_SOCKET_PATH` | Override agent host socket path |
 | `FAB_PROJECT` | Set project context for agent commands |
+| `FAB_AGENT_ID` | Agent identifier (set automatically by fab, used by agent commands) |
 
 ### Worktrees
 
