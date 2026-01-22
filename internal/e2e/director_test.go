@@ -2,16 +2,28 @@
 package e2e
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 )
+
+// requireClaude skips the test if the claude CLI is not available.
+// The director spawns Claude Code processes, so these tests cannot run
+// in environments where claude is not installed (e.g., CI).
+func requireClaude(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("claude"); err != nil {
+		t.Skip("skipping test: claude CLI not found in PATH")
+	}
+}
 
 // TestDirectorLifecycle tests the director agent start/stop/restart lifecycle.
 func TestDirectorLifecycle(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
+	requireClaude(t)
 
 	// Create temp directory with short path for Unix socket
 	fabDir, cleanup := shortTempDir(t)
@@ -146,6 +158,7 @@ func TestDirectorClearHistory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
+	requireClaude(t)
 
 	// Create temp directory with short path for Unix socket
 	fabDir, cleanup := shortTempDir(t)
