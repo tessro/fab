@@ -1,7 +1,6 @@
 package supervisor
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -167,32 +166,6 @@ func TestCommentPoller_DeduplicationKey(t *testing.T) {
 	}
 
 	_ = comment // Used to build the dedup ID format
-}
-
-// mockBackend implements issue.CollaborativeBackend for testing
-type mockBackend struct {
-	issue.Backend
-	comments []*issue.Comment
-	err      error
-}
-
-func (m *mockBackend) ListComments(_ context.Context, _ string, _ time.Time) ([]*issue.Comment, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.comments, nil
-}
-
-func (m *mockBackend) AddComment(_ context.Context, _ string, _ string) error {
-	return nil
-}
-
-func (m *mockBackend) UpsertPlanSection(_ context.Context, _ string, _ string) error {
-	return nil
-}
-
-func (m *mockBackend) CreateSubIssue(_ context.Context, _ string, _ issue.CreateParams) (*issue.Issue, error) {
-	return nil, nil
 }
 
 func TestCommentPoller_ListCommentsFiltering(t *testing.T) {

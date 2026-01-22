@@ -142,7 +142,7 @@ func TestResolveLocalDir(t *testing.T) {
 		if err := os.Chdir(tmpDir); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chdir(oldWd)
+		defer func() { _ = os.Chdir(oldWd) }()
 
 		absPath, ok := resolveLocalDir("owner/repo")
 		if !ok {

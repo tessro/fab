@@ -782,7 +782,7 @@ func TestEvaluatorWithDefaultRules(t *testing.T) {
 	defer os.Setenv("FAB_DIR", oldEnv)
 
 	// Create required directories but no permissions.toml
-	os.MkdirAll(filepath.Join(dir, "config"), 0755)
+	_ = os.MkdirAll(filepath.Join(dir, "config"), 0755)
 
 	evaluator := NewEvaluator()
 	ctx := context.Background()
