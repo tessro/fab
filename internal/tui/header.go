@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -15,14 +14,6 @@ type Header struct {
 	// Agent stats
 	agentCount   int
 	runningCount int
-
-	// Session stats
-	commitCount int
-
-	// Usage stats
-	usagePercent  int
-	timeRemaining time.Duration
-	hasUsage      bool
 
 	// Connection state
 	connState connectionState
@@ -51,18 +42,6 @@ func (h *Header) SetConnectionState(state connectionState) {
 	h.connState = state
 }
 
-// SetCommitCount updates the session commit count.
-func (h *Header) SetCommitCount(count int) {
-	h.commitCount = count
-}
-
-// SetUsage updates the usage display.
-func (h *Header) SetUsage(percent int, remaining time.Duration) {
-	h.usagePercent = percent
-	h.timeRemaining = remaining
-	h.hasUsage = true
-}
-
 // View renders the header.
 func (h Header) View() string {
 	// Left side: branding
@@ -85,20 +64,6 @@ func (h Header) View() string {
 		)
 	}
 
-	// Session stats section (commits)
-	var sessionStats string
-	if h.commitCount > 0 && h.connState == connectionConnected {
-		sessionStats = headerStatsStyle.Render(
-			fmt.Sprintf("%d commits", h.commitCount),
-		)
-	}
-
-	// Usage meter section (only show if we have usage data)
-	var usageMeter string
-	if h.hasUsage && h.connState == connectionConnected {
-		usageMeter = h.renderUsageMeter()
-	}
-
 	// Build the sections with separators
 	var sections []string
 	sections = append(sections, brand)
@@ -110,12 +75,6 @@ func (h Header) View() string {
 	var rightStats []string
 	if agentStats != "" {
 		rightStats = append(rightStats, agentStats)
-	}
-	if sessionStats != "" {
-		rightStats = append(rightStats, sessionStats)
-	}
-	if usageMeter != "" {
-		rightStats = append(rightStats, usageMeter)
 	}
 
 	// Calculate widths
@@ -133,41 +92,4 @@ func (h Header) View() string {
 	content := lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(sections, ""), spacer, rightContent)
 
 	return headerContainerStyle.Width(h.width).Render(content)
-}
-
-// renderUsageMeter renders the usage progress bar.
-func (h Header) renderUsageMeter() string {
-	// Progress bar: 10 segments
-	const barLen = 10
-	filled := h.usagePercent * barLen / 100
-	if filled > barLen {
-		filled = barLen
-	}
-	if filled < 0 {
-		filled = 0
-	}
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", barLen-filled)
-
-	// Color based on usage level
-	var barStyle lipgloss.Style
-	switch {
-	case h.usagePercent >= 90:
-		barStyle = headerUsageHighStyle
-	case h.usagePercent >= 70:
-		barStyle = headerUsageMediumStyle
-	default:
-		barStyle = headerUsageLowStyle
-	}
-
-	// Format: "Usage: ████░░░░░░ 45% (2h 15m)"
-	percentStr := fmt.Sprintf("%d%%", h.usagePercent)
-	timeStr := ""
-	if h.timeRemaining > 0 {
-		timeStr = fmt.Sprintf(" (%s)", formatDuration(h.timeRemaining))
-	}
-
-	return headerStatsStyle.Render("Usage: ") +
-		barStyle.Render(bar) +
-		headerStatsStyle.Render(" "+percentStr+timeStr)
 }

@@ -651,36 +651,6 @@ func (c *Client) RespondUserQuestion(id string, answers map[string]string) error
 	return nil
 }
 
-// Stats retrieves aggregated session statistics.
-func (c *Client) Stats(project string) (*StatsResponse, error) {
-	resp, err := c.Send(&Request{
-		Type:    MsgStats,
-		Payload: StatsRequest{Project: project},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Success {
-		return nil, NewServerError("stats", resp.Error)
-	}
-	return decodePayload[StatsResponse](resp.Payload)
-}
-
-// CommitList retrieves recent commits.
-func (c *Client) CommitList(project string, limit int) (*CommitListResponse, error) {
-	resp, err := c.Send(&Request{
-		Type:    MsgCommitList,
-		Payload: CommitListRequest{Project: project, Limit: limit},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Success {
-		return nil, NewServerError("commit list", resp.Error)
-	}
-	return decodePayload[CommitListResponse](resp.Payload)
-}
-
 // ListPendingPermissions returns pending permission requests awaiting user approval.
 func (c *Client) ListPendingPermissions(project string) (*PermissionListResponse, error) {
 	resp, err := c.Send(&Request{

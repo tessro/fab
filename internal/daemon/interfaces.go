@@ -36,10 +36,8 @@ type TUIClient interface {
 	RespondPermission(id, behavior, message string, interrupt bool) error
 	RespondUserQuestion(id string, answers map[string]string) error
 
-	// Project/Stats operations
+	// Project operations
 	ProjectList() (*ProjectListResponse, error)
-	Stats(project string) (*StatsResponse, error)
-	CommitList(project string, limit int) (*CommitListResponse, error)
 
 	// Supervisor operations
 	Start(project string, all bool) error

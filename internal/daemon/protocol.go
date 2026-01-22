@@ -60,12 +60,6 @@ const (
 	MsgAgentClaim MessageType = "agent.claim" // Claim a ticket for an agent
 	MsgClaimList  MessageType = "claim.list"  // List all active claims
 
-	// Commit tracking
-	MsgCommitList MessageType = "commit.list" // List recent commits
-
-	// Stats
-	MsgStats MessageType = "stats" // Get aggregated session statistics
-
 	// Manager agent (interactive user conversation)
 	MsgManagerStart        MessageType = "manager.start"         // Start the manager agent
 	MsgManagerStop         MessageType = "manager.stop"          // Stop the manager agent
@@ -495,52 +489,6 @@ type ClaimInfo struct {
 	TicketID string `json:"ticket_id"`
 	AgentID  string `json:"agent_id"`
 	Project  string `json:"project"`
-}
-
-// CommitListRequest is the payload for commit.list requests.
-type CommitListRequest struct {
-	Project string `json:"project,omitempty"` // Filter by project, empty = all
-	Limit   int    `json:"limit,omitempty"`   // Max commits to return, 0 = all
-}
-
-// CommitListResponse is the payload for commit.list responses.
-type CommitListResponse struct {
-	Commits []CommitInfo `json:"commits"`
-}
-
-// CommitInfo describes a merged commit.
-type CommitInfo struct {
-	SHA         string `json:"sha"`
-	Branch      string `json:"branch"`
-	AgentID     string `json:"agent_id"`
-	TaskID      string `json:"task_id,omitempty"`
-	Description string `json:"description,omitempty"` // Agent description at time of merge
-	Project     string `json:"project"`
-	MergedAt    string `json:"merged_at"` // RFC3339 format
-}
-
-// StatsRequest is the payload for stats requests.
-type StatsRequest struct {
-	Project string `json:"project,omitempty"` // Filter by project, empty = all
-}
-
-// StatsResponse contains aggregated session statistics.
-type StatsResponse struct {
-	// Session stats (accumulated since daemon start)
-	CommitCount int `json:"commit_count"` // Total commits merged this session
-
-	// Usage stats (current billing window)
-	Usage UsageStats `json:"usage"`
-}
-
-// UsageStats contains token usage for the current billing window.
-type UsageStats struct {
-	OutputTokens int64  `json:"output_tokens"`
-	Percent      int    `json:"percent"`    // Usage as percentage (0-100+)
-	WindowEnd    string `json:"window_end"` // RFC3339 format
-	TimeLeft     string `json:"time_left"`  // Human-readable time remaining
-	PlanLimit    int64  `json:"plan_limit"` // Output token limit for current plan
-	Plan         string `json:"plan"`       // "pro" or "max"
 }
 
 // ManagerStartRequest is the payload for manager.start requests.

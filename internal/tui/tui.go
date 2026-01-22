@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tessro/fab/internal/daemon"
-	"github.com/tessro/fab/internal/usage"
 )
 
 // Focus indicates which panel is currently focused.
@@ -47,12 +46,11 @@ type Model struct {
 	modeState ModeState
 
 	// Components
-	header     Header
-	agentList  AgentList
-	recentWork RecentWork
-	chatView   ChatView
-	inputLine  InputLine
-	helpBar    HelpBar
+	header    Header
+	agentList AgentList
+	chatView  ChatView
+	inputLine InputLine
+	helpBar   HelpBar
 
 	// Daemon client for IPC
 	client   daemon.TUIClient
@@ -76,15 +74,8 @@ type Model struct {
 	// Spinner animation frame counter
 	spinnerFrame int
 
-	// Stats refresh counter (every 300 ticks = 30s at 100ms/tick)
-	statsRefreshTick int
-
 	// Key bindings
 	keys KeyBindings
-
-	// Usage tracking
-	lastUsageFetch time.Time
-	usageLimits    usage.Limits
 
 	// Initial agent to select on startup (empty = first agent)
 	initialAgentID string
@@ -102,7 +93,6 @@ func New() Model {
 	return Model{
 		header:         NewHeader(),
 		agentList:      agentList,
-		recentWork:     NewRecentWork(),
 		chatView:       NewChatView(),
 		inputLine:      NewInputLine(),
 		helpBar:        NewHelpBar(),
@@ -111,7 +101,6 @@ func New() Model {
 		connState:      connectionConnected,
 		reconnectDelay: 500 * time.Millisecond,
 		maxReconnects:  10,
-		usageLimits:    usage.DefaultProLimits(),
 	}
 }
 
@@ -138,7 +127,6 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.inputLine.input.Cursor.BlinkCmd(),
 		m.tickCmd(), // Start spinner animation
-		m.fetchUsage(),
 	}
 	if m.client != nil {
 		// Fetch agent list first, then attach to stream
@@ -167,15 +155,13 @@ func (m Model) View() string {
 	m.helpBar.SetModeState(m.modeState)
 	status := m.helpBar.View()
 
-	// Left pane: agent list (70%) + recent work (30%)
+	// Left pane: agent list
 	agentList := m.agentList.View()
-	recentWork := m.recentWork.View()
-	leftPane := lipgloss.JoinVertical(lipgloss.Left, agentList, recentWork)
 
 	// Right pane: chat view
 	chatView := m.chatView.View()
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, chatView)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, agentList, chatView)
 
 	return fmt.Sprintf("%s\n%s\n%s", header, content, status)
 }

@@ -90,9 +90,6 @@ type Orchestrator struct {
 	// Ticket claim registry to prevent duplicate work
 	claims *ClaimRegistry
 
-	// Commit log tracks successfully merged commits
-	commits *CommitLog
-
 	// Lifecycle management (channels are goroutine-safe: created in Start, closed to signal)
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -109,18 +106,12 @@ func New(proj *project.Project, agents *agent.Manager, cfg Config) *Orchestrator
 		config:  cfg,
 		agents:  agents,
 		claims:  NewClaimRegistry(),
-		commits: NewCommitLog(DefaultCommitLogSize),
 	}
 }
 
 // Claims returns the ticket claim registry.
 func (o *Orchestrator) Claims() *ClaimRegistry {
 	return o.claims
-}
-
-// Commits returns the commit log.
-func (o *Orchestrator) Commits() *CommitLog {
-	return o.commits
 }
 
 // Project returns the orchestrator's project.
@@ -409,22 +400,6 @@ func (o *Orchestrator) handleAgentDoneMerge(agentID, taskID string) (*AgentDoneR
 		result.Merged = true
 		result.SHA = mergeResult.SHA
 		slog.Info("merged agent branch to main", "agent", agentID, "branch", mergeResult.BranchName, "sha", mergeResult.SHA)
-
-		// Get agent description before deletion
-		var description string
-		if a, err := o.agents.Get(agentID); err == nil {
-			description = a.GetDescription()
-		}
-
-		// Record the commit
-		o.commits.Add(CommitRecord{
-			SHA:         mergeResult.SHA,
-			Branch:      mergeResult.BranchName,
-			AgentID:     agentID,
-			TaskID:      taskID,
-			Description: description,
-			MergedAt:    time.Now(),
-		})
 
 		_ = o.agents.Stop(agentID)
 		if err := o.agents.Delete(agentID); err != nil {

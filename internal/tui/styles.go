@@ -39,19 +39,6 @@ var (
 				Foreground(lipgloss.Color("#A0A0A0")).
 				Background(primaryColor)
 
-	// Usage bar styles (colored by level)
-	headerUsageLowStyle = lipgloss.NewStyle().
-				Foreground(secondaryColor). // Green
-				Background(primaryColor)
-
-	headerUsageMediumStyle = lipgloss.NewStyle().
-				Foreground(warningColor). // Amber/Yellow
-				Background(primaryColor)
-
-	headerUsageHighStyle = lipgloss.NewStyle().
-				Foreground(errorColor). // Red
-				Background(primaryColor)
-
 	// Status bar style
 	statusStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
@@ -218,29 +205,4 @@ var (
 			Foreground(errorColor).
 			Padding(0, 1)
 
-	// Recent work styles
-	recentWorkContainerStyle = lipgloss.NewStyle()
-
-	recentWorkEmptyStyle = lipgloss.NewStyle().
-				Foreground(mutedColor).
-				Padding(0, 1)
-
-	recentWorkRowStyle = lipgloss.NewStyle().
-				Padding(0, 1)
-
-	recentWorkCheckStyle = lipgloss.NewStyle().
-				Foreground(secondaryColor) // Green checkmark
-
-	recentWorkTaskStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true)
-
-	recentWorkBranchStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#A0A0A0"))
-
-	recentWorkProjectStyle = lipgloss.NewStyle().
-				Foreground(primaryColor)
-
-	recentWorkDescriptionStyle = lipgloss.NewStyle().
-					Foreground(mutedColor)
 )

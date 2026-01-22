@@ -30,18 +30,6 @@ type agentChatHistoryMsg struct {
 	Err     error
 }
 
-// statsMsg contains aggregated session statistics.
-type statsMsg struct {
-	Stats *daemon.StatsResponse
-	Err   error
-}
-
-// commitListMsg contains recent commits for the recent work section.
-type commitListMsg struct {
-	Commits []daemon.CommitInfo
-	Err     error
-}
-
 // permissionResultMsg is the result of responding to a permission request.
 type permissionResultMsg struct {
 	Err error
@@ -87,13 +75,6 @@ type reconnectMsg struct {
 	Success   bool
 	Err       error
 	EventChan <-chan daemon.EventResult
-}
-
-// usageUpdateMsg contains updated usage statistics.
-type usageUpdateMsg struct {
-	Percent   int
-	Remaining time.Duration
-	Err       error
 }
 
 // supervisorProjectListMsg contains the list of projects with their running state.

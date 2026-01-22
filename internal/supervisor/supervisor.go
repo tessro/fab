@@ -268,14 +268,6 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 	case daemon.MsgClaimList:
 		return s.handleClaimList(ctx, req)
 
-	// Commit tracking
-	case daemon.MsgCommitList:
-		return s.handleCommitList(ctx, req)
-
-	// Stats
-	case daemon.MsgStats:
-		return s.handleStats(ctx, req)
-
 	// Manager agent
 	case daemon.MsgManagerStart:
 		return s.handleManagerStart(ctx, req)

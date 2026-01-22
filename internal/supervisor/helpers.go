@@ -2,8 +2,6 @@ package supervisor
 
 import (
 	"encoding/json"
-	"fmt"
-	"time"
 
 	"github.com/tessro/fab/internal/daemon"
 )
@@ -61,16 +59,4 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
-}
-
-// formatDuration formats a duration as a human-readable string (e.g., "2h 15m").
-func formatDuration(d time.Duration) string {
-	d = d.Round(time.Minute)
-	h := d / time.Hour
-	d -= h * time.Hour
-	m := d / time.Minute
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
 }

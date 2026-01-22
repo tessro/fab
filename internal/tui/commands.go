@@ -9,7 +9,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tessro/fab/internal/daemon"
-	"github.com/tessro/fab/internal/usage"
 )
 
 // tickCmd returns a command that sends a tick message after a delay.
@@ -208,35 +207,6 @@ func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	}
 }
 
-// fetchStats retrieves aggregated session statistics.
-func (m Model) fetchStats() tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		resp, err := m.client.Stats("")
-		if err != nil {
-			return statsMsg{Err: err}
-		}
-		return statsMsg{Stats: resp}
-	}
-}
-
-// fetchCommits retrieves recent commits for the recent work section.
-func (m Model) fetchCommits() tea.Cmd {
-	return func() tea.Msg {
-		if m.client == nil {
-			return nil
-		}
-		resp, err := m.client.CommitList("", 20) // Get up to 20 recent commits
-		if err != nil {
-			slog.Debug("tui.fetchCommits: CommitList failed", "error", err)
-			return commitListMsg{Err: err}
-		}
-		return commitListMsg{Commits: resp.Commits}
-	}
-}
-
 // fetchProjectsForPlan retrieves the list of projects for plan mode.
 func (m Model) fetchProjectsForPlan() tea.Cmd {
 	return func() tea.Msg {
@@ -324,21 +294,6 @@ func (m Model) abortAgent(agentID, project string, force bool) tea.Cmd {
 			err = m.client.AgentAbort(agentID, force)
 		}
 		return abortResultMsg{Err: err}
-	}
-}
-
-// fetchUsage retrieves current usage statistics.
-func (m Model) fetchUsage() tea.Cmd {
-	limits := m.usageLimits
-	return func() tea.Msg {
-		window, err := usage.GetCurrentBillingWindowWithUsage()
-		if err != nil {
-			return usageUpdateMsg{Err: err}
-		}
-		return usageUpdateMsg{
-			Percent:   window.Usage.PercentInt(limits),
-			Remaining: window.TimeRemaining(),
-		}
 	}
 }
 

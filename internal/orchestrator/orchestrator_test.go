@@ -33,9 +33,6 @@ func TestNew(t *testing.T) {
 	if orch.claims == nil {
 		t.Error("expected orchestrator to have a claim registry")
 	}
-	if orch.commits == nil {
-		t.Error("expected orchestrator to have a commit log")
-	}
 	if orch.IsRunning() {
 		t.Error("expected orchestrator to not be running initially")
 	}
@@ -125,32 +122,6 @@ func TestOrchestrator_Claims(t *testing.T) {
 	// Should be able to claim tickets
 	if err := claims.Claim("TICKET-1", "agent-1"); err != nil {
 		t.Errorf("expected claim to succeed, got %v", err)
-	}
-}
-
-func TestOrchestrator_Commits(t *testing.T) {
-	proj := &project.Project{Name: "test-project"}
-	agents := agent.NewManager()
-	cfg := DefaultConfig()
-
-	orch := New(proj, agents, cfg)
-
-	commits := orch.Commits()
-	if commits == nil {
-		t.Fatal("expected Commits() to return non-nil")
-	}
-
-	// Should be able to add commits
-	commits.Add(CommitRecord{
-		SHA:      "abc123",
-		Branch:   "feature",
-		AgentID:  "agent-1",
-		TaskID:   "task-1",
-		MergedAt: time.Now(),
-	})
-
-	if commits.Len() != 1 {
-		t.Errorf("expected 1 commit, got %d", commits.Len())
 	}
 }
 
