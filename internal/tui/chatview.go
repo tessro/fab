@@ -21,6 +21,7 @@ type ChatView struct {
 	agentID             string
 	project             string
 	backend             string // CLI backend name (e.g., "claude", "codex")
+	worktree            string // Agent's working directory (for path shortening)
 	viewport            viewport.Model
 	ready               bool
 	pendingPermission   *daemon.PermissionRequest // pending permission request
@@ -120,11 +121,12 @@ func (v *ChatView) IsFocused() bool {
 }
 
 // SetAgent sets the currently viewed agent.
-func (v *ChatView) SetAgent(agentID, project, backend string) {
+func (v *ChatView) SetAgent(agentID, project, backend, worktree string) {
 	if v.agentID != agentID {
 		v.agentID = agentID
 		v.project = project
 		v.backend = backend
+		v.worktree = worktree
 		v.entries = make([]daemon.ChatEntryDTO, 0)
 		v.updateContent()
 	}
@@ -135,6 +137,7 @@ func (v *ChatView) ClearAgent() {
 	v.agentID = ""
 	v.project = ""
 	v.backend = ""
+	v.worktree = ""
 	v.entries = make([]daemon.ChatEntryDTO, 0)
 	v.updateContent()
 }
@@ -439,7 +442,9 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) s
 
 		// Tool invocation line (only show if we have a tool name)
 		if entry.ToolName != "" {
-			toolLine := "  " + chatToolStyle.Render("["+entry.ToolName+"]") + " " + truncateToolInput(entry.ToolInput)
+			// Shorten paths in tool input (e.g., file_path for Read/Write/Edit)
+			toolInput := shortenPath(entry.ToolInput, v.worktree)
+			toolLine := "  " + chatToolStyle.Render("["+entry.ToolName+"]") + " " + truncateToolInput(toolInput)
 			parts = append(parts, toolLine)
 		}
 
@@ -450,7 +455,7 @@ func (v *ChatView) renderEntry(entry daemon.ChatEntryDTO, lastToolName string) s
 			if toolName == "" {
 				toolName = lastToolName
 			}
-			resultLine := "  " + chatResultStyle.Render("->") + " " + summarizeToolResult(toolName, entry.ToolResult, v.width-6, entry.IsError)
+			resultLine := "  " + chatResultStyle.Render("->") + " " + v.summarizeToolResult(toolName, entry.ToolResult, v.width-6, entry.IsError)
 			parts = append(parts, resultLine)
 		}
 
@@ -498,7 +503,8 @@ func truncateToolInput(input string) string {
 }
 
 // truncateResult truncates tool result for display.
-func truncateResult(result string, maxWidth int) string {
+// Applies path shortening to each line.
+func (v *ChatView) truncateResult(result string, maxWidth int) string {
 	lines := strings.Split(result, "\n")
 
 	// Show first few lines
@@ -508,11 +514,13 @@ func truncateResult(result string, maxWidth int) string {
 		lines = append(lines, "...")
 	}
 
-	// Truncate each line
+	// Shorten paths and truncate each line
 	for i, line := range lines {
+		line = v.shortenPathsInLine(line)
 		if len(line) > maxWidth {
-			lines[i] = line[:maxWidth-3] + "..."
+			line = line[:maxWidth-3] + "..."
 		}
+		lines[i] = line
 	}
 
 	// Join with indentation for continuation lines
@@ -532,10 +540,11 @@ func truncateResult(result string, maxWidth int) string {
 // For Read and Grep tools, it shows line counts instead of content.
 // For error results, it shows the full output to help diagnose failures.
 // For other tools, it uses the existing truncateResult behavior.
-func summarizeToolResult(toolName, result string, maxWidth int, isError bool) string {
+// Path shortening is applied using the ChatView's worktree.
+func (v *ChatView) summarizeToolResult(toolName, result string, maxWidth int, isError bool) string {
 	// Show full output for errors (e.g., test failures)
 	if isError {
-		return formatFullResult(result, maxWidth)
+		return v.formatFullResult(result, maxWidth)
 	}
 
 	switch toolName {
@@ -563,20 +572,23 @@ func summarizeToolResult(toolName, result string, maxWidth int, isError bool) st
 		return formatMatchCount(matchCount)
 
 	default:
-		return truncateResult(result, maxWidth)
+		return v.truncateResult(result, maxWidth)
 	}
 }
 
 // formatFullResult formats a result for display without line truncation.
 // Used for error output where we need to see the full content.
-func formatFullResult(result string, maxWidth int) string {
+// Applies path shortening to each line.
+func (v *ChatView) formatFullResult(result string, maxWidth int) string {
 	lines := strings.Split(result, "\n")
 
-	// Truncate each line to terminal width
+	// Shorten paths and truncate each line to terminal width
 	for i, line := range lines {
+		line = v.shortenPathsInLine(line)
 		if len(line) > maxWidth {
-			lines[i] = line[:maxWidth-3] + "..."
+			line = line[:maxWidth-3] + "..."
 		}
+		lines[i] = line
 	}
 
 	// Join with indentation for continuation lines
@@ -611,6 +623,38 @@ func formatMatchCount(count int) string {
 // formatNumber formats a number as a string.
 func formatNumber(n int) string {
 	return strconv.Itoa(n)
+}
+
+// shortenPath replaces a worktree prefix in a path with "./" for more readable display.
+// If the path doesn't start with the worktree prefix, it's returned unchanged.
+func shortenPath(path, worktree string) string {
+	if worktree == "" || path == "" {
+		return path
+	}
+	// Ensure worktree has no trailing slash for consistent matching
+	worktree = strings.TrimSuffix(worktree, "/")
+	// Check for exact match (path is the worktree dir itself)
+	if path == worktree {
+		return "."
+	}
+	// Check for prefix with trailing slash
+	prefix := worktree + "/"
+	if strings.HasPrefix(path, prefix) {
+		return "./" + path[len(prefix):]
+	}
+	return path
+}
+
+// shortenPathsInLine shortens any absolute paths matching the worktree prefix within a line.
+// This handles common output formats like grep results (path:line:content).
+func (v *ChatView) shortenPathsInLine(line string) string {
+	if v.worktree == "" {
+		return line
+	}
+	worktree := strings.TrimSuffix(v.worktree, "/")
+	prefix := worktree + "/"
+	// Replace all occurrences of the worktree prefix with "./"
+	return strings.ReplaceAll(line, prefix, "./")
 }
 
 // View renders the chat view.

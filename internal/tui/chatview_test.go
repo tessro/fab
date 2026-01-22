@@ -102,9 +102,12 @@ func TestSummarizeToolResult(t *testing.T) {
 		},
 	}
 
+	// Create a ChatView with no worktree (no path shortening)
+	cv := NewChatView()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := summarizeToolResult(tt.toolName, tt.result, tt.maxWidth, tt.isError)
+			got := cv.summarizeToolResult(tt.toolName, tt.result, tt.maxWidth, tt.isError)
 			if got != tt.want {
 				t.Errorf("summarizeToolResult(%q, result, %d, %v) = %q, want %q", tt.toolName, tt.maxWidth, tt.isError, got, tt.want)
 			}
@@ -122,6 +125,119 @@ func generateLines(n int) string {
 		s += "line"
 	}
 	return s
+}
+
+func TestShortenPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		worktree string
+		want     string
+	}{
+		{
+			name:     "path within worktree",
+			path:     "/home/user/.fab/worktrees/proj/internal/tui/chatview.go",
+			worktree: "/home/user/.fab/worktrees/proj",
+			want:     "./internal/tui/chatview.go",
+		},
+		{
+			name:     "path is worktree root",
+			path:     "/home/user/.fab/worktrees/proj",
+			worktree: "/home/user/.fab/worktrees/proj",
+			want:     ".",
+		},
+		{
+			name:     "path outside worktree",
+			path:     "/home/user/other/file.go",
+			worktree: "/home/user/.fab/worktrees/proj",
+			want:     "/home/user/other/file.go",
+		},
+		{
+			name:     "empty worktree",
+			path:     "/home/user/.fab/worktrees/proj/file.go",
+			worktree: "",
+			want:     "/home/user/.fab/worktrees/proj/file.go",
+		},
+		{
+			name:     "empty path",
+			path:     "",
+			worktree: "/home/user/.fab/worktrees/proj",
+			want:     "",
+		},
+		{
+			name:     "worktree with trailing slash",
+			path:     "/home/user/.fab/worktrees/proj/internal/file.go",
+			worktree: "/home/user/.fab/worktrees/proj/",
+			want:     "./internal/file.go",
+		},
+		{
+			name:     "similar prefix but not inside worktree",
+			path:     "/home/user/.fab/worktrees/proj-other/file.go",
+			worktree: "/home/user/.fab/worktrees/proj",
+			want:     "/home/user/.fab/worktrees/proj-other/file.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shortenPath(tt.path, tt.worktree)
+			if got != tt.want {
+				t.Errorf("shortenPath(%q, %q) = %q, want %q", tt.path, tt.worktree, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShortenPathsInLine(t *testing.T) {
+	cv := NewChatView()
+	cv.worktree = "/home/user/.fab/worktrees/proj"
+
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "grep output with path",
+			line: "/home/user/.fab/worktrees/proj/internal/tui/chatview.go:123: some match",
+			want: "./internal/tui/chatview.go:123: some match",
+		},
+		{
+			name: "multiple paths in line",
+			line: "from /home/user/.fab/worktrees/proj/a.go to /home/user/.fab/worktrees/proj/b.go",
+			want: "from ./a.go to ./b.go",
+		},
+		{
+			name: "line without worktree path",
+			line: "just some regular text",
+			want: "just some regular text",
+		},
+		{
+			name: "path outside worktree",
+			line: "/home/user/other/file.go:10: match",
+			want: "/home/user/other/file.go:10: match",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cv.shortenPathsInLine(tt.line)
+			if got != tt.want {
+				t.Errorf("shortenPathsInLine(%q) = %q, want %q", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShortenPathsInLineEmptyWorktree(t *testing.T) {
+	cv := NewChatView()
+	// No worktree set
+
+	line := "/home/user/.fab/worktrees/proj/file.go:10: match"
+	got := cv.shortenPathsInLine(line)
+	if got != line {
+		t.Errorf("shortenPathsInLine with empty worktree should return line unchanged, got %q", got)
+	}
 }
 
 func TestFormatLineCount(t *testing.T) {
@@ -297,7 +413,7 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 			cv := NewChatView()
 			// Initialize viewport with a size
 			cv.SetSize(80, 24)
-			cv.SetAgent("test-agent", "test-project", "claude")
+			cv.SetAgent("test-agent", "test-project", "claude", "/test/worktree")
 
 			// Add existing entries (simulating streaming entries)
 			for _, e := range tt.existing {
@@ -329,7 +445,7 @@ func TestChatViewSetEntriesPreservesOrder(t *testing.T) {
 	// Verify that merged entries maintain chronological order
 	cv := NewChatView()
 	cv.SetSize(80, 24)
-	cv.SetAgent("test-agent", "test-project", "claude")
+	cv.SetAgent("test-agent", "test-project", "claude", "/test/worktree")
 
 	// Add streaming entries - one older than history, two newer
 	cv.AppendEntry(daemon.ChatEntryDTO{Role: "user", Content: "very old", Timestamp: "2024-01-15T08:00:00Z"})
