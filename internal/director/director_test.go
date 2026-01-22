@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tessro/fab/internal/backend"
+	"github.com/tessro/fab/internal/project"
 )
 
 // mockBackend implements backend.Backend for testing.
@@ -165,7 +166,8 @@ func TestBackendInjection(t *testing.T) {
 }
 
 func TestDirectorSystemPrompt(t *testing.T) {
-	prompt := buildDirectorSystemPrompt("/usr/bin/fab")
+	// Test with nil projects
+	prompt := buildDirectorSystemPrompt(nil)
 
 	// Check that key elements are present
 	checks := []string{
@@ -175,8 +177,9 @@ func TestDirectorSystemPrompt(t *testing.T) {
 		"fab status",
 		"fab issue create",
 		"--project",
-		"cross-project",
-		"Global Context",
+		"Cross-Project",
+		"Projects Under Your Direction",
+		"No projects registered",
 	}
 
 	for _, check := range checks {
@@ -184,6 +187,89 @@ func TestDirectorSystemPrompt(t *testing.T) {
 			t.Errorf("system prompt missing %q", check)
 		}
 	}
+}
+
+func TestDirectorSystemPromptWithProjects(t *testing.T) {
+	// Create mock projects
+	projects := []*project.Project{
+		project.NewProject("backend", "git@github.com:org/backend.git"),
+		project.NewProject("api", "git@github.com:org/api.git"),
+	}
+	projects[0].SetRunning(true)
+
+	prompt := buildDirectorSystemPrompt(projects)
+
+	// Check project info is included
+	checks := []string{
+		"### api",
+		"### backend",
+		"git@github.com:org/backend.git",
+		"git@github.com:org/api.git",
+		"Status: running",
+		"Status: stopped",
+		"~/.fab/projects/backend/repo/",
+		"~/.fab/projects/api/repo/",
+	}
+
+	for _, check := range checks {
+		if !strings.Contains(prompt, check) {
+			t.Errorf("system prompt with projects missing %q", check)
+		}
+	}
+}
+
+func TestBuildProjectSummary(t *testing.T) {
+	t.Run("empty projects", func(t *testing.T) {
+		summary := buildProjectSummary(nil)
+		if !strings.Contains(summary, "No projects registered") {
+			t.Error("empty summary should mention no projects registered")
+		}
+	})
+
+	t.Run("with projects", func(t *testing.T) {
+		projects := []*project.Project{
+			project.NewProject("zebra", "https://github.com/org/zebra.git"),
+			project.NewProject("alpha", "https://github.com/org/alpha.git"),
+		}
+		projects[1].SetRunning(true)
+
+		summary := buildProjectSummary(projects)
+
+		// Projects should be sorted alphabetically
+		alphaIdx := strings.Index(summary, "### alpha")
+		zebraIdx := strings.Index(summary, "### zebra")
+		if alphaIdx == -1 || zebraIdx == -1 {
+			t.Error("summary should include both project names")
+		}
+		if alphaIdx > zebraIdx {
+			t.Error("projects should be sorted alphabetically (alpha before zebra)")
+		}
+
+		// Check project details
+		checks := []string{
+			"Remote: https://github.com/org/alpha.git",
+			"Remote: https://github.com/org/zebra.git",
+			"Active agents: 0/3",
+			"~/.fab/projects/alpha/repo/",
+		}
+		for _, check := range checks {
+			if !strings.Contains(summary, check) {
+				t.Errorf("summary missing %q", check)
+			}
+		}
+	})
+
+	t.Run("running project status", func(t *testing.T) {
+		projects := []*project.Project{
+			project.NewProject("myproj", "https://github.com/org/myproj.git"),
+		}
+		projects[0].SetRunning(true)
+
+		summary := buildProjectSummary(projects)
+		if !strings.Contains(summary, "Status: running") {
+			t.Error("running project should show 'running' status")
+		}
+	})
 }
 
 func TestDirectorCreation(t *testing.T) {
