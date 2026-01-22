@@ -146,7 +146,7 @@ patterns = [
 # Bash commands it can run without prompting.
 
 [manager]
-allowed_patterns = ["fab:*"]
+allowed-patterns = ["fab:*"]
 
 # =============================================================================
 # EXAMPLES

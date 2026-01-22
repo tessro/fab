@@ -35,10 +35,10 @@ The Configuration system manages fab's settings across two scopes: global (daemo
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `log_level` | `"info"` | Logging verbosity: `"debug"`, `"info"`, `"warn"`, `"error"` |
+| `log-level` | `"info"` | Logging verbosity: `"debug"`, `"info"`, `"warn"`, `"error"` |
 | `providers.<name>.api-key` | — | API key for provider (anthropic, openai, linear, github) |
-| `llm_auth.provider` | `"anthropic"` | LLM auth provider: `"anthropic"` or `"openai"` |
-| `llm_auth.model` | `"claude-haiku-4-5"` | Model for permission authorization |
+| `llm-auth.provider` | `"anthropic"` | LLM auth provider: `"anthropic"` or `"openai"` |
+| `llm-auth.model` | `"claude-haiku-4-5"` | Model for permission authorization |
 | `defaults.agent-backend` | `"claude"` | Default agent CLI: `"claude"` or `"codex"` |
 | `defaults.planner-backend` | — | Default planner CLI: `"claude"` or `"codex"` (falls back to agent-backend) |
 | `defaults.coding-backend` | — | Default coding agent CLI: `"claude"` or `"codex"` (falls back to agent-backend) |

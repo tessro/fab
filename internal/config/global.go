@@ -13,13 +13,13 @@ import (
 type GlobalConfig struct {
 	// LogLevel controls logging verbosity ("debug", "info", "warn", "error").
 	// Defaults to "info" if not specified.
-	LogLevel string `toml:"log_level"`
+	LogLevel string `toml:"log-level"`
 
 	// Providers contains API provider configurations.
 	Providers ProvidersConfig `toml:"providers"`
 
 	// LLMAuth contains LLM authorization settings.
-	LLMAuth LLMAuthConfig `toml:"llm_auth"`
+	LLMAuth LLMAuthConfig `toml:"llm-auth"`
 
 	// Defaults contains default values for project configuration.
 	Defaults DefaultsConfig `toml:"defaults"`

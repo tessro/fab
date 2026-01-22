@@ -13,13 +13,13 @@ templates = "templates"
 
 [rules]
 # Maximum lines per document
-max_lines = 300
+max-lines = 300
 
 # Require verification sections in documents
-require_verification = true
+require-verification = true
 
 # Require examples sections in documents
-require_examples = true
+require-examples = true
 
 # Gradual adoption mode disabled - full enforcement active
 gradual = false

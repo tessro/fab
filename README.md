@@ -185,7 +185,7 @@ Config lives at `~/.config/fab/config.toml` (or `$FAB_DIR/config/config.toml` if
 
 ```toml
 # Logging level: debug, info, warn, error
-log_level = "info"
+log-level = "info"
 
 # API Provider Configuration
 [providers.anthropic]
@@ -201,7 +201,7 @@ api-key = "lin_api_..."  # Linear API key for issue backend
 api-key = "ghp_..."      # GitHub token (or use GITHUB_TOKEN env var)
 
 # LLM Authorization Settings
-[llm_auth]
+[llm-auth]
 provider = "anthropic"  # or "openai"
 model = "claude-haiku-4-5"
 

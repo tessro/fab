@@ -93,16 +93,25 @@ func coalesceStringSlice(values ...[]string) []string {
 // This includes all known fields to preserve them when saving.
 type Config struct {
 	// LogLevel is preserved from global config.
-	LogLevel string `toml:"log_level,omitempty"`
+	LogLevel string `toml:"log-level,omitempty"`
 
 	// Providers is preserved from global config.
 	Providers map[string]any `toml:"providers,omitempty"`
 
 	// LLMAuth is preserved from global config.
-	LLMAuth map[string]any `toml:"llm_auth,omitempty"`
+	LLMAuth map[string]any `toml:"llm-auth,omitempty"`
+
+	// Defaults is preserved from global config.
+	Defaults map[string]any `toml:"defaults,omitempty"`
 
 	// Projects is the list of registered projects.
 	Projects []ProjectEntry `toml:"projects"`
+
+	// Legacy fields (underscore format) - for backwards compatibility during loading.
+	// These are read during load() and merged with hyphen-format fields.
+	// When saving, only the hyphen-format fields are written.
+	LegacyLogLevel string         `toml:"log_level,omitempty"`
+	LegacyLLMAuth  map[string]any `toml:"llm_auth,omitempty"`
 }
 
 // Registry manages the persistent collection of projects.
@@ -180,7 +189,7 @@ func (r *Registry) SetProjectBaseDir(baseDir string) {
 // load reads the config file and populates the registry.
 // It supports both hyphen-format keys (e.g., "remote-url") and legacy underscore-format
 // keys (e.g., "remote_url") for backwards compatibility. Hyphen-format takes precedence.
-// It also preserves non-project config fields (log_level, providers, llm_auth) for saving.
+// It also preserves non-project config fields (log-level, providers, llm-auth, defaults) for saving.
 func (r *Registry) load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -190,11 +199,19 @@ func (r *Registry) load() error {
 		return err
 	}
 
+	// Coalesce hyphen-format and underscore-format fields (hyphen takes precedence)
+	logLevel := coalesce(config.LogLevel, config.LegacyLogLevel)
+	llmAuth := config.LLMAuth
+	if llmAuth == nil {
+		llmAuth = config.LegacyLLMAuth
+	}
+
 	// Preserve global config fields for saving
 	r.globalConfig = &Config{
-		LogLevel:  config.LogLevel,
+		LogLevel:  logLevel,
 		Providers: config.Providers,
-		LLMAuth:   config.LLMAuth,
+		LLMAuth:   llmAuth,
+		Defaults:  config.Defaults,
 	}
 
 	for _, entry := range config.Projects {
@@ -258,6 +275,7 @@ func (r *Registry) save() error {
 		config.LogLevel = r.globalConfig.LogLevel
 		config.Providers = r.globalConfig.Providers
 		config.LLMAuth = r.globalConfig.LLMAuth
+		config.Defaults = r.globalConfig.Defaults
 	}
 
 	for _, p := range r.projects {

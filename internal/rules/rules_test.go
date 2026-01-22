@@ -673,7 +673,7 @@ action = "allow"
 pattern = "ls:*"
 
 [manager]
-allowed_patterns = ["fab:*", "git:*"]
+allowed-patterns = ["fab:*", "git:*"]
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -709,7 +709,7 @@ action = "allow"
 pattern = "ls:*"
 
 [manager]
-allowed_patterns = ["fab:*", ""]
+allowed-patterns = ["fab:*", ""]
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)

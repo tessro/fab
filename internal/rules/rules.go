@@ -37,7 +37,7 @@ type ManagerConfig struct {
 	// AllowedPatterns are Bash command patterns the manager can run without prompting.
 	// Uses the same pattern syntax as permissions.toml (e.g., "fab:*" for prefix match).
 	// Defaults to ["fab:*"] if not specified.
-	AllowedPatterns []string `toml:"allowed_patterns,omitempty"`
+	AllowedPatterns []string `toml:"allowed-patterns,omitempty"`
 }
 
 // Config represents a permissions configuration file.

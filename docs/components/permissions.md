@@ -141,7 +141,7 @@ The manager agent has its own allowlist for Bash commands:
 
 ```toml
 [manager]
-allowed_patterns = ["fab:*"]
+allowed-patterns = ["fab:*"]
 ```
 
 ### Claude Code Settings

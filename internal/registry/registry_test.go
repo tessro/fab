@@ -430,13 +430,13 @@ func TestRegistry_SavePreservesGlobalConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	// Write a config file with global config and projects
-	initialConfig := `log_level = "debug"
+	initialConfig := `log-level = "debug"
 
 [providers]
 [providers.anthropic]
 api-key = "sk-secret-key"
 
-[llm_auth]
+[llm-auth]
 provider = "anthropic"
 model = "claude-haiku-4-5"
 
@@ -474,8 +474,8 @@ max-agents = 2
 	configStr := string(content)
 
 	// Verify global config was preserved
-	if !strings.Contains(configStr, `log_level = "debug"`) {
-		t.Errorf("Config should contain log_level = debug, got:\n%s", configStr)
+	if !strings.Contains(configStr, `log-level = "debug"`) {
+		t.Errorf("Config should contain log-level = debug, got:\n%s", configStr)
 	}
 	if !strings.Contains(configStr, `api-key = "sk-secret-key"`) {
 		t.Errorf("Config should contain api-key = sk-secret-key, got:\n%s", configStr)
@@ -501,7 +501,7 @@ func TestRegistry_SavePreservesGlobalConfigOnUpdate(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	// Write a config file with global config and a project
-	initialConfig := `log_level = "warn"
+	initialConfig := `log-level = "warn"
 
 [providers]
 [providers.openai]
@@ -536,8 +536,8 @@ max-agents = 1
 	configStr := string(content)
 
 	// Verify global config was preserved
-	if !strings.Contains(configStr, `log_level = "warn"`) {
-		t.Errorf("Config should contain log_level = warn, got:\n%s", configStr)
+	if !strings.Contains(configStr, `log-level = "warn"`) {
+		t.Errorf("Config should contain log-level = warn, got:\n%s", configStr)
 	}
 	if !strings.Contains(configStr, `api-key = "openai-key"`) {
 		t.Errorf("Config should contain api-key = openai-key, got:\n%s", configStr)
@@ -546,6 +546,65 @@ max-agents = 1
 	// Verify project update was saved
 	if !strings.Contains(configStr, `max-agents = 5`) {
 		t.Errorf("Config should contain max-agents = 5, got:\n%s", configStr)
+	}
+}
+
+func TestRegistry_SavePreservesLegacyGlobalConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Write a config file with legacy underscore-format global config
+	initialConfig := `log_level = "debug"
+
+[providers]
+[providers.anthropic]
+api-key = "sk-secret-key"
+
+[llm_auth]
+provider = "anthropic"
+model = "claude-haiku-4-5"
+
+[[projects]]
+name = "existing-project"
+remote-url = "git@github.com:user/existing.git"
+max-agents = 2
+`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Load the registry
+	r, err := NewWithPath(configPath)
+	if err != nil {
+		t.Fatalf("NewWithPath() error = %v", err)
+	}
+
+	// Add a new project (this triggers save)
+	_, err = r.Add("git@github.com:user/new-project.git", "new-project", 3, false, "")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Read back the config file
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	configStr := string(content)
+
+	// Verify global config was migrated to hyphen format
+	if !strings.Contains(configStr, `log-level = "debug"`) {
+		t.Errorf("Config should contain log-level = debug (migrated from log_level), got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `api-key = "sk-secret-key"`) {
+		t.Errorf("Config should contain api-key = sk-secret-key, got:\n%s", configStr)
+	}
+	// LLM auth section should be preserved with hyphen format
+	if !strings.Contains(configStr, `[llm-auth]`) {
+		t.Errorf("Config should contain [llm-auth] section, got:\n%s", configStr)
+	}
+	if !strings.Contains(configStr, `provider = "anthropic"`) {
+		t.Errorf("Config should contain provider = anthropic, got:\n%s", configStr)
 	}
 }
 
