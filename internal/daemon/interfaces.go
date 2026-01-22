@@ -42,6 +42,14 @@ type TUIClient interface {
 	// Supervisor operations
 	Start(project string, all bool) error
 	Stop(project string, all bool) error
+
+	// Director operations
+	DirectorStart() error
+	DirectorStop() error
+	DirectorStatus() (*DirectorStatusResponse, error)
+	DirectorSendMessage(content string) error
+	DirectorChatHistory(limit int) (*DirectorChatHistoryResponse, error)
+	DirectorClearHistory() error
 }
 
 // Compile-time assertions to verify Client implements all interfaces.

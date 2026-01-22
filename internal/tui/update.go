@@ -865,6 +865,73 @@ func (m *Model) handleStreamEvent(event *daemon.StreamEvent) tea.Cmd {
 		}
 		m.header.SetAgentCounts(len(agents), countRunning(agents))
 
+	case "director_chat_entry":
+		// Director agent chat entry - display if director is selected
+		if event.ChatEntry != nil && m.chatView.AgentID() == DirectorAgentID {
+			m.chatView.AppendEntry(*event.ChatEntry)
+		}
+
+	case "director_state":
+		// Director agent state changed - add/remove/update in the agent list
+		agents := m.agentList.Agents()
+
+		// Find director in the current list
+		directorIndex := -1
+		for i := range agents {
+			if agents[i].ID == DirectorAgentID {
+				directorIndex = i
+				break
+			}
+		}
+
+		switch event.DirectorState {
+		case "stopped":
+			// Remove director from the list when stopped
+			if directorIndex >= 0 {
+				wasSelected := m.chatView.AgentID() == DirectorAgentID
+				agents = append(agents[:directorIndex], agents[directorIndex+1:]...)
+				m.agentList.SetAgents(agents)
+				// If director was selected, select the next agent
+				if wasSelected {
+					m.chatView.ClearAgent()
+					if len(agents) > 0 {
+						return m.selectCurrentAgent()
+					}
+				}
+			}
+		case "starting", "running":
+			// Add director to the list if not present
+			if directorIndex < 0 {
+				startedAt := time.Now() // fallback
+				if event.StartedAt != "" {
+					if t, err := time.Parse(time.RFC3339, event.StartedAt); err == nil {
+						startedAt = t
+					}
+				}
+				// Prepend director as first entry (before manager and other agents)
+				directorAgent := daemon.AgentStatus{
+					ID:          DirectorAgentID,
+					Project:     "director",
+					State:       event.DirectorState,
+					StartedAt:   startedAt,
+					Description: "Director",
+				}
+				agents = append([]daemon.AgentStatus{directorAgent}, agents...)
+				m.agentList.SetAgents(agents)
+			} else {
+				// Update existing director state
+				agents[directorIndex].State = event.DirectorState
+				m.agentList.SetAgents(agents)
+			}
+		default:
+			// Update state for other transitions (stopping, etc.)
+			if directorIndex >= 0 {
+				agents[directorIndex].State = event.DirectorState
+				m.agentList.SetAgents(agents)
+			}
+		}
+		m.header.SetAgentCounts(len(agents), countRunning(agents))
+
 	case "planner_created":
 		// A new planner was created - add to list
 		agents := m.agentList.Agents()

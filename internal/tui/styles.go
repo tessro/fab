@@ -94,6 +94,11 @@ var (
 				Foreground(lipgloss.Color("#00BFFF")). // Deep Sky Blue
 				Bold(true)
 
+	// Special style for the director agent
+	agentDirectorIDStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF8C00")). // Dark Orange
+				Bold(true)
+
 	agentProjectStyle = lipgloss.NewStyle().
 				Foreground(primaryColor)
 

@@ -10,6 +10,11 @@ func isManager(agentID string) bool {
 	return isManagerAgent(agentID)
 }
 
+// isDirector returns true if the given agent ID is the director agent.
+func isDirector(agentID string) bool {
+	return isDirectorAgent(agentID)
+}
+
 // isPlanner returns true if the given agent ID is a planner agent.
 func isPlanner(agentID string) bool {
 	return isPlannerAgent(agentID)

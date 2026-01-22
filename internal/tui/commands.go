@@ -161,7 +161,9 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 			return nil
 		}
 		var err error
-		if isManager(agentID) {
+		if isDirector(agentID) {
+			err = m.client.DirectorSendMessage(content)
+		} else if isManager(agentID) {
 			err = m.client.ManagerSendMessage(project, content)
 		} else if isPlanner(agentID) {
 			err = m.client.PlanSendMessage(extractPlannerID(agentID), content)
@@ -172,7 +174,7 @@ func (m Model) sendAgentMessage(agentID, project, content string) tea.Cmd {
 	}
 }
 
-// fetchAgentChatHistory retrieves chat history for an agent (or manager/planner).
+// fetchAgentChatHistory retrieves chat history for an agent (or manager/planner/director).
 // project is required when agentID is "manager".
 func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 	return func() tea.Msg {
@@ -181,7 +183,13 @@ func (m Model) fetchAgentChatHistory(agentID, project string) tea.Cmd {
 		}
 		var entries []daemon.ChatEntryDTO
 		var err error
-		if isManager(agentID) {
+		if isDirector(agentID) {
+			var resp *daemon.DirectorChatHistoryResponse
+			resp, err = m.client.DirectorChatHistory(0) // 0 = all entries
+			if err == nil {
+				entries = resp.Entries
+			}
+		} else if isManager(agentID) {
 			var resp *daemon.ManagerChatHistoryResponse
 			resp, err = m.client.ManagerChatHistory(project, 0) // 0 = all entries
 			if err == nil {
@@ -276,7 +284,7 @@ func (m Model) answerUserQuestion(questionID string, answers map[string]string) 
 	}
 }
 
-// abortAgent aborts a running agent, planner, or manager.
+// abortAgent aborts a running agent, planner, manager, or director.
 // project is required when agentID is "manager".
 func (m Model) abortAgent(agentID, project string, force bool) tea.Cmd {
 	return func() tea.Msg {
@@ -284,7 +292,10 @@ func (m Model) abortAgent(agentID, project string, force bool) tea.Cmd {
 			return nil
 		}
 		var err error
-		if isManager(agentID) {
+		if isDirector(agentID) {
+			// Director uses DirectorStop (graceful only, force is ignored)
+			err = m.client.DirectorStop()
+		} else if isManager(agentID) {
 			// Manager uses ManagerStop (graceful only, force is ignored)
 			err = m.client.ManagerStop(project)
 		} else if isPlanner(agentID) {

@@ -170,12 +170,20 @@ func (l AgentList) View() string {
 // ManagerAgentID is the special agent ID for the manager agent.
 const ManagerAgentID = "manager"
 
+// DirectorAgentID is the special agent ID for the director agent.
+const DirectorAgentID = "director"
+
 // PlannerAgentIDPrefix is the prefix for planner agents in the agent list.
 const PlannerAgentIDPrefix = "plan:"
 
 // isManagerAgent returns true if the agent is the special manager agent.
 func isManagerAgent(agentID string) bool {
 	return agentID == ManagerAgentID
+}
+
+// isDirectorAgent returns true if the agent is the special director agent.
+func isDirectorAgent(agentID string) bool {
+	return agentID == DirectorAgentID
 }
 
 // isPlannerAgent returns true if the agent is a planner agent.
@@ -230,10 +238,12 @@ func (l AgentList) renderAgent(index int, agent daemon.AgentStatus, width int) s
 	stateStyle := l.stateStyle(agent.ID, agent.State).Inherit(bgStyle)
 	stateStr := stateStyle.Render(stateIcon)
 
-	// Agent ID - use special style for manager and planner
+	// Agent ID - use special style for manager, director, and planner
 	idStyle := agentIDStyle
 	displayID := agent.ID
-	if isManagerAgent(agent.ID) {
+	if isDirectorAgent(agent.ID) {
+		idStyle = agentDirectorIDStyle
+	} else if isManagerAgent(agent.ID) {
 		idStyle = agentManagerIDStyle
 	} else if isPlannerAgent(agent.ID) {
 		idStyle = agentPlannerIDStyle
@@ -367,9 +377,9 @@ func (l AgentList) stateIcon(agentID, state string) string {
 		// Animated spinner for starting state
 		return spinnerFrames[l.spinnerFrame%len(spinnerFrames)]
 	case "running":
-		// Manager agents don't spin when running - they're idle waiting for input
+		// Manager and director agents don't spin when running - they're idle waiting for input
 		// Planner agents DO spin because they actively work on their initial prompt
-		if isManagerAgent(agentID) {
+		if isManagerAgent(agentID) || isDirectorAgent(agentID) {
 			return "○"
 		}
 		// Animated spinner for active agents (including planners)
