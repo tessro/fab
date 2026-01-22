@@ -16,7 +16,8 @@ The fab CLI provides commands for managing the daemon, projects, agents, issues,
 | `fab server stop` | Stop the daemon |
 | `fab server restart` | Restart the daemon |
 | `fab status` | Show daemon, supervisor, and agent status |
-| `fab tui` / `fab attach` | Launch interactive TUI |
+| `fab tui` | Launch interactive TUI |
+| `fab attach [projects...]` | Stream live agent output to stdout |
 | **Project Management** | |
 | `fab project add <remote-url>` | Register a project by git remote URL |
 | `fab project remove <name>` | Unregister a project |

@@ -136,7 +136,8 @@ go install github.com/tessro/fab/cmd/fab@latest
 | Command | Description |
 |---------|-------------|
 | `fab status [-a]` | Show daemon and project status |
-| `fab tui` / `fab attach` | Launch interactive TUI |
+| `fab tui` | Launch interactive TUI |
+| `fab attach [projects...]` | Stream live agent output to stdout |
 | `fab branch cleanup` | Clean up merged fab/* branches |
 | `fab claims` | List claimed tickets |
 | `fab version` | Print version information |
