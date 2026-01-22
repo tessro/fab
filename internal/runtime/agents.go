@@ -18,9 +18,10 @@ import (
 type AgentKind string
 
 const (
-	KindCoding  AgentKind = "coding"
-	KindManager AgentKind = "manager"
-	KindPlanner AgentKind = "planner"
+	KindCoding   AgentKind = "coding"
+	KindManager  AgentKind = "manager"
+	KindPlanner  AgentKind = "planner"
+	KindDirector AgentKind = "director"
 )
 
 // AgentRuntime contains the runtime metadata needed to reconnect to an agent.

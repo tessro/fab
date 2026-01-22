@@ -11,6 +11,7 @@ import (
 	"github.com/tessro/fab/internal/agent"
 	"github.com/tessro/fab/internal/config"
 	"github.com/tessro/fab/internal/daemon"
+	"github.com/tessro/fab/internal/director"
 	"github.com/tessro/fab/internal/manager"
 	"github.com/tessro/fab/internal/orchestrator"
 	"github.com/tessro/fab/internal/planner"
@@ -42,6 +43,10 @@ type Supervisor struct {
 	// Per-project manager agents (project name -> manager)
 	// +checklocks:mu
 	managers map[string]*manager.Manager
+
+	// Global director agent (singleton)
+	// +checklocks:mu
+	director *director.Director
 
 	// Planner agents for implementation planning.
 	// Safe for concurrent access via Manager's internal synchronization.
@@ -296,6 +301,20 @@ func (s *Supervisor) Handle(ctx context.Context, req *daemon.Request) *daemon.Re
 		return s.handlePlanSendMessage(ctx, req)
 	case daemon.MsgPlanChatHistory:
 		return s.handlePlanChatHistory(ctx, req)
+
+	// Director agent
+	case daemon.MsgDirectorStart:
+		return s.handleDirectorStart(ctx, req)
+	case daemon.MsgDirectorStop:
+		return s.handleDirectorStop(ctx, req)
+	case daemon.MsgDirectorStatus:
+		return s.handleDirectorStatus(ctx, req)
+	case daemon.MsgDirectorSendMessage:
+		return s.handleDirectorSendMessage(ctx, req)
+	case daemon.MsgDirectorChatHistory:
+		return s.handleDirectorChatHistory(ctx, req)
+	case daemon.MsgDirectorClearHistory:
+		return s.handleDirectorClearHistory(ctx, req)
 
 	default:
 		return errorResponse(req, fmt.Sprintf("unknown message type: %s", req.Type))

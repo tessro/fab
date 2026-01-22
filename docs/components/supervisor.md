@@ -28,6 +28,7 @@ The Supervisor implements `daemon.Handler` and processes requests via the `Handl
 | Permissions | `permission.request`, `permission.respond`, `permission.list` | Tool permission handling |
 | Questions | `question.request`, `question.respond` | AskUserQuestion tool handling |
 | Manager | `manager.start`, `manager.stop`, `manager.status`, `manager.send_message`, `manager.chat_history`, `manager.clear_history` | Per-project manager agents |
+| Director | `director.start`, `director.stop`, `director.status`, `director.send_message`, `director.chat_history`, `director.clear_history` | Global director agent (singleton) |
 | Planner | `plan.start`, `plan.stop`, `plan.list`, `plan.send_message`, `plan.chat_history` | Issue planning agents |
 
 ## Configuration

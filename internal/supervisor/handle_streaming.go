@@ -344,3 +344,51 @@ func (s *Supervisor) broadcastPlannerChatEntry(plannerID, project string, entry 
 		ChatEntry: dto,
 	})
 }
+
+// broadcastDirectorState sends a director state change to attached clients.
+func (s *Supervisor) broadcastDirectorState(state string, startedAt time.Time) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	event := &daemon.StreamEvent{
+		Type:          "director_state",
+		DirectorState: state,
+	}
+
+	// Include StartedAt when director starts so TUI can track it
+	if state == "starting" {
+		event.StartedAt = startedAt.Format(time.RFC3339)
+	}
+
+	srv.Broadcast(event)
+}
+
+// broadcastDirectorChatEntry sends a director chat entry to attached clients.
+func (s *Supervisor) broadcastDirectorChatEntry(entry agent.ChatEntry) {
+	s.mu.RLock()
+	srv := s.server
+	s.mu.RUnlock()
+
+	if srv == nil {
+		return
+	}
+
+	dto := &daemon.ChatEntryDTO{
+		Role:       entry.Role,
+		Content:    entry.Content,
+		ToolName:   entry.ToolName,
+		ToolInput:  entry.ToolInput,
+		ToolResult: entry.ToolResult,
+		IsError:    entry.IsError,
+		Timestamp:  entry.Timestamp.Format(time.RFC3339),
+	}
+	srv.Broadcast(&daemon.StreamEvent{
+		Type:      "director_chat_entry",
+		ChatEntry: dto,
+	})
+}
