@@ -40,6 +40,10 @@ type TUIClient interface {
 	ProjectList() (*ProjectListResponse, error)
 	Stats(project string) (*StatsResponse, error)
 	CommitList(project string, limit int) (*CommitListResponse, error)
+
+	// Supervisor operations
+	Start(project string, all bool) error
+	Stop(project string, all bool) error
 }
 
 // Compile-time assertions to verify Client implements all interfaces.

@@ -40,6 +40,13 @@ type ChatView struct {
 	planProjectFilter string   // current filter text for fuzzy matching
 	planPromptMode    bool     // in plan prompt mode
 	planPromptProject string   // project for plan prompt
+
+	// Supervisor mode state
+	supervisorProjectSelect  bool            // in supervisor project selection mode
+	supervisorProjects       []string        // list of available projects
+	supervisorProjectIndex   int             // selected project index
+	supervisorProjectFilter  string          // current filter text for fuzzy matching
+	supervisorProjectRunning map[string]bool // which projects have running supervision
 }
 
 // NewChatView creates a new chat view component.
@@ -608,6 +615,15 @@ func formatNumber(n int) string {
 
 // View renders the chat view.
 func (v ChatView) View() string {
+	// Handle supervisor project selection mode
+	if v.supervisorProjectSelect {
+		innerWidth := v.width - 2
+		header := paneTitleFocusedStyle.Width(innerWidth).Render("Supervisor")
+		content := v.renderSupervisorProjectSelection()
+		inner := lipgloss.JoinVertical(lipgloss.Left, header, content)
+		return chatViewFocusedBorderStyle.Width(v.width - 2).Height(v.height - 2).Render(inner)
+	}
+
 	// Handle plan project selection mode
 	if v.planProjectSelect {
 		innerWidth := v.width - 2
@@ -945,6 +961,120 @@ func (v *ChatView) renderPlanPromptMode() string {
 
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 	lines = append(lines, hintStyle.Render("Enter your planning task below. Press Enter to start, Esc to cancel."))
+
+	content := strings.Join(lines, "\n")
+	return style.Width(v.width - 4).Render(content)
+}
+
+// SetSupervisorProjectSelection sets the supervisor project selection mode state.
+func (v *ChatView) SetSupervisorProjectSelection(projects []string, selectedIndex int, running map[string]bool) {
+	v.supervisorProjectSelect = true
+	v.supervisorProjects = projects
+	v.supervisorProjectIndex = selectedIndex
+	v.supervisorProjectFilter = ""
+	v.supervisorProjectRunning = running
+	v.updateViewportSize()
+}
+
+// SetSupervisorProjectSelectionWithFilter sets the supervisor project selection mode state with a filter.
+func (v *ChatView) SetSupervisorProjectSelectionWithFilter(projects []string, selectedIndex int, running map[string]bool, filter string) {
+	v.supervisorProjectSelect = true
+	v.supervisorProjects = projects
+	v.supervisorProjectIndex = selectedIndex
+	v.supervisorProjectFilter = filter
+	v.supervisorProjectRunning = running
+	v.updateViewportSize()
+}
+
+// ClearSupervisorProjectSelection clears supervisor project selection mode.
+func (v *ChatView) ClearSupervisorProjectSelection() {
+	v.supervisorProjectSelect = false
+	v.supervisorProjects = nil
+	v.supervisorProjectIndex = 0
+	v.supervisorProjectFilter = ""
+	v.supervisorProjectRunning = nil
+	v.updateViewportSize()
+}
+
+// renderSupervisorProjectSelection renders the supervisor project selection UI.
+func (v *ChatView) renderSupervisorProjectSelection() string {
+	if !v.supervisorProjectSelect {
+		return ""
+	}
+
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color("#2B3B5B")). // Dark blue background
+		Padding(0, 1)
+
+	headerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")). // Light blue
+		Bold(true)
+
+	optionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E0E0E0"))
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#3B4B6B")).
+		Bold(true)
+
+	runningStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#4ADE80")). // Green for running
+		Bold(true)
+
+	stoppedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#888888")) // Gray for stopped
+
+	filterStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#3B4B5B"))
+
+	var lines []string
+	lines = append(lines, headerStyle.Render("Supervisor: Start/Stop Project"))
+
+	// Show filter input
+	filterDisplay := v.supervisorProjectFilter
+	if filterDisplay == "" {
+		filterDisplay = "Type to filter..."
+	}
+	lines = append(lines, filterStyle.Render("▸ "+filterDisplay+"█"))
+	lines = append(lines, "") // Empty line
+
+	if len(v.supervisorProjects) == 0 {
+		// No matching projects
+		noMatchStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6666")).
+			Italic(true)
+		lines = append(lines, noMatchStyle.Render("  No matching projects"))
+	} else {
+		for i, project := range v.supervisorProjects {
+			// Status indicator
+			var statusStr string
+			if v.supervisorProjectRunning[project] {
+				statusStr = runningStyle.Render("●")
+			} else {
+				statusStr = stoppedStyle.Render("○")
+			}
+
+			// Action hint
+			var actionHint string
+			if v.supervisorProjectRunning[project] {
+				actionHint = stoppedStyle.Render(" (stop)")
+			} else {
+				actionHint = runningStyle.Render(" (start)")
+			}
+
+			if i == v.supervisorProjectIndex {
+				lines = append(lines, selectedStyle.Render("▶ "+statusStr+" "+project)+actionHint)
+			} else {
+				lines = append(lines, optionStyle.Render("  "+statusStr+" "+project)+actionHint)
+			}
+		}
+	}
+
+	lines = append(lines, "")
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+	lines = append(lines, hintStyle.Render("● running  ○ stopped  ↑/↓: select  Enter: toggle  Esc: cancel"))
 
 	content := strings.Join(lines, "\n")
 	return style.Width(v.width - 4).Render(content)

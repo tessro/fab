@@ -95,3 +95,22 @@ type usageUpdateMsg struct {
 	Remaining time.Duration
 	Err       error
 }
+
+// supervisorProjectListMsg contains the list of projects with their running state.
+type supervisorProjectListMsg struct {
+	Projects []string
+	Running  map[string]bool
+	Err      error
+}
+
+// supervisorStartResultMsg is the result of starting supervisor for a project.
+type supervisorStartResultMsg struct {
+	Project string
+	Err     error
+}
+
+// supervisorStopResultMsg is the result of stopping supervisor for a project.
+type supervisorStopResultMsg struct {
+	Project string
+	Err     error
+}

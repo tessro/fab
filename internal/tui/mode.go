@@ -22,6 +22,8 @@ const (
 	ModePlanProjectSelect
 	// ModePlanPrompt means the user is entering a planning prompt.
 	ModePlanPrompt
+	// ModeSupervisorProjectSelect means the user is selecting a project for supervisor start.
+	ModeSupervisorProjectSelect
 )
 
 // String returns the string representation of a Mode.
@@ -39,6 +41,8 @@ func (m Mode) String() string {
 		return "plan_project_select"
 	case ModePlanPrompt:
 		return "plan_prompt"
+	case ModeSupervisorProjectSelect:
+		return "supervisor_project_select"
 	default:
 		return "unknown"
 	}
@@ -76,6 +80,21 @@ type ModeState struct {
 
 	// PlanProjectFiltered is the list of projects that match the filter (only valid when Mode == ModePlanProjectSelect).
 	PlanProjectFiltered []string
+
+	// SupervisorProjects is the list of available projects for supervisor (only valid when Mode == ModeSupervisorProjectSelect).
+	SupervisorProjects []string
+
+	// SupervisorProjectIndex is the currently selected project index (only valid when Mode == ModeSupervisorProjectSelect).
+	SupervisorProjectIndex int
+
+	// SupervisorProjectFilter is the current filter text for fuzzy matching (only valid when Mode == ModeSupervisorProjectSelect).
+	SupervisorProjectFilter string
+
+	// SupervisorProjectFiltered is the list of projects that match the filter (only valid when Mode == ModeSupervisorProjectSelect).
+	SupervisorProjectFiltered []string
+
+	// SupervisorProjectRunning tracks which projects have running supervision.
+	SupervisorProjectRunning map[string]bool
 }
 
 // NewModeState creates a new ModeState with default values.
@@ -432,4 +451,124 @@ func fuzzyMatch(text, pattern string) bool {
 		}
 	}
 	return pi == len(pattern)
+}
+
+// EnterSupervisorProjectSelect transitions to supervisor project selection mode.
+// projects is the list of available projects to choose from.
+// running is a map of project names that have running supervision.
+func (s *ModeState) EnterSupervisorProjectSelect(projects []string, running map[string]bool) error {
+	if s.Mode != ModeNormal {
+		return ErrInvalidModeTransition
+	}
+	if len(projects) == 0 {
+		return errors.New("no projects available")
+	}
+	s.Mode = ModeSupervisorProjectSelect
+	s.SupervisorProjects = projects
+	s.SupervisorProjectIndex = 0
+	s.SupervisorProjectFilter = ""
+	s.SupervisorProjectFiltered = projects // Initially show all projects
+	s.SupervisorProjectRunning = running
+	return nil
+}
+
+// SupervisorProjectSelectUp moves the selection up in the project list.
+func (s *ModeState) SupervisorProjectSelectUp() {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return
+	}
+	if s.SupervisorProjectIndex > 0 {
+		s.SupervisorProjectIndex--
+	}
+}
+
+// SupervisorProjectSelectDown moves the selection down in the project list.
+func (s *ModeState) SupervisorProjectSelectDown() {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return
+	}
+	if s.SupervisorProjectIndex < len(s.SupervisorProjectFiltered)-1 {
+		s.SupervisorProjectIndex++
+	}
+}
+
+// SelectSupervisorProject selects the current project and returns to normal mode.
+// Returns the project name and whether it was running (to determine start vs stop).
+func (s *ModeState) SelectSupervisorProject() (project string, wasRunning bool, err error) {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return "", false, ErrInvalidModeTransition
+	}
+	if len(s.SupervisorProjectFiltered) == 0 {
+		return "", false, errors.New("no matching projects")
+	}
+	if s.SupervisorProjectIndex < 0 || s.SupervisorProjectIndex >= len(s.SupervisorProjectFiltered) {
+		return "", false, errors.New("invalid project selection")
+	}
+	project = s.SupervisorProjectFiltered[s.SupervisorProjectIndex]
+	wasRunning = s.SupervisorProjectRunning[project]
+	s.Mode = ModeNormal
+	s.SupervisorProjects = nil
+	s.SupervisorProjectIndex = 0
+	s.SupervisorProjectFilter = ""
+	s.SupervisorProjectFiltered = nil
+	s.SupervisorProjectRunning = nil
+	return project, wasRunning, nil
+}
+
+// CancelSupervisorProjectSelect cancels project selection and returns to normal mode.
+func (s *ModeState) CancelSupervisorProjectSelect() error {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return ErrInvalidModeTransition
+	}
+	s.Mode = ModeNormal
+	s.SupervisorProjects = nil
+	s.SupervisorProjectIndex = 0
+	s.SupervisorProjectFilter = ""
+	s.SupervisorProjectFiltered = nil
+	s.SupervisorProjectRunning = nil
+	return nil
+}
+
+// IsSupervisorProjectSelect returns true if in supervisor project selection mode.
+func (s *ModeState) IsSupervisorProjectSelect() bool {
+	return s.Mode == ModeSupervisorProjectSelect
+}
+
+// SelectedSupervisorProject returns the filtered list of projects and the current index.
+func (s *ModeState) SelectedSupervisorProject() ([]string, int, map[string]bool) {
+	return s.SupervisorProjectFiltered, s.SupervisorProjectIndex, s.SupervisorProjectRunning
+}
+
+// SupervisorProjectFilterState returns the current filter string.
+func (s *ModeState) SupervisorProjectFilterState() string {
+	return s.SupervisorProjectFilter
+}
+
+// SupervisorProjectSetFilter updates the filter and recomputes the filtered list.
+func (s *ModeState) SupervisorProjectSetFilter(filter string) {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return
+	}
+	s.SupervisorProjectFilter = filter
+	s.SupervisorProjectFiltered = filterProjects(s.SupervisorProjects, filter)
+	// Reset index to 0, but ensure it's valid
+	s.SupervisorProjectIndex = 0
+}
+
+// SupervisorProjectAppendFilter appends a character to the filter.
+func (s *ModeState) SupervisorProjectAppendFilter(ch rune) {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return
+	}
+	s.SupervisorProjectSetFilter(s.SupervisorProjectFilter + string(ch))
+}
+
+// SupervisorProjectBackspaceFilter removes the last character from the filter.
+func (s *ModeState) SupervisorProjectBackspaceFilter() {
+	if s.Mode != ModeSupervisorProjectSelect {
+		return
+	}
+	if len(s.SupervisorProjectFilter) > 0 {
+		s.SupervisorProjectSetFilter(s.SupervisorProjectFilter[:len(s.SupervisorProjectFilter)-1])
+	}
 }

@@ -173,6 +173,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
+		// Handle supervisor project selection mode
+		if m.modeState.IsSupervisorProjectSelect() {
+			switch {
+			case key.Matches(msg, m.keys.Cancel):
+				// Cancel project selection
+				_ = m.modeState.CancelSupervisorProjectSelect()
+				m.chatView.ClearSupervisorProjectSelection()
+			case key.Matches(msg, m.keys.Submit):
+				// Select project and start/stop supervision
+				project, wasRunning, err := m.modeState.SelectSupervisorProject()
+				if err == nil {
+					m.chatView.ClearSupervisorProjectSelection()
+					if wasRunning {
+						cmds = append(cmds, m.stopSupervisor(project))
+					} else {
+						cmds = append(cmds, m.startSupervisor(project))
+					}
+				}
+			case key.Matches(msg, m.keys.Up):
+				m.modeState.SupervisorProjectSelectUp()
+				projects, idx, running := m.modeState.SelectedSupervisorProject()
+				filter := m.modeState.SupervisorProjectFilterState()
+				m.chatView.SetSupervisorProjectSelectionWithFilter(projects, idx, running, filter)
+			case key.Matches(msg, m.keys.Down):
+				m.modeState.SupervisorProjectSelectDown()
+				projects, idx, running := m.modeState.SelectedSupervisorProject()
+				filter := m.modeState.SupervisorProjectFilterState()
+				m.chatView.SetSupervisorProjectSelectionWithFilter(projects, idx, running, filter)
+			case msg.Type == tea.KeyBackspace:
+				// Handle backspace for filter
+				m.modeState.SupervisorProjectBackspaceFilter()
+				projects, idx, running := m.modeState.SelectedSupervisorProject()
+				filter := m.modeState.SupervisorProjectFilterState()
+				m.chatView.SetSupervisorProjectSelectionWithFilter(projects, idx, running, filter)
+			case msg.Type == tea.KeyRunes:
+				// Handle character input for filter
+				for _, r := range msg.Runes {
+					m.modeState.SupervisorProjectAppendFilter(r)
+				}
+				projects, idx, running := m.modeState.SelectedSupervisorProject()
+				filter := m.modeState.SupervisorProjectFilterState()
+				m.chatView.SetSupervisorProjectSelectionWithFilter(projects, idx, running, filter)
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			// Close client to unblock any pending RecvEvent() calls
@@ -344,6 +390,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Start plan mode - fetch projects first
 			if m.modeState.IsNormal() {
 				cmds = append(cmds, m.fetchProjectsForPlan())
+			}
+
+		case key.Matches(msg, m.keys.Supervisor):
+			// Start supervisor mode - fetch projects first
+			if m.modeState.IsNormal() {
+				cmds = append(cmds, m.fetchProjectsForSupervisor())
 			}
 		}
 
@@ -584,6 +636,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The planner_created event will add it to the agent list
 			// We just need to refresh the list to ensure we see it
 			cmds = append(cmds, m.fetchAgentList())
+		}
+
+	case supervisorProjectListMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else if len(msg.Projects) == 0 {
+			cmds = append(cmds, m.setError(fmt.Errorf("no projects configured")))
+		} else {
+			// Enter supervisor project selection mode
+			if err := m.modeState.EnterSupervisorProjectSelect(msg.Projects, msg.Running); err != nil {
+				cmds = append(cmds, m.setError(err))
+			} else {
+				// Show project selection in chat view
+				m.chatView.SetSupervisorProjectSelection(msg.Projects, 0, msg.Running)
+			}
+		}
+
+	case supervisorStartResultMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else {
+			slog.Info("supervisor started from TUI", "project", msg.Project)
+		}
+
+	case supervisorStopResultMsg:
+		if msg.Err != nil {
+			cmds = append(cmds, m.setError(msg.Err))
+		} else {
+			slog.Info("supervisor stopped from TUI", "project", msg.Project)
 		}
 
 	case abortResultMsg:

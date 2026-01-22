@@ -341,3 +341,55 @@ func (m Model) fetchUsage() tea.Cmd {
 		}
 	}
 }
+
+// fetchProjectsForSupervisor retrieves the list of projects with their running state.
+func (m Model) fetchProjectsForSupervisor() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return supervisorProjectListMsg{Err: fmt.Errorf("not connected")}
+		}
+		resp, err := m.client.ProjectList()
+		if err != nil {
+			return supervisorProjectListMsg{Err: err}
+		}
+		var projects []string
+		running := make(map[string]bool)
+		for _, p := range resp.Projects {
+			projects = append(projects, p.Name)
+			running[p.Name] = p.Running
+		}
+		// Sort projects alphabetically (case-insensitive)
+		slices.SortFunc(projects, func(a, b string) int {
+			return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+		})
+		return supervisorProjectListMsg{Projects: projects, Running: running}
+	}
+}
+
+// startSupervisor starts supervision for the given project.
+func (m Model) startSupervisor(project string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return supervisorStartResultMsg{Err: fmt.Errorf("not connected")}
+		}
+		err := m.client.Start(project, false)
+		if err != nil {
+			return supervisorStartResultMsg{Err: err}
+		}
+		return supervisorStartResultMsg{Project: project}
+	}
+}
+
+// stopSupervisor stops supervision for the given project.
+func (m Model) stopSupervisor(project string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return supervisorStopResultMsg{Err: fmt.Errorf("not connected")}
+		}
+		err := m.client.Stop(project, false)
+		if err != nil {
+			return supervisorStopResultMsg{Err: err}
+		}
+		return supervisorStopResultMsg{Project: project}
+	}
+}

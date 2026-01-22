@@ -221,15 +221,15 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 	// that arrived during the history fetch. This is critical for reconnection logic.
 
 	tests := []struct {
-		name           string
-		existing       []daemon.ChatEntryDTO // entries already in chat view (from streaming)
-		history        []daemon.ChatEntryDTO // entries fetched from history API
-		wantCount      int
-		wantLastRole   string
-		wantLastTime   string
+		name         string
+		existing     []daemon.ChatEntryDTO // entries already in chat view (from streaming)
+		history      []daemon.ChatEntryDTO // entries fetched from history API
+		wantCount    int
+		wantLastRole string
+		wantLastTime string
 	}{
 		{
-			name:     "empty history keeps existing streaming entries",
+			name: "empty history keeps existing streaming entries",
 			existing: []daemon.ChatEntryDTO{
 				{Role: "user", Content: "hello", Timestamp: "2024-01-15T10:00:00Z"},
 			},
@@ -239,7 +239,7 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 			wantLastTime: "2024-01-15T10:00:00Z",
 		},
 		{
-			name:     "history replaces older streaming entries",
+			name: "history replaces older streaming entries",
 			existing: []daemon.ChatEntryDTO{
 				{Role: "user", Content: "old streaming entry", Timestamp: "2024-01-15T09:00:00Z"},
 			},
@@ -252,7 +252,7 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 			wantLastTime: "2024-01-15T10:01:00Z",
 		},
 		{
-			name:     "streaming entries newer than history are preserved",
+			name: "streaming entries newer than history are preserved",
 			existing: []daemon.ChatEntryDTO{
 				{Role: "user", Content: "old", Timestamp: "2024-01-15T09:00:00Z"},
 				{Role: "assistant", Content: "new streaming", Timestamp: "2024-01-15T10:05:00Z"},
@@ -266,7 +266,7 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 			wantLastTime: "2024-01-15T10:05:00Z",
 		},
 		{
-			name:     "multiple newer streaming entries preserved",
+			name: "multiple newer streaming entries preserved",
 			existing: []daemon.ChatEntryDTO{
 				{Role: "user", Content: "old", Timestamp: "2024-01-15T09:00:00Z"},
 				{Role: "assistant", Content: "streaming 1", Timestamp: "2024-01-15T10:05:00Z"},
@@ -280,8 +280,8 @@ func TestChatViewSetEntriesMerge(t *testing.T) {
 			wantLastTime: "2024-01-15T10:06:00Z",
 		},
 		{
-			name:         "empty existing with history loads all",
-			existing:     []daemon.ChatEntryDTO{},
+			name:     "empty existing with history loads all",
+			existing: []daemon.ChatEntryDTO{},
 			history: []daemon.ChatEntryDTO{
 				{Role: "user", Content: "history 1", Timestamp: "2024-01-15T10:00:00Z"},
 				{Role: "assistant", Content: "history 2", Timestamp: "2024-01-15T10:01:00Z"},

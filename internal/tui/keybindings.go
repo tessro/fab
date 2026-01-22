@@ -19,10 +19,11 @@ type KeyBindings struct {
 	PageDown key.Binding
 
 	// Action keys
-	Approve key.Binding
-	Reject  key.Binding
-	Abort   key.Binding
-	Plan    key.Binding
+	Approve    key.Binding
+	Reject     key.Binding
+	Abort      key.Binding
+	Plan       key.Binding
+	Supervisor key.Binding
 
 	// Input keys
 	Submit      key.Binding
@@ -92,6 +93,10 @@ func DefaultKeyBindings() KeyBindings {
 		Plan: key.NewBinding(
 			key.WithKeys("p"),
 			key.WithHelp("p", "plan"),
+		),
+		Supervisor: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "supervisor"),
 		),
 
 		Submit: key.NewBinding(
