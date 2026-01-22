@@ -101,6 +101,11 @@ func (m *Manager) Stop() error {
 	return m.ProcessAgent.Stop()
 }
 
+// Resume restarts a stopped manager without clearing history.
+func (m *Manager) Resume() error {
+	return m.ProcessAgent.Resume()
+}
+
 // StopWithTimeout stops the manager with a custom timeout.
 func (m *Manager) StopWithTimeout(timeout time.Duration) error {
 	return m.ProcessAgent.StopWithTimeout(timeout)

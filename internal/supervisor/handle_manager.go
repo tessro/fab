@@ -288,6 +288,18 @@ func (s *Supervisor) handleManagerSendMessage(_ context.Context, req *daemon.Req
 		return errorResponse(req, fmt.Sprintf("no manager running for project: %s", sendReq.Project))
 	}
 
+	// If manager process has stopped (e.g., Claude Code exited after responding),
+	// auto-resume it to continue the conversation. This keeps managers open for
+	// ongoing conversations as users expect.
+	if mgr.State() == manager.StateStopped {
+		slog.Info("auto-resuming stopped manager", "project", sendReq.Project)
+		if err := mgr.Resume(); err != nil {
+			return errorResponse(req, fmt.Sprintf("failed to resume manager: %v", err))
+		}
+		// Update runtime store with resumed state
+		s.saveManagerRuntime(mgr)
+	}
+
 	if err := mgr.SendMessage(sendReq.Content); err != nil {
 		return errorResponse(req, fmt.Sprintf("failed to send message: %v", err))
 	}

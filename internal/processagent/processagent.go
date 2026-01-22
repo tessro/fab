@@ -328,6 +328,125 @@ func (p *ProcessAgent) Start() error {
 	return nil
 }
 
+// Resume restarts a stopped process without clearing history.
+// This allows continuing an ongoing conversation after the underlying process exits.
+// If the process is already running, returns ErrAlreadyRunning.
+func (p *ProcessAgent) Resume() error {
+	log := slog.With("component", p.config.LogPrefix)
+
+	log.Debug("ProcessAgent.Resume: beginning", "workdir", p.workDir)
+	p.mu.Lock()
+
+	if p.state != StateStopped {
+		currentState := p.state
+		p.mu.Unlock()
+		log.Debug("ProcessAgent.Resume: already running", "state", currentState)
+		return ErrAlreadyRunning
+	}
+
+	p.state = StateStarting
+	// Keep existing startedAt and history - don't reset them
+
+	// Ensure work directory exists
+	log.Debug("ProcessAgent.Resume: creating work dir", "workdir", p.workDir)
+	if err := os.MkdirAll(p.workDir, 0755); err != nil {
+		p.state = StateStopped
+		p.mu.Unlock()
+		log.Error("ProcessAgent.Resume: failed to create work dir", "error", err)
+		return fmt.Errorf("create work dir: %w", err)
+	}
+
+	// Build the command
+	log.Debug("ProcessAgent.Resume: building command")
+	cmd, err := p.config.BuildCommand()
+	if err != nil {
+		p.state = StateStopped
+		p.mu.Unlock()
+		log.Error("ProcessAgent.Resume: failed to build command", "error", err)
+		return fmt.Errorf("build command: %w", err)
+	}
+	cmd.Dir = p.workDir
+
+	// Set up pipes
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		p.state = StateStopped
+		p.mu.Unlock()
+		log.Error("ProcessAgent.Resume: stdin pipe failed", "error", err)
+		return fmt.Errorf("stdin pipe: %w", err)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		stdin.Close()
+		p.state = StateStopped
+		p.mu.Unlock()
+		log.Error("ProcessAgent.Resume: stdout pipe failed", "error", err)
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	// Set up stderr if logging is requested
+	var stderr io.ReadCloser
+	if p.config.LogStderr {
+		stderr, err = cmd.StderrPipe()
+		if err != nil {
+			stdin.Close()
+			stdout.Close()
+			p.state = StateStopped
+			p.mu.Unlock()
+			log.Error("ProcessAgent.Resume: stderr pipe failed", "error", err)
+			return fmt.Errorf("stderr pipe: %w", err)
+		}
+	}
+
+	// Start the process
+	log.Debug("ProcessAgent.Resume: starting process", "cmd", cmd.Path, "dir", cmd.Dir)
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		if stderr != nil {
+			stderr.Close()
+		}
+		p.state = StateStopped
+		p.mu.Unlock()
+		log.Error("ProcessAgent.Resume: process start failed", "error", err)
+		return fmt.Errorf("start process: %w", err)
+	}
+
+	// Start stderr reader goroutine if logging is enabled
+	if stderr != nil {
+		stderrLog := log
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				stderrLog.Warn(p.config.LogPrefix+".stderr", "line", line)
+			}
+		}()
+	}
+	log.Debug("ProcessAgent.Resume: process started", "pid", cmd.Process.Pid)
+
+	p.cmd = cmd
+	p.stdin = stdin
+	p.stdout = stdout
+
+	// Create read loop channels
+	p.readLoopStop = make(chan struct{})
+	p.readLoopDone = make(chan struct{})
+
+	p.mu.Unlock()
+
+	// Note: Don't send initial prompt on resume - this is a continuation
+
+	// Start read loop
+	log.Debug("ProcessAgent.Resume: starting read loop goroutine")
+	go p.runReadLoop()
+
+	p.setState(StateRunning)
+	log.Info("ProcessAgent.Resume: complete", "pid", cmd.Process.Pid)
+	return nil
+}
+
 // Stop gracefully stops the process agent.
 func (p *ProcessAgent) Stop() error {
 	return p.StopWithTimeout(StopTimeout)
