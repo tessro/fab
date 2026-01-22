@@ -40,6 +40,11 @@ The fab CLI provides commands for managing the daemon, projects, agents, issues,
 | `fab manager stop <project>` | Stop the manager agent |
 | `fab manager status <project>` | Show manager agent status |
 | `fab manager clear <project>` | Clear manager agent's context window |
+| **Director Agent** | |
+| `fab director start` | Start the global director agent |
+| `fab director stop` | Stop the director agent |
+| `fab director status` | Show director agent status |
+| `fab director clear` | Clear director agent's context window |
 | **Issue/Task Management** | |
 | `fab issue list` | List all issues |
 | `fab issue show <id>` | Show issue details |
@@ -77,6 +82,7 @@ fab/
 │   │   ├── issue.go             # issue list/show/ready/create/update/close/commit/comment/plan
 │   │   ├── plan.go              # plan write/read/list (storage)
 │   │   ├── manager.go           # manager commands
+│   │   ├── director.go          # director commands
 │   │   ├── attach.go            # tui/attach command
 │   │   ├── status.go            # status command
 │   │   ├── claims.go            # claims list
@@ -231,6 +237,7 @@ fab agent done            # Signal completion
 - `internal/cli/issue.go` - Issue/ticket commands
 - `internal/cli/plan.go` - Plan storage commands
 - `internal/cli/manager.go` - Manager agent commands
+- `internal/cli/director.go` - Director agent commands
 - `internal/cli/attach.go` - TUI launch command
 - `internal/cli/status.go` - Status display command
 - `internal/cli/hook.go` - Permission hook callbacks
