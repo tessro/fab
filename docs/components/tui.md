@@ -31,6 +31,7 @@ The TUI (Terminal User Interface) provides an interactive Bubbletea-based interf
 | Normal | `n` | Reject pending permission |
 | Normal | `x` | Abort selected agent (with confirmation) |
 | Normal | `p` | Start a new planner agent |
+| Normal | `s` | Toggle supervisor/manager view |
 | Normal | `r` | Reconnect when disconnected |
 | Input | `Enter` | Send message |
 | Input | `Esc` | Cancel input mode |
