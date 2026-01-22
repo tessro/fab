@@ -18,9 +18,9 @@ The Configuration system manages fab's settings across two scopes: global (daemo
 | `fab project list` | List all registered projects with their settings |
 | `fab project add <url>` | Register a new project from a git URL |
 | `fab project remove <name>` | Unregister a project |
-| `fab project config <name>` | Show all configuration for a project |
-| `fab project config <name> <key>` | Get a single configuration value |
-| `fab project config <name> <key> <value>` | Set a configuration value |
+| `fab project config show <name>` | Show all configuration for a project |
+| `fab project config get <name> <key>` | Get a single configuration value |
+| `fab project config set <name> <key> <value>` | Set a configuration value |
 
 ### Configuration Scopes
 
@@ -88,7 +88,7 @@ backend    true       3
 View project configuration:
 
 ```bash
-$ fab project config myapp
+$ fab project config show myapp
 max-agents: 3
 autostart: false
 issue-backend: tk
