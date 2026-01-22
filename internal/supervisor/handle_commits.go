@@ -1,8 +1,10 @@
 package supervisor
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/tessro/fab/internal/daemon"
@@ -46,6 +48,17 @@ func (s *Supervisor) handleCommitList(_ context.Context, req *daemon.Request) *d
 		}
 	}
 	s.mu.RUnlock()
+
+	// Sort by MergedAt descending (newest first) for stable ordering.
+	// RFC3339 timestamps are lexicographically sortable.
+	slices.SortStableFunc(commits, func(a, b daemon.CommitInfo) int {
+		return cmp.Compare(b.MergedAt, a.MergedAt) // Descending order
+	})
+
+	// Apply limit after sorting all commits.
+	if listReq.Limit > 0 && len(commits) > listReq.Limit {
+		commits = commits[:listReq.Limit]
+	}
 
 	return successResponse(req, daemon.CommitListResponse{
 		Commits: commits,
