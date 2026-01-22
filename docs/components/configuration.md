@@ -40,7 +40,13 @@ The Configuration system manages fab's settings across two scopes: global (daemo
 | `llm_auth.provider` | `"anthropic"` | LLM auth provider: `"anthropic"` or `"openai"` |
 | `llm_auth.model` | `"claude-haiku-4-5"` | Model for permission authorization |
 | `defaults.agent-backend` | `"claude"` | Default agent CLI: `"claude"` or `"codex"` |
+| `defaults.planner-backend` | — | Default planner CLI: `"claude"` or `"codex"` (falls back to agent-backend) |
+| `defaults.coding-backend` | — | Default coding agent CLI: `"claude"` or `"codex"` (falls back to agent-backend) |
 | `defaults.merge-strategy` | `"direct"` | Default merge: `"direct"` or `"pull-request"` |
+| `defaults.issue-backend` | `"tk"` | Default issue backend: `"tk"`, `"github"`, `"gh"`, or `"linear"` |
+| `defaults.permissions-checker` | `"manual"` | Default permission checker: `"manual"` or `"llm"` |
+| `defaults.autostart` | `false` | Default autostart setting for new projects |
+| `defaults.max-agents` | `3` | Default max concurrent agents per project (1-100) |
 
 ### Per-Project Keys
 

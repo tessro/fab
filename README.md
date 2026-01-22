@@ -207,8 +207,14 @@ model = "claude-haiku-4-5"
 
 # Default settings for new projects
 [defaults]
-agent-backend = "claude"      # "claude" or "codex"
-merge-strategy = "direct"     # "direct" or "pull-request"
+agent-backend = "claude"            # "claude" or "codex"
+planner-backend = "claude"          # "claude" or "codex" (falls back to agent-backend)
+coding-backend = "claude"           # "claude" or "codex" (falls back to agent-backend)
+merge-strategy = "direct"           # "direct" or "pull-request"
+issue-backend = "tk"                # "tk", "github", "gh", or "linear"
+permissions-checker = "manual"      # "manual" or "llm"
+autostart = false                   # true/false
+max-agents = 3                      # 1-100
 
 # Project definitions (use [[projects]] for each project)
 [[projects]]
