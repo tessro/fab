@@ -120,7 +120,7 @@ remote-url = "git@github.com:user/repo.git"
 ### Multi-project configuration
 
 ```toml
-log_level = "info"
+log-level = "info"
 
 [providers.anthropic]
 api-key = "sk-ant-..."
@@ -154,7 +154,7 @@ allowed-authors = ["user@example.com"]
 
 ## Gotchas
 
-- **Key naming**: Config keys use hyphens (`remote-url`), not underscores. Legacy underscore format is supported for backwards compatibility but not recommended.
+- **Key naming**: Config keys use hyphens (`remote-url`), not underscores.
 - **Backend fallback**: `planner-backend` and `coding-backend` fall back to `agent-backend` if not set, which falls back to `"claude"`.
 - **Linear requires team**: The `linear-team` key is required when using `issue-backend = "linear"`. Without it, issue fetching will fail.
 - **FAB_DIR override**: When `FAB_DIR` is set, the config path changes to `$FAB_DIR/config/config.toml`, not the usual `~/.config/fab/config.toml`.
@@ -164,7 +164,7 @@ allowed-authors = ["user@example.com"]
 
 **Single config file**: All configuration lives in one `config.toml` file. Global settings are at the top level, and projects are defined in `[[projects]]` arrays. This keeps configuration centralized and easy to version control.
 
-**Hyphen-style keys**: Config keys use hyphens (e.g., `remote-url`) to match CLI flag conventions. Legacy underscore format is auto-migrated during load.
+**Hyphen-style keys**: Config keys use hyphens (e.g., `remote-url`) to match CLI flag conventions.
 
 **Environment variable layering**: Environment variables provide testing isolation (`FAB_DIR`) and deployment flexibility (specific path overrides). The layering ensures test isolation while allowing production customization.
 

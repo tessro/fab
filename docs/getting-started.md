@@ -62,14 +62,14 @@ Global config lives at `~/.config/fab/config.toml`:
 
 ```toml
 # Logging level: debug, info, warn, error
-log_level = "info"
+log-level = "info"
 
 # API Provider Configuration
 [providers.anthropic]
 api-key = "sk-ant-..."  # Or use ANTHROPIC_API_KEY env var
 
 # LLM Authorization Settings
-[llm_auth]
+[llm-auth]
 provider = "anthropic"
 model = "claude-haiku-4-5"
 ```

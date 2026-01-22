@@ -26,7 +26,6 @@ var (
 	ErrProjectExists    = errors.New("project already exists")
 	ErrProjectNotFound  = errors.New("project not found")
 	ErrInvalidRemoteURL = errors.New("invalid remote URL")
-	ErrOldConfigFormat  = errors.New("old config format detected: please re-add projects with 'fab project add <url>'")
 )
 
 // ProjectEntry represents a project in the config file.
@@ -45,48 +44,6 @@ type ProjectEntry struct {
 	PlannerBackend     string   `toml:"planner-backend,omitempty"`     // Planner CLI backend: "claude" (default), "codex"
 	CodingBackend      string   `toml:"coding-backend,omitempty"`      // Coding agent CLI backend: "claude" (default), "codex"
 	MergeStrategy      string   `toml:"merge-strategy,omitempty"`      // Merge strategy: "direct" (default), "pull-request"
-	// Deprecated: Path is only used to detect old config format
-	Path string `toml:"path,omitempty"`
-
-	// Legacy fields (underscore format) - for backwards compatibility during loading.
-	// These are read during load() and merged with hyphen-format fields.
-	// When saving, only the hyphen-format fields are written.
-	LegacyRemoteURL          string   `toml:"remote_url,omitempty"`
-	LegacyMaxAgents          int      `toml:"max_agents,omitempty"`
-	LegacyIssueBackend       string   `toml:"issue_backend,omitempty"`
-	LegacyAllowedAuthors     []string `toml:"allowed_authors,omitempty"`
-	LegacyPermissionsChecker string   `toml:"permissions_checker,omitempty"`
-	LegacyAgentBackend       string   `toml:"agent_backend,omitempty"`
-}
-
-// coalesce returns the first non-empty string from the provided values.
-func coalesce(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// coalesceInt returns the first non-zero int from the provided values.
-func coalesceInt(values ...int) int {
-	for _, v := range values {
-		if v != 0 {
-			return v
-		}
-	}
-	return 0
-}
-
-// coalesceStringSlice returns the first non-empty slice from the provided values.
-func coalesceStringSlice(values ...[]string) []string {
-	for _, v := range values {
-		if len(v) > 0 {
-			return v
-		}
-	}
-	return nil
 }
 
 // Config represents the fab configuration file.
@@ -106,12 +63,6 @@ type Config struct {
 
 	// Projects is the list of registered projects.
 	Projects []ProjectEntry `toml:"projects"`
-
-	// Legacy fields (underscore format) - for backwards compatibility during loading.
-	// These are read during load() and merged with hyphen-format fields.
-	// When saving, only the hyphen-format fields are written.
-	LegacyLogLevel string         `toml:"log_level,omitempty"`
-	LegacyLLMAuth  map[string]any `toml:"llm_auth,omitempty"`
 }
 
 // Registry manages the persistent collection of projects.
@@ -187,8 +138,6 @@ func (r *Registry) SetProjectBaseDir(baseDir string) {
 }
 
 // load reads the config file and populates the registry.
-// It supports both hyphen-format keys (e.g., "remote-url") and legacy underscore-format
-// keys (e.g., "remote_url") for backwards compatibility. Hyphen-format takes precedence.
 // It also preserves non-project config fields (log-level, providers, llm-auth, defaults) for saving.
 func (r *Registry) load() error {
 	r.mu.Lock()
@@ -199,53 +148,33 @@ func (r *Registry) load() error {
 		return err
 	}
 
-	// Coalesce hyphen-format and underscore-format fields (hyphen takes precedence)
-	logLevel := coalesce(config.LogLevel, config.LegacyLogLevel)
-	llmAuth := config.LLMAuth
-	if llmAuth == nil {
-		llmAuth = config.LegacyLLMAuth
-	}
-
 	// Preserve global config fields for saving
 	r.globalConfig = &Config{
-		LogLevel:  logLevel,
+		LogLevel:  config.LogLevel,
 		Providers: config.Providers,
-		LLMAuth:   llmAuth,
+		LLMAuth:   config.LLMAuth,
 		Defaults:  config.Defaults,
 	}
 
 	for _, entry := range config.Projects {
-		// Coalesce hyphen-format and underscore-format fields (hyphen takes precedence)
-		remoteURL := coalesce(entry.RemoteURL, entry.LegacyRemoteURL)
-		maxAgents := coalesceInt(entry.MaxAgents, entry.LegacyMaxAgents)
-		issueBackend := coalesce(entry.IssueBackend, entry.LegacyIssueBackend)
-		allowedAuthors := coalesceStringSlice(entry.AllowedAuthors, entry.LegacyAllowedAuthors)
-		permissionsChecker := coalesce(entry.PermissionsChecker, entry.LegacyPermissionsChecker)
-		agentBackend := coalesce(entry.AgentBackend, entry.LegacyAgentBackend)
-
-		// Detect old config format (has Path but no RemoteURL)
-		if entry.Path != "" && remoteURL == "" {
-			return ErrOldConfigFormat
-		}
-
-		p := project.NewProject(entry.Name, remoteURL)
+		p := project.NewProject(entry.Name, entry.RemoteURL)
 		p.BaseDir = r.projectBaseDir
 		// Inject global defaults for config precedence: project -> global -> internal
 		p.Defaults = r.defaults
-		if maxAgents > 0 {
-			p.MaxAgents = maxAgents
+		if entry.MaxAgents > 0 {
+			p.MaxAgents = entry.MaxAgents
 		}
-		if issueBackend != "" {
-			p.IssueBackend = issueBackend
+		if entry.IssueBackend != "" {
+			p.IssueBackend = entry.IssueBackend
 		}
 		p.LinearTeam = entry.LinearTeam
 		p.LinearProject = entry.LinearProject
-		if len(allowedAuthors) > 0 {
-			p.AllowedAuthors = allowedAuthors
+		if len(entry.AllowedAuthors) > 0 {
+			p.AllowedAuthors = entry.AllowedAuthors
 		}
 		p.Autostart = entry.Autostart
-		p.PermissionsChecker = permissionsChecker
-		p.AgentBackend = agentBackend
+		p.PermissionsChecker = entry.PermissionsChecker
+		p.AgentBackend = entry.AgentBackend
 		p.PlannerBackend = entry.PlannerBackend
 		p.CodingBackend = entry.CodingBackend
 		p.MergeStrategy = entry.MergeStrategy

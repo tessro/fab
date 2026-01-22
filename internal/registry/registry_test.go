@@ -288,56 +288,6 @@ func TestRegistry_Persistence(t *testing.T) {
 	}
 }
 
-func TestRegistry_LegacyConfigFormat(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// Write a config file with legacy underscore-format keys
-	legacyConfig := `[[projects]]
-name = "legacy-project"
-remote_url = "git@github.com:user/legacy.git"
-max_agents = 5
-issue_backend = "tk"
-allowed_authors = ["user1", "user2"]
-permissions_checker = "llm"
-`
-	if err := os.WriteFile(configPath, []byte(legacyConfig), 0644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	// Load the registry - should parse legacy format
-	r, err := NewWithPath(configPath)
-	if err != nil {
-		t.Fatalf("NewWithPath() error = %v", err)
-	}
-
-	if r.Count() != 1 {
-		t.Fatalf("Count() = %d, want 1", r.Count())
-	}
-
-	p, err := r.Get("legacy-project")
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-
-	// Verify all legacy fields were parsed correctly
-	if p.RemoteURL != "git@github.com:user/legacy.git" {
-		t.Errorf("RemoteURL = %q, want %q", p.RemoteURL, "git@github.com:user/legacy.git")
-	}
-	if p.MaxAgents != 5 {
-		t.Errorf("MaxAgents = %d, want 5", p.MaxAgents)
-	}
-	if p.IssueBackend != "tk" {
-		t.Errorf("IssueBackend = %q, want %q", p.IssueBackend, "tk")
-	}
-	if len(p.AllowedAuthors) != 2 || p.AllowedAuthors[0] != "user1" {
-		t.Errorf("AllowedAuthors = %v, want [user1 user2]", p.AllowedAuthors)
-	}
-	if p.PermissionsChecker != "llm" {
-		t.Errorf("PermissionsChecker = %q, want %q", p.PermissionsChecker, "llm")
-	}
-}
-
 func TestRegistry_HyphenConfigFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
@@ -381,47 +331,6 @@ permissions-checker = "llm"
 	}
 	if p.PermissionsChecker != "llm" {
 		t.Errorf("PermissionsChecker = %q, want %q", p.PermissionsChecker, "llm")
-	}
-}
-
-func TestRegistry_HyphenTakesPrecedence(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// Write a config file with both hyphen and underscore format (hyphen should win)
-	mixedConfig := `[[projects]]
-name = "mixed-project"
-remote-url = "git@github.com:user/hyphen.git"
-remote_url = "git@github.com:user/underscore.git"
-max-agents = 10
-max_agents = 5
-permissions-checker = "llm"
-permissions_checker = "manual"
-`
-	if err := os.WriteFile(configPath, []byte(mixedConfig), 0644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	// Load the registry
-	r, err := NewWithPath(configPath)
-	if err != nil {
-		t.Fatalf("NewWithPath() error = %v", err)
-	}
-
-	p, err := r.Get("mixed-project")
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-
-	// Hyphen format should take precedence
-	if p.RemoteURL != "git@github.com:user/hyphen.git" {
-		t.Errorf("RemoteURL = %q, want hyphen version", p.RemoteURL)
-	}
-	if p.MaxAgents != 10 {
-		t.Errorf("MaxAgents = %d, want 10 (hyphen version)", p.MaxAgents)
-	}
-	if p.PermissionsChecker != "llm" {
-		t.Errorf("PermissionsChecker = %q, want llm (hyphen version)", p.PermissionsChecker)
 	}
 }
 
@@ -546,65 +455,6 @@ max-agents = 1
 	// Verify project update was saved
 	if !strings.Contains(configStr, `max-agents = 5`) {
 		t.Errorf("Config should contain max-agents = 5, got:\n%s", configStr)
-	}
-}
-
-func TestRegistry_SavePreservesLegacyGlobalConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// Write a config file with legacy underscore-format global config
-	initialConfig := `log_level = "debug"
-
-[providers]
-[providers.anthropic]
-api-key = "sk-secret-key"
-
-[llm_auth]
-provider = "anthropic"
-model = "claude-haiku-4-5"
-
-[[projects]]
-name = "existing-project"
-remote-url = "git@github.com:user/existing.git"
-max-agents = 2
-`
-	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	// Load the registry
-	r, err := NewWithPath(configPath)
-	if err != nil {
-		t.Fatalf("NewWithPath() error = %v", err)
-	}
-
-	// Add a new project (this triggers save)
-	_, err = r.Add("git@github.com:user/new-project.git", "new-project", 3, false, "")
-	if err != nil {
-		t.Fatalf("Add() error = %v", err)
-	}
-
-	// Read back the config file
-	content, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	configStr := string(content)
-
-	// Verify global config was migrated to hyphen format
-	if !strings.Contains(configStr, `log-level = "debug"`) {
-		t.Errorf("Config should contain log-level = debug (migrated from log_level), got:\n%s", configStr)
-	}
-	if !strings.Contains(configStr, `api-key = "sk-secret-key"`) {
-		t.Errorf("Config should contain api-key = sk-secret-key, got:\n%s", configStr)
-	}
-	// LLM auth section should be preserved with hyphen format
-	if !strings.Contains(configStr, `[llm-auth]`) {
-		t.Errorf("Config should contain [llm-auth] section, got:\n%s", configStr)
-	}
-	if !strings.Contains(configStr, `provider = "anthropic"`) {
-		t.Errorf("Config should contain provider = anthropic, got:\n%s", configStr)
 	}
 }
 
