@@ -359,7 +359,7 @@ fab plan list
 
 ## Documentation
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
+See the [Architecture documentation](docs/components/architecture.md) for detailed design documentation.
 
 ### Building the Site
 
