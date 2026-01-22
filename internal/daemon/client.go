@@ -1050,3 +1050,93 @@ func (c *Client) PlanChatHistory(id string, limit int) (*PlanChatHistoryResponse
 	}
 	return decodePayload[PlanChatHistoryResponse](resp.Payload)
 }
+
+// DirectorStart starts the global director agent.
+func (c *Client) DirectorStart() error {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorStart,
+		Payload: DirectorStartRequest{},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return NewServerError("director start", resp.Error)
+	}
+	return nil
+}
+
+// DirectorStop stops the global director agent.
+func (c *Client) DirectorStop() error {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorStop,
+		Payload: DirectorStopRequest{},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return NewServerError("director stop", resp.Error)
+	}
+	return nil
+}
+
+// DirectorStatus returns the director agent status.
+func (c *Client) DirectorStatus() (*DirectorStatusResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorStatus,
+		Payload: DirectorStatusRequest{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, NewServerError("director status", resp.Error)
+	}
+	return decodePayload[DirectorStatusResponse](resp.Payload)
+}
+
+// DirectorSendMessage sends a message to the director agent.
+func (c *Client) DirectorSendMessage(content string) error {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorSendMessage,
+		Payload: DirectorSendMessageRequest{Content: content},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return NewServerError("director send message", resp.Error)
+	}
+	return nil
+}
+
+// DirectorChatHistory returns the director's chat history.
+func (c *Client) DirectorChatHistory(limit int) (*DirectorChatHistoryResponse, error) {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorChatHistory,
+		Payload: DirectorChatHistoryRequest{Limit: limit},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success {
+		return nil, NewServerError("director chat history", resp.Error)
+	}
+	return decodePayload[DirectorChatHistoryResponse](resp.Payload)
+}
+
+// DirectorClearHistory clears the director's chat history.
+func (c *Client) DirectorClearHistory() error {
+	resp, err := c.Send(&Request{
+		Type:    MsgDirectorClearHistory,
+		Payload: DirectorClearHistoryRequest{},
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return NewServerError("director clear history", resp.Error)
+	}
+	return nil
+}
