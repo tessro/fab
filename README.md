@@ -209,13 +209,6 @@ model = "claude-haiku-4-5"
 agent-backend = "claude"      # "claude" or "codex"
 merge-strategy = "direct"     # "direct" or "pull-request"
 
-# Webhook server (for GitHub/Linear integrations)
-[webhook]
-enabled = false
-bind-addr = ":8080"
-secret = "your-webhook-secret"
-path-prefix = "/webhooks"
-
 # Project definitions (use [[projects]] for each project)
 [[projects]]
 name = "myapp"

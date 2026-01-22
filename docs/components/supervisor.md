@@ -34,13 +34,6 @@ The Supervisor implements `daemon.Handler` and processes requests via the `Handl
 
 Configuration is loaded from `~/.config/fab/config.toml` via `config.GlobalConfig`.
 
-| Key | Description |
-|-----|-------------|
-| `webhook.enabled` | Enable webhook server for issue events |
-| `webhook.bind_addr` | Webhook HTTP bind address |
-| `webhook.secret` | Webhook signature secret |
-| `webhook.path_prefix` | URL path prefix for webhooks |
-
 Per-project settings are stored in the project registry.
 
 ## Verification
@@ -88,7 +81,6 @@ The heartbeat monitor runs periodically (default 30s):
 ## Gotchas
 
 - **Permission timeout**: Permission requests timeout after 5 minutes (`PermissionTimeout`). If the user doesn't respond in time, the request fails.
-- **Webhook deduplication**: The webhook server deduplicates events using a runtime store. Without proper dedup, the same event may spawn multiple agents.
 - **Orchestrator vs agents**: Stopping an orchestrator doesn't automatically stop its agents unless explicitly requested. Use `StopHost` flag during shutdown to control this.
 - **Agent state transitions**: Agents must follow valid state transitions. Calling `MarkIdle()` on a non-running agent will fail silently.
 
@@ -98,8 +90,6 @@ The heartbeat monitor runs periodically (default 30s):
 
 **Heartbeat monitor**: Agents can get stuck waiting for model responses. The heartbeat monitor ensures stuck agents are recovered by sending "continue" or killing them. The 2-minute timeout before "continue" balances responsiveness with avoiding false positives.
 
-**Webhook event channel**: Webhook events are processed asynchronously via a buffered channel (100 events). This prevents webhook handlers from blocking on slow event processing.
-
 **Orchestrator per project**: Each project gets its own orchestrator instance. This isolates project state and allows independent start/stop control.
 
 ## Paths
@@ -108,5 +98,4 @@ The heartbeat monitor runs periodically (default 30s):
 - `internal/supervisor/handle_*.go` - Request handlers by category
 - `internal/supervisor/heartbeat.go` - Heartbeat monitor for stuck agent detection
 - `internal/supervisor/orchestrator.go` - Orchestrator lifecycle management
-- `internal/supervisor/webhook.go` - Webhook server for issue events
 - `internal/supervisor/rehydrate.go` - Agent reconnection after daemon restart

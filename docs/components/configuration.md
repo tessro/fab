@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Configuration system manages fab's settings across two scopes: global (daemon-wide) and per-project. It handles API keys for external providers, LLM authorization settings, webhook configuration, and project-specific orchestration parameters.
+The Configuration system manages fab's settings across two scopes: global (daemon-wide) and per-project. It handles API keys for external providers, LLM authorization settings, and project-specific orchestration parameters.
 
 **Non-goals:**
 - Does not handle permission rules (that's `permissions.toml`)
@@ -26,7 +26,7 @@ The Configuration system manages fab's settings across two scopes: global (daemo
 
 | Scope | File | Description |
 |-------|------|-------------|
-| Global | `~/.config/fab/config.toml` | API keys, logging, webhook settings, defaults |
+| Global | `~/.config/fab/config.toml` | API keys, logging, defaults |
 | Per-project | `[[projects]]` in global config | Project-specific orchestration settings |
 
 ## Configuration
@@ -41,10 +41,6 @@ The Configuration system manages fab's settings across two scopes: global (daemo
 | `llm_auth.model` | `"claude-haiku-4-5"` | Model for permission authorization |
 | `defaults.agent-backend` | `"claude"` | Default agent CLI: `"claude"` or `"codex"` |
 | `defaults.merge-strategy` | `"direct"` | Default merge: `"direct"` or `"pull-request"` |
-| `webhook.enabled` | `false` | Enable webhook server |
-| `webhook.bind-addr` | `":8080"` | Webhook server bind address |
-| `webhook.secret` | — | Webhook signature secret |
-| `webhook.path-prefix` | `"/webhooks"` | Webhook URL path prefix |
 
 ### Per-Project Keys
 
@@ -148,16 +144,6 @@ issue-backend = "linear"
 linear-team = "TEAM-UUID"
 linear-project = "PROJECT-UUID"
 allowed-authors = ["user@example.com"]
-```
-
-### Webhook-enabled configuration
-
-```toml
-[webhook]
-enabled = true
-bind-addr = ":9000"
-secret = "your-webhook-secret"
-path-prefix = "/hooks"
 ```
 
 ## Gotchas
