@@ -74,6 +74,14 @@ const (
 	MsgManagerChatHistory  MessageType = "manager.chat_history"  // Get manager chat history
 	MsgManagerClearHistory MessageType = "manager.clear_history" // Clear manager chat history
 
+	// Director agent (global agent spanning all projects)
+	MsgDirectorStart        MessageType = "director.start"         // Start the director agent
+	MsgDirectorStop         MessageType = "director.stop"          // Stop the director agent
+	MsgDirectorStatus       MessageType = "director.status"        // Get director status
+	MsgDirectorSendMessage  MessageType = "director.send_message"  // Send message to director
+	MsgDirectorChatHistory  MessageType = "director.chat_history"  // Get director chat history
+	MsgDirectorClearHistory MessageType = "director.clear_history" // Clear director chat history
+
 	// Planning agents (implementation planning mode)
 	MsgPlanStart       MessageType = "plan.start"        // Start a planning agent
 	MsgPlanStop        MessageType = "plan.stop"         // Stop a planning agent
@@ -332,7 +340,7 @@ type AgentChatHistoryResponse struct {
 
 // StreamEvent is sent to attached clients when agent output occurs.
 type StreamEvent struct {
-	Type              string             `json:"type"` // "output", "state", "created", "deleted", "info", "permission_request", "user_question", "intervention", "manager_chat_entry", "manager_state"
+	Type              string             `json:"type"` // "output", "state", "created", "deleted", "info", "permission_request", "user_question", "intervention", "manager_chat_entry", "manager_state", "director_chat_entry", "director_state"
 	AgentID           string             `json:"agent_id"`
 	Project           string             `json:"project"`
 	Data              string             `json:"data,omitempty"`               // For output events
@@ -346,6 +354,7 @@ type StreamEvent struct {
 	UserQuestion      *UserQuestion      `json:"user_question,omitempty"`      // For "user_question" events
 	Intervening       *bool              `json:"intervening,omitempty"`        // For "intervention" events (user is intervening)
 	ManagerState      string             `json:"manager_state,omitempty"`      // For "manager_state" events
+	DirectorState     string             `json:"director_state,omitempty"`     // For "director_state" events
 }
 
 // ChatEntryDTO is the wire format for chat entries sent to TUI clients
@@ -580,6 +589,42 @@ type ManagerChatHistoryResponse struct {
 type ManagerClearHistoryRequest struct {
 	Project string `json:"project"` // Project name (required)
 }
+
+// DirectorStartRequest is the payload for director.start requests.
+// Director is a global singleton, so no parameters are needed.
+type DirectorStartRequest struct{}
+
+// DirectorStopRequest is the payload for director.stop requests.
+type DirectorStopRequest struct{}
+
+// DirectorStatusRequest is the payload for director.status requests.
+type DirectorStatusRequest struct{}
+
+// DirectorStatusResponse is the payload for director.status responses.
+type DirectorStatusResponse struct {
+	Running   bool   `json:"running"`
+	State     string `json:"state"`      // "stopped", "starting", "running", "stopping"
+	StartedAt string `json:"started_at"` // RFC3339 format, empty if not running
+	WorkDir   string `json:"workdir"`    // Working directory
+}
+
+// DirectorSendMessageRequest is the payload for director.send_message requests.
+type DirectorSendMessageRequest struct {
+	Content string `json:"content"`
+}
+
+// DirectorChatHistoryRequest is the payload for director.chat_history requests.
+type DirectorChatHistoryRequest struct {
+	Limit int `json:"limit,omitempty"` // Max entries to return (0 = all)
+}
+
+// DirectorChatHistoryResponse is the payload for director.chat_history responses.
+type DirectorChatHistoryResponse struct {
+	Entries []ChatEntryDTO `json:"entries"`
+}
+
+// DirectorClearHistoryRequest is the payload for director.clear_history requests.
+type DirectorClearHistoryRequest struct{}
 
 // PlanStartRequest is the payload for plan.start requests.
 type PlanStartRequest struct {
