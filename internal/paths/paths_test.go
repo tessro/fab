@@ -328,3 +328,34 @@ func TestPlanPath(t *testing.T) {
 		t.Errorf("PlanPath() = %q, want %q", path, expected)
 	}
 }
+
+func TestDirectorWorkDir(t *testing.T) {
+	t.Run("default uses projects directory", func(t *testing.T) {
+		os.Unsetenv(EnvFabDir)
+		defer os.Unsetenv(EnvFabDir)
+
+		dir, err := DirectorWorkDir()
+		if err != nil {
+			t.Fatalf("DirectorWorkDir() error = %v", err)
+		}
+		home, _ := os.UserHomeDir()
+		expected := filepath.Join(home, ".fab", "projects")
+		if dir != expected {
+			t.Errorf("DirectorWorkDir() = %q, want %q", dir, expected)
+		}
+	})
+
+	t.Run("FAB_DIR override", func(t *testing.T) {
+		os.Setenv(EnvFabDir, "/tmp/fab-test")
+		defer os.Unsetenv(EnvFabDir)
+
+		dir, err := DirectorWorkDir()
+		if err != nil {
+			t.Fatalf("DirectorWorkDir() error = %v", err)
+		}
+		expected := "/tmp/fab-test/projects"
+		if dir != expected {
+			t.Errorf("DirectorWorkDir() = %q, want %q", dir, expected)
+		}
+	})
+}

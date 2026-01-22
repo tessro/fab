@@ -193,3 +193,10 @@ func AgentsRuntimePath() (string, error) {
 	}
 	return filepath.Join(dir, "agents.json"), nil
 }
+
+// DirectorWorkDir returns the director's working directory.
+// This is the projects directory (~/.fab/projects by default)
+// which gives the director visibility into all project repos.
+func DirectorWorkDir() (string, error) {
+	return ProjectsDir()
+}
